@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小小实验室</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet" />
+    <style>
+      :root { --bg:#eef3ff; --violet:#7168f6; --pink:#ff9fd1; --mint:#98edd0; --ink:#283160; --card:#ffffff; }
+      * { box-sizing:border-box; } body { margin:0; font-family:"DM Sans","Noto Sans SC",sans-serif; background:radial-gradient(circle at top left,rgba(255,255,255,.9),transparent 26%),linear-gradient(180deg,#eef2ff,#e6f6ff); color:var(--ink); }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.14fr .86fr; gap:20px; padding:20px; }
+      .panel { border-radius:34px; overflow:hidden; background:rgba(255,255,255,.74); box-shadow:0 26px 60px rgba(113,104,246,.12); }
+      .stage { position:relative; min-height:calc(100vh - 40px); background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.22)),linear-gradient(135deg,#8f88ff 0%,#8fcfff 52%,#bff7dc 100%); }
+      .bubble { position:absolute; border-radius:999px; filter:blur(2px); opacity:.62; }
+      .bubble.a { width:220px; height:220px; top:-80px; left:-40px; background:#fff1f7; } .bubble.b { width:180px; height:180px; top:100px; right:50px; background:#c8f4e8; } .bubble.c { width:260px; height:260px; bottom:-100px; left:30%; background:#e6dbff; }
+      .hero { position:absolute; top:28px; left:28px; right:28px; z-index:3; }
+      .hero h1 { margin:12px 0 10px; max-width:580px; font-family:"Nunito",sans-serif; font-size:46px; line-height:1.08; }
+      .hero p { max-width:520px; margin:0; color:rgba(40,49,96,.82); line-height:1.72; }
+      .badge { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; background:rgba(255,255,255,.76); font:800 12px/1 "Nunito",sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+      .teacher-card { position:absolute; top:28px; right:28px; width:250px; z-index:3; padding:18px; border-radius:24px; background:rgba(255,255,255,.78); }
+      .teacher-card p { margin:8px 0 0; color:rgba(40,49,96,.72); font-size:13px; line-height:1.7; }
+      .avatar-shell { position:absolute; inset:220px 26px 132px; border-radius:30px; overflow:hidden; background:radial-gradient(circle at top left,rgba(255,255,255,.48),transparent 32%),linear-gradient(180deg,#ffd0e4,#fff2b7 48%,#d5fff1 100%); }
+      .avatar-shell::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,255,255,.12),transparent 24%,rgba(255,255,255,.24)); z-index:1; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 20px 26px rgba(77,66,143,.2)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.015); }
+      .caption { position:absolute; left:50%; bottom:148px; transform:translateX(-50%); width:min(76%,740px); padding:16px 18px; border-radius:20px; background:rgba(255,255,255,.88); z-index:4; text-align:center; line-height:1.75; }
+      .caption[hidden] { display:none; }
+      .facts { position:absolute; left:26px; right:26px; bottom:24px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; z-index:4; }
+      .facts article { padding:16px; border-radius:22px; background:rgba(255,255,255,.84); }
+      .facts b { display:block; font-family:"Nunito",sans-serif; } .facts span { display:block; margin-top:8px; color:rgba(40,49,96,.72); font-size:12px; line-height:1.65; }
+      .desk { display:flex; flex-direction:column; gap:14px; padding:22px; }
+      .card { padding:18px; border-radius:24px; background:#fff; }
+      .top { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#edeaff; font-size:12px; font-weight:800; }
+      .status-pill--online { background:#daf7eb; color:#1f8d68; } .status-pill--connecting { background:#ffe9c7; color:#b16a00; } .status-pill--idle { background:#edeaff; color:#6558c4; }
+      .steps { display:grid; gap:12px; } .step { padding:16px; border-radius:20px; background:#f7f7ff; cursor:pointer; }
+      .step strong { display:block; font-family:"Nunito",sans-serif; font-size:17px; } .step p { margin:8px 0 0; color:rgba(40,49,96,.74); line-height:1.7; font-size:13px; } .step.active { background:#efeefe; outline:2px solid rgba(113,104,246,.18); }
+      .quiz { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .quiz button, .actions button { min-height:48px; border:0; border-radius:18px; font:800 15px/1 "Nunito",sans-serif; cursor:pointer; }
+      .quiz button { background:#f9fbff; color:var(--ink); }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .primary { background:linear-gradient(135deg,#6f69f7,#8d85ff); color:#fff; } .secondary { background:#ffe6f1; color:#b74d87; }
+      @media (max-width: 1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width: 760px) { .app { padding:10px; } .hero h1 { font-size:34px; } .teacher-card { position:relative; top:auto; right:auto; width:100%; margin-top:16px; } .avatar-shell { inset:324px 16px 188px; } .facts, .quiz, .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="bubble a"></div><div class="bubble b"></div><div class="bubble c"></div>
+        <div class="hero">
+          <div class="badge">儿童科普</div>
+          <h1>火山喷发实验课</h1>
+          <p>准备小苏打、白醋和透明杯，按步骤观察泡泡、颜色和喷发高度。</p>
+        </div>
+        <aside class="teacher-card">
+          <strong>课堂提醒</strong>
+          <p>先确认材料，再开始喷发观察。实验液体只看不喝，桌面和手部都要保持干净。</p>
+        </aside>
+        <div class="avatar-shell">
+          <div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="实验老师实时形象" /></div>
+          <div id="avatarMount"></div>
+        </div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="facts">
+          <article><b>材料准备</b><span>小苏打、白醋、红色色素、洗洁精和透明杯。</span></article>
+          <article><b>安全提醒</b><span>实验液体不要入口，操作台保持干燥。</span></article>
+          <article><b>观察重点</b><span>注意泡泡高度、颜色变化和喷发速度。</span></article>
+        </div>
+      </section>
+      <aside class="panel desk">
+        <section class="card top">
+          <div><strong>小小实验室</strong><div style="margin-top:6px;color:rgba(40,49,96,.64);font-size:13px;">火山喷发课堂</div></div>
+        <div id="statusPill" class="status-pill">准备就绪</div>
+        </section>
+        <section class="card">
+          <strong>实验步骤</strong>
+          <div class="steps" style="margin-top:14px;">
+            <button class="step active" data-script="第一步先把透明杯放稳，再把小苏打倒进杯子里。小苏打不用装太满，大约铺住杯底就可以。接着滴入一点红色色素，让后面的泡泡更像火山喷出的熔岩。操作时手不要伸到杯口正上方，桌面旁边可以垫一张纸巾。准备这一步看起来简单，但它会影响后面喷发的高度、颜色和泡泡数量。可以请孩子先预测：小苏打多一点时，喷发会更高，还是持续更久。"><strong>第一步：准备火山口</strong><p>把小苏打放进透明杯，加入色素。</p></button>
+            <button class="step" data-script="第二步加入一点洗洁精。洗洁精的作用不是让反应变得更危险，而是帮助气泡停留得更久，看起来更丰富、更像火山熔岩。加入时只需要一点点，不要倒太多，否则泡沫可能溢出杯子。加完以后可以轻轻晃一下杯子，但不要用力搅拌。接下来观察时，要重点看泡泡大小、颜色扩散和泡沫上升速度。可以把这一步和不加洗洁精的版本做对比，孩子会更容易理解变量。"><strong>第二步：增加泡泡</strong><p>加入洗洁精，让喷发更立体。</p></button>
+            <button class="step" data-script="第三步慢慢倒入白醋。白醋接触小苏打以后，会很快产生二氧化碳气泡，所以不要一下子倒太多。可以一边倒一边观察泡泡从杯底往上冒，颜色也会跟着被带出来。这个现象说明酸和碱发生了反应，生成了气体。实验结束后不要用手直接揉眼睛，先把桌面擦干净，再去洗手。最后可以让孩子用一句话复述：是什么材料碰到一起，产生了什么气体。"><strong>第三步：开始喷发</strong><p>缓慢倒白醋，观察喷发高度。</p></button>
+          </div>
+        </section>
+        <section class="card">
+          <strong>课堂问答</strong>
+          <div class="quiz" style="margin-top:14px;">
+            <button id="askWhy">为什么会冒泡？</button>
+            <button id="askMore">怎样喷得更高？</button>
+          </div>
+        </section>
+        <section class="card" id="summary">先完成“火山口准备”，再开始观察泡泡高度和颜色变化。</section>
+        <section class="actions">
+          <button id="connectBtn" class="primary">接入顾问</button>
+          <button id="introBtn" class="secondary">安全提醒</button>
+        </section>
+      </aside>
+    </main>
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"science-lab", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"课堂在线" });
+      const steps = Array.from(document.querySelectorAll(".step"));
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        await app.connectAndSpeak("同学们好，今天做一个会喷发的小火山实验。材料包括小苏打、白醋、红色色素、洗洁精和透明杯。开始之前先把杯子放稳，桌面保持干燥，实验液体只用来观察，不能入口。这个实验最有趣的地方，是白醋和小苏打碰到一起后会产生很多气泡，我们会一步一步观察颜色、泡泡高度和喷发速度。开始前可以先猜一猜：泡泡是从哪里冒出来的，为什么会把颜色带上来。");
+      });
+      document.getElementById("introBtn").addEventListener("click", async () => {
+        await app.speak("开始之前先记住安全规则。实验液体只看不喝，不能把杯子靠近嘴巴，也不要把手伸到杯口正上方。桌面要保持干燥，旁边最好放纸巾，万一泡沫溢出来可以马上擦掉。倒白醋的时候要慢，不要抢着操作。实验结束后先清理桌面，再洗手，这样既能看到现象，也能保持安全。安全提醒的重点不是吓唬孩子，而是让他们知道实验有边界，也知道什么时候该停下来请大人帮忙。");
+      });
+      document.getElementById("askWhy").addEventListener("click", async () => {
+        summary.textContent = "白醋和小苏打碰在一起，会产生很多二氧化碳气泡。";
+        await app.speak("会冒泡，是因为白醋和小苏打碰到一起以后发生了酸碱反应，产生了很多二氧化碳气体。气体从液体里跑出来，就形成一个个小泡泡。洗洁精会把这些泡泡包住，让它们停留得更久，所以看起来像火山熔岩往外涌。观察时可以比较三件事：泡泡出现得快不快，颜色扩散得均不均匀，泡沫最高能到哪里。这个问题适合引导孩子从现象走到原因。");
+      });
+      document.getElementById("askMore").addEventListener("click", async () => {
+        summary.textContent = "洗洁精和色素会让喷发看起来更饱满。";
+        await app.speak("想让喷发看起来更高、更饱满，可以稍微增加一点洗洁精，或者让杯口更窄一些，这样泡沫会更集中。不过白醋还是要慢慢倒，不能一下子倒满。还可以比较两次实验：一次少放洗洁精，一次多放一点，看看泡泡高度和持续时间有什么变化。这样不只是做出效果，还能学会用对比的方法观察实验。下一次可以只改变一个条件，结果就更容易判断。");
+      });
+      steps.forEach((step) => step.addEventListener("click", async () => {
+        steps.forEach((item) => item.classList.remove("active"));
+        step.classList.add("active");
+        summary.textContent = step.querySelector("p").textContent;
+        await app.speak(step.dataset.script);
+      }));
+    </script>
+  </body>
+</html>

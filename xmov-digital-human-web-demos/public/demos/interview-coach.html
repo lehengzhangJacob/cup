@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>面试练习室</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing:border-box; } body { margin:0; font-family:"Inter","Noto Sans SC",sans-serif; color:#14181d; background:#f7f7f4; }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.08fr .92fr; gap:18px; padding:18px; }
+      .panel { border:1px solid #d9d9d2; border-radius:0; background:#fffef9; overflow:hidden; }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.12)),url("https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80") center/cover no-repeat; }
+      .copy { position:absolute; top:26px; left:26px; right:26px; z-index:3; border-top:4px solid #111; padding:18px 18px 0; background:rgba(255,255,255,.76); }
+      .copy h1 { margin:14px 0 10px; max-width:580px; font-size:44px; line-height:1.04; letter-spacing:-.06em; text-transform:uppercase; }
+      .copy p { max-width:500px; margin:0; color:#39424b; line-height:1.75; }
+      .note { position:absolute; top:26px; right:26px; width:220px; z-index:3; padding:18px; border:1px solid #d9d9d2; background:rgba(255,255,255,.86); }
+      .note p { margin:8px 0 0; font-size:13px; line-height:1.7; color:#57606a; }
+      .avatar-shell { position:absolute; inset:236px 26px 126px; background:
+        linear-gradient(180deg,rgba(255,255,255,.68),rgba(255,255,255,.54)),
+        url("https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat;
+        border:1px solid #d9d9d2; overflow:hidden; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+.fallback.is-visible { opacity:1; } .fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 18px 24px rgba(0,0,0,.16)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.012); }
+      .caption { position:absolute; left:50%; bottom:140px; transform:translateX(-50%); width:min(74%,690px); padding:14px 16px; background:rgba(255,255,255,.92); border:1px solid #d9d9d2; z-index:4; text-align:center; line-height:1.72; }
+      .caption[hidden] { display:none; }
+      .desk { padding:22px; display:flex; flex-direction:column; gap:14px; }
+      .card { padding:18px; border:1px solid #d9d9d2; background:#fffef9; }
+      .top { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+      .status-pill { padding:10px 14px; border:1px solid #d9d9d2; font-size:12px; font-weight:800; text-transform:uppercase; }
+      .status-pill--online { background:#f0f6f2; } .status-pill--connecting { background:#fff3df; } .status-pill--idle { background:#fffef9; }
+      .qa { display:grid; gap:12px; } .qa button { min-height:66px; text-align:left; padding:16px; border:1px solid #d9d9d2; background:#fff; font:700 15px/1.55 "Inter",sans-serif; cursor:pointer; }
+      .qa button.active { background:#f5f5ef; }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .actions button { min-height:48px; border:1px solid #111; background:#111; color:#fff; font:700 14px/1 "Inter",sans-serif; cursor:pointer; }
+      .actions .ghost { background:#fffef9; color:#111; }
+      @media (max-width:1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width:760px) { .app { padding:10px; } .copy h1 { font-size:36px; } .note { position:relative; top:auto; right:auto; width:100%; margin-top:16px; } .avatar-shell { inset:336px 16px 186px; } .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="copy"><div style="font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;">Interview Coach</div><h1>产品运营模拟面试</h1><p>自我介绍要控制在一分钟内，项目经历突出推进动作，协作问题重点回答判断依据和结果。</p></div>
+        <aside class="note"><strong>本轮目标</strong><p>先把回答压缩清楚，再补充结果和岗位匹配，让表达更像正式面试而不是聊天。</p></aside>
+        <div class="avatar-shell"><div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="面试教练实时形象" /></div><div id="avatarMount"></div></div>
+        <div id="caption" class="caption" hidden></div>
+      </section>
+      <aside class="panel desk">
+<section class="card top"><div><strong>面试练习室</strong><div style="margin-top:6px;color:#59616b;font-size:13px;">岗位：产品运营</div></div><div id="statusPill" class="status-pill">准备就绪</div></section>
+        <section class="card"><strong>提问列表</strong><div class="qa" style="margin-top:14px;"><button class="active" data-script="请先做一个不超过一分钟的自我介绍。建议按三段回答：第一段说明你的专业背景和求职方向；第二段选一个最能证明能力的项目或实习，不要罗列所有经历；第三段把这个经历和产品运营岗位连接起来。重点是让面试官快速知道你是谁、做过什么、为什么适合这个岗位，而不是把简历从头念一遍。结尾可以落到你想负责的岗位价值，比如提升转化、优化内容供给或推进活动增长，让介绍自然收住。">请做一个自我介绍</button><button data-script="最近做过的项目里，请选一个最能体现推进能力的环节。回答时不要只说项目很复杂，而要说清楚你面对的阻力是什么、你采取了什么动作、协调了哪些人、最后让指标或结果发生了什么变化。产品运营岗位很看重把事情往前推的能力，所以案例里最好有具体时间、数据、协作对象和复盘结论。最后把结果和岗位能力连起来，例如跨部门推进、用户洞察或数据复盘，面试官会更容易判断你的实际强项。">说一个推进项目的例子</button><button data-script="如果你和协作方意见不一致，可以先说明判断依据，而不是直接说服对方。比较好的回答顺序是：先确认双方目标是否一致，再把分歧拆成数据、资源、时间或优先级问题；接着说明你会拿事实和用户反馈做判断；最后给出折中方案和复盘方式。这样能体现你不是情绪化争论，而是在推进共同结果。收尾时强调你会把分歧沉淀成规则或流程，下一次协作就不会重复卡在同一个问题上。">你如何处理分歧？</button></div></section>
+        <section class="card" id="summary">自我介绍控制在一分钟内，按“背景、亮点、岗位匹配”三段回答。</section>
+        <section class="actions"><button id="connectBtn">接入顾问</button><button id="feedbackBtn" class="ghost">给我点评</button></section>
+      </aside>
+    </main>
+    <script src="/config.js"></script><script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script><script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"interview-coach", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线面试" });
+      const summary = document.getElementById("summary"); const qs = Array.from(document.querySelectorAll(".qa button"));
+      document.getElementById("connectBtn").addEventListener("click", async () => { await app.connectAndSpeak("第一题是一分钟自我介绍。回答里要有背景、代表经历和岗位匹配。建议先用一句话说明你是谁，再用一个项目证明你能推进运营目标，最后把经历落到这个岗位需要的能力上。不要从简历第一行开始流水账，也不要把所有实习都塞进去。面试官最想听的是你能解决什么问题，以及为什么现在适合这个岗位。开口前先选一个最强案例作为主线，后面追问时再展开细节，整体表达会更稳。"); });
+      document.getElementById("feedbackBtn").addEventListener("click", async () => { summary.textContent = "点评重点：减少经历堆砌，多讲结果和岗位匹配。"; await app.speak("回答太长时，先删掉经历堆砌，保留最能证明岗位匹配的结果、动作和复盘。比如把三段实习缩成一个最强案例，说明目标是什么、你做了什么、结果提升了多少、复盘后知道了什么。产品运营面试不只看经历数量，更看你能否把用户、内容、活动或数据指标说清楚，并证明自己能持续推进。修改答案时可以先保留一条主线，再把无关背景删掉，听起来会更像面试回答，而不是经历汇报。"); });
+      qs.forEach((q) => q.addEventListener("click", async () => { qs.forEach((item) => item.classList.remove("active")); q.classList.add("active"); summary.textContent = `练习问题：${q.textContent}`; await app.speak(q.dataset.script); }));
+    </script>
+  </body>
+</html>

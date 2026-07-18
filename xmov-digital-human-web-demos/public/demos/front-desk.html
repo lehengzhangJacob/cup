@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>序厅接待</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    <style>
+      :root { --bg:#edf4f7; --ink:#14303f; --muted:#607989; --line:#d5e3ea; --brand:#0d6d8b; --green:#0d7a63; }
+      * { box-sizing:border-box; } body { margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; color:var(--ink); background:linear-gradient(180deg,#f7fbfd,#edf4f7); }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.16fr .84fr; gap:18px; padding:18px; }
+      .panel { border-radius:30px; overflow:hidden; background:rgba(255,255,255,.9); box-shadow:0 24px 60px rgba(20,48,63,.08); }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.08)),url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80") center/cover no-repeat; }
+      .hero { position:absolute; top:26px; left:26px; right:26px; z-index:3; display:flex; justify-content:space-between; gap:18px; }
+      .hero-main h1 { margin:12px 0 10px; max-width:560px; font:700 44px/1.1 "Space Grotesk",sans-serif; letter-spacing:-.04em; }
+      .hero-main { max-width:640px; padding:18px 20px; border-radius:24px; background:rgba(255,255,255,.78); backdrop-filter:blur(10px); }
+      .hero-main p { margin:0; max-width:520px; color:#3d5a69; line-height:1.75; }
+      .badge { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:rgba(255,255,255,.86); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+      .hero-side { width:260px; padding:18px; border-radius:24px; background:rgba(255,255,255,.88); }
+      .hero-side p { margin:8px 0 0; color:#5a7584; font-size:13px; line-height:1.72; }
+      .avatar-shell { position:absolute; inset:220px 26px 126px; border-radius:28px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.02)),url("https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat; }
+      .avatar-shell::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,27,38,.08),transparent 22%,rgba(8,27,38,.1)); z-index:1; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 16px 28px rgba(0,0,0,.2)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.015); }
+      .caption { position:absolute; left:50%; bottom:140px; transform:translateX(-50%); width:min(76%,720px); padding:14px 16px; border-radius:18px; background:rgba(255,255,255,.9); z-index:4; text-align:center; line-height:1.72; }
+      .caption[hidden] { display:none; }
+      .kpis { position:absolute; left:26px; right:26px; bottom:24px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; z-index:4; }
+      .kpis article { padding:16px; border-radius:20px; background:rgba(255,255,255,.88); } .kpis b { display:block; font-size:14px; } .kpis span { display:block; margin-top:8px; color:#617a89; font-size:12px; line-height:1.65; }
+      .desk { display:flex; flex-direction:column; gap:14px; padding:22px; }
+      .card { padding:18px; border-radius:24px; background:#fff; border:1px solid var(--line); }
+      .top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#edf3f6; font-size:12px; font-weight:800; } .status-pill--online { background:#dff1eb; color:var(--green); } .status-pill--connecting { background:#fff0d8; color:#b26d00; } .status-pill--idle { color:#6b8290; }
+      .services { display:grid; gap:12px; }
+      .service { padding:16px; border-radius:20px; background:#f7fbfc; border:1px solid var(--line); cursor:pointer; }
+      .service h3 { margin:0 0 8px; font-size:17px; } .service p { margin:0; color:var(--muted); font-size:13px; line-height:1.7; } .service.active { background:#eef7fa; border-color:rgba(13,109,139,.22); }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; } button { min-height:48px; border:0; border-radius:16px; font:inherit; font-weight:800; cursor:pointer; }
+      .primary { background:linear-gradient(135deg,#0d6d8b,#2c95b4); color:#fff; } .secondary { background:#eef4f7; color:var(--ink); border:1px solid var(--line); }
+      @media (max-width:1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width:760px) { .app { padding:10px; } .hero { flex-direction:column; } .hero-main h1 { font-size:34px; } .hero-side { width:100%; } .avatar-shell { inset:338px 16px 188px; } .kpis, .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="hero">
+          <div class="hero-main">
+            <div class="badge">企业接待</div>
+            <h1>来访接待与动线指引</h1>
+          <p>参观展厅、前往会议室或联系销售，都可以直接查看对应路线和接待安排。</p>
+          </div>
+          <aside class="hero-side"><strong>来访提示</strong><p>首次到访可先看展厅路线，参加会议则直接前往八楼会议区，联系销售需先登记需求。</p></aside>
+        </div>
+        <div class="avatar-shell">
+          <div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="接待顾问实时形象" /></div>
+          <div id="avatarMount"></div>
+        </div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="kpis">
+          <article><b>会客路线</b><span>一楼接待 → 东侧电梯 → 八楼会议区。</span></article>
+          <article><b>展厅参观</b><span>先从品牌序厅进入，再到产品展示墙。</span></article>
+          <article><b>销售联系</b><span>登记需求后，由对应行业顾问接待。</span></article>
+        </div>
+      </section>
+      <aside class="panel desk">
+        <section class="card top">
+          <div><strong>序厅接待</strong><div style="margin-top:6px;color:var(--muted);font-size:13px;">访客分流台</div></div>
+        <div id="statusPill" class="status-pill">准备就绪</div>
+        </section>
+        <section class="card">
+          <strong>来访选择</strong>
+          <div class="services" style="margin-top:14px;">
+            <button class="service active" data-script="参观展厅请从一楼序厅右侧进入。进入后先看品牌总览墙，了解公司的发展阶段和核心业务；再往前走到产品展示墙，看主要方案和应用案例；最后回到洽谈区，工作人员可以根据你关注的行业继续补充资料。全程不需要折返，第一次到访大约二十分钟可以完成基础参观。参观结束后如果对某个案例感兴趣，可以直接告诉现场同事行业方向，他们会把对应资料带到洽谈区继续说明。"><h3>参观展厅</h3><p>适合首次来访的品牌与产品参观。</p></button>
+            <button class="service" data-script="参加会议请直接前往东侧电梯。八楼会议区前台已经同步到访信息，到达后出示预约姓名即可。电梯出门后向右走，先经过等候区，再到会议室签到台。如果会议还没开始，可以在等候区休息，前台会提醒参会时间。若需要投屏、茶水或临时打印资料，可以在签到时一并说明。会议开始前如果同行人员还没到，可以先在等候区入座，前台会按预约名单继续接待，不会影响签到。"><h3>前往会议室</h3><p>会议区在八楼，东侧电梯直达。</p></button>
+            <button class="service" data-script="联系销售请先登记行业和需求方向。登记内容包括公司名称、所在行业、主要需求和预计对接时间。系统会安排对应行业顾问处理，避免把需求转来转去。登记完成后，可以先在洽谈区等待，顾问会带着相关案例和报价范围过来沟通。如果需求比较复杂，也可以预约后续线上会议。建议提前说明预算区间、上线时间和现有系统情况，顾问会更快判断方案范围，不会只做泛泛介绍。"><h3>联系销售</h3><p>先登记需求，再安排顾问。</p></button>
+          </div>
+        </section>
+        <section id="summary" class="card">首次到访建议先走展厅路线，更容易快速了解公司。</section>
+        <section class="actions">
+          <button id="connectBtn" class="primary">接入顾问</button>
+          <button id="introBtn" class="secondary">访客问候</button>
+        </section>
+      </aside>
+    </main>
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"front-desk", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线接待" });
+      const services = Array.from(document.querySelectorAll(".service"));
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        await app.connectAndSpeak("欢迎到访。请先确认今天的来访目的：参观展厅、前往会议室，或联系销售。参观展厅请走一楼序厅右侧，适合第一次了解公司；参加会议请乘东侧电梯到八楼，会议区前台已准备签到；联系销售请先登记行业和需求方向，系统会安排对应顾问接待。如果你还不确定目的，可以先告诉前台预约对象或来访公司名称，我会按当前信息给你推荐最合适的下一步。");
+      });
+      document.getElementById("introBtn").addEventListener("click", async () => {
+        await app.speak("您好。参观展厅请从一楼序厅右侧进入，先看品牌总览，再看产品展示墙；会议访客请乘东侧电梯到八楼，到达后在会议区前台签到；销售咨询请先完成需求登记，写清行业、预算范围和希望解决的问题。这样接待人员能更快把你带到对应位置，减少等待时间。若同行人员分批到达，可以把公司名称留给前台，后续访客到达时会被统一带到同一接待区域。");
+      });
+      services.forEach((service) => service.addEventListener("click", async () => {
+        services.forEach((entry) => entry.classList.remove("active"));
+        service.classList.add("active");
+        summary.textContent = service.querySelector("p").textContent;
+        await app.speak(service.dataset.script);
+      }));
+    </script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 # secrets & local env
 softcup_glmkey
+glm_api
 .env
 .env.*
 *.pem

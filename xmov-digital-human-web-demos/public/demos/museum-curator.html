@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>策展手记</title><link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing:border-box; } body { margin:0; font-family:"Manrope","Noto Sans SC",sans-serif; color:#121212; background:#f4f3f0; }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.18fr .82fr; gap:18px; padding:18px; }
+      .panel { border-radius:0; overflow:hidden; background:#fff; }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.1)),url("https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1600&q=80") center/cover no-repeat; }
+      .copy { position:absolute; top:24px; left:24px; right:24px; z-index:3; }
+      .copy h1 { margin:14px 0 10px; max-width:640px; font:700 56px/1 "Playfair Display","Noto Serif SC",serif; letter-spacing:-.04em; }
+      .copy p { max-width:480px; margin:0; color:#404040; line-height:1.72; }
+      .badge { display:inline-flex; padding:8px 14px; border-radius:999px; background:rgba(255,255,255,.84); font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+      .avatar-shell { position:absolute; inset:220px 24px 126px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.06)),url("https://images.unsplash.com/photo-1518998053901-5348d3961a04?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+.fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; } .fallback.is-visible { opacity:1; } .fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 18px 24px rgba(0,0,0,.2)); } .fallback.is-speaking img { transform:translateX(-50%) scale(1.012); }
+      .caption { position:absolute; left:50%; bottom:140px; transform:translateX(-50%); width:min(74%,700px); padding:14px 16px; background:rgba(255,255,255,.92); z-index:4; text-align:center; line-height:1.72; }
+      .caption[hidden] { display:none; }
+      .desk { display:flex; flex-direction:column; gap:14px; padding:22px; background:#f7f3ea; color:#1d1a16; }
+      .card { padding:18px; border:1px solid rgba(51,42,32,.16); background:rgba(255,255,255,.88); color:#1d1a16; }
+      .top { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+      .status-pill { padding:10px 14px; border:1px solid rgba(51,42,32,.16); background:#fff; color:#3b332a; font-size:12px; font-weight:800; text-transform:uppercase; }
+      .status-pill--online { background:#1f513f; color:#fff; } .status-pill--connecting { color:#8a5a12; }
+      .works { display:grid; gap:12px; } .work { padding:16px; border:1px solid rgba(51,42,32,.16); background:#fffaf1; color:#1d1a16; cursor:pointer; } .work h3 { margin:0 0 8px; font-size:17px; font-family:"Playfair Display",serif; } .work p { margin:0; color:#6f6255; font-size:13px; line-height:1.7; } .work.active { background:#efe2cb; border-color:#b79764; }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .actions button { min-height:48px; border:1px solid rgba(51,42,32,.18); background:#2f5b49; color:#fff; font:700 14px/1 "Manrope",sans-serif; cursor:pointer; } .actions .ghost { background:#fff; color:#2f5b49; }
+      @media (max-width:1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width:760px) { .app { padding:10px; } .copy h1 { font-size:38px; } .avatar-shell { inset:282px 16px 188px; } .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="copy"><div class="badge">Curatorial Voice</div><h1>当代器物专题讲述</h1><p>每件展品都从时代背景、材料工艺和观看细节进入，顺着展线理解器物背后的生活与审美。</p></div>
+        <div class="avatar-shell"><div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="策展讲述人实时形象" /></div><div id="avatarMount"></div></div>
+        <div id="caption" class="caption" hidden></div>
+      </section>
+      <aside class="panel desk">
+<section class="card top"><div><strong>策展手记</strong><div style="margin-top:6px;color:#6f6255;font-size:13px;">当代器物专题展</div></div><div id="statusPill" class="status-pill">准备就绪</div></section>
+        <section class="card"><strong>展品切换</strong><div class="works" style="margin-top:14px;"><button class="work active" data-script="这件青釉执壶的重点，不只是器物本身，而是它呈现出的日常生活方式和工艺审美。可以先看器口，它收得很稳，没有过多装饰；再看肩线，线条从上到下慢慢展开；最后看釉色，青色不抢眼，却让器物显得安静。它真正动人的地方，是把实用器具做出了克制、含蓄和耐看的比例。如果现场停留时间有限，建议重点看器口、肩线和釉面厚薄三处，就能抓住这件器物的安静张力。"><h3>青釉执壶</h3><p>背景与器型的流动感。</p></button><button class="work" data-script="木雕屏风可以从空间关系看起。它不是单纯的装饰品，而是在室内划分视线、遮挡空间、营造停顿感的器物。刀法控制了光影，留白控制了呼吸感，观看距离越近，细节越明显。可以先站远一点看整体构图，再靠近观察转角、边框和纹样深浅，就能理解它为什么既有功能，也有审美。站远时看它怎样改变空间边界，走近时看刀痕如何制造明暗，这样会更容易理解屏风在旧式厅堂里的角色。"><h3>木雕屏风</h3><p>空间关系、刀法和留白。</p></button><button class="work" data-script="这幅纸本设色卷的重点在观看角度和克制用色。颜色没有抢走叙事，反而让人物、空间和留白更安静。看这类作品时，可以顺着画面移动的方向慢慢看，不要只停在最鲜艳的位置。作者通过低饱和色彩和细节安排，让观看者把注意力放在关系、动作和氛围上，而不是单纯看画面漂不漂亮。看完以后可以回到最安静的留白处，再重新顺着人物关系看一遍，画面节奏往往就藏在这些不抢眼的位置里。"><h3>纸本设色卷</h3><p>视角、用色与叙事节奏。</p></button></div></section>
+        <section class="card" id="summary">青釉执壶：从生活背景进入，再观察器口、肩线和釉色。</section>
+        <section class="actions"><button id="connectBtn">接入顾问</button><button id="detailBtn" class="ghost">说说细节</button></section>
+      </aside>
+    </main>
+    <script src="/config.js"></script><script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script><script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"museum-curator", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线讲述" });
+      const works = Array.from(document.querySelectorAll(".work")); const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => { await app.connectAndSpeak("欢迎来到当代器物专题展。可以先从青釉执壶看起，它把日常器物做得含蓄而有张力。观看时不要只看颜色，而要看器型比例、肩线过渡、器口收束和釉色留白。好的器物往往不是靠复杂装饰取胜，而是在使用功能和审美比例之间保持平衡。接下来可以先用青釉执壶建立观看方法，再切换到木雕屏风和纸本设色卷，比较器物、空间和图像三种不同的叙事方式。"); });
+      document.getElementById("detailBtn").addEventListener("click", async () => { summary.textContent = "细节观察：器口、肩线和釉色之间的克制关系。"; await app.speak("继续看细节时，重点放在器口、肩线和釉色之间的克制关系。器口收得稳，说明它没有追求夸张造型；肩线过渡自然，让器身有流动感；釉色克制，不会压过形体本身。真正动人的地方不在装饰，而在比例、留白和日常使用痕迹共同形成的安静气质。适合把视线从整体轮廓移到器口边缘，再回到器身比例，前后对照会更清楚地看到工匠怎样控制分寸。"); });
+      works.forEach((work) => work.addEventListener("click", async () => { works.forEach((item) => item.classList.remove("active")); work.classList.add("active"); summary.textContent = `${work.querySelector("h3").textContent}：${work.querySelector("p").textContent}`; await app.speak(work.dataset.script); }));
+    </script>
+  </body>
+</html>

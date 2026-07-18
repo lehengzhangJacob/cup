@@ -145,6 +145,46 @@ class ZhipuClient:
             r.raise_for_status()
             return r.content
 
+    async def tts_stream(
+        self,
+        text: str,
+        *,
+        voice: Optional[str] = None,
+        speed: float = 1.0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream base64 PCM chunks from GLM-TTS as they arrive."""
+        payload = {
+            "model": TTS_MODEL,
+            "input": text[:2000],
+            "voice": voice or TTS_VOICE,
+            "speed": speed,
+            "volume": 1.0,
+            "response_format": "pcm",
+            "encode_format": "base64",
+            "stream": True,
+        }
+        timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base}/audio/speech",
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("data:"):
+                        line = line[5:].strip()
+                    if line == "[DONE]":
+                        break
+                    event = json.loads(line)
+                    if event.get("error"):
+                        raise RuntimeError(event["error"].get("message", "GLM-TTS stream failed"))
+                    yield event
+
     async def asr(self, audio: bytes, filename: str = "audio.wav") -> str:
         # glm-asr 对格式敏感，优先 wav/mp3；按扩展名设置 MIME
         lower = filename.lower()

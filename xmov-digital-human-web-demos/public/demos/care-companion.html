@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>安然陪伴</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+      :root { --bg:#edf5f6; --card:#ffffff; --line:#d6e4e8; --text:#1f3d45; --muted:#63808a; --teal:#1c8f82; --green:#20805f; --warm:#f7b76a; }
+      * { box-sizing:border-box; } body { margin:0; font-family:"Manrope","Noto Sans SC",sans-serif; color:var(--text); background:linear-gradient(180deg,#f4fbfb,#e8f1f2); }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.08fr .92fr; gap:18px; padding:18px; }
+      .panel { border:1px solid var(--line); border-radius:30px; background:rgba(255,255,255,.88); box-shadow:0 24px 60px rgba(31,61,69,.08); overflow:hidden; }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.18)),url("https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80") center/cover no-repeat; }
+      .stage-copy { position:absolute; top:26px; left:26px; right:26px; z-index:3; }
+      .stage-copy h1 { margin:10px 0 10px; font-size:42px; line-height:1.14; max-width:580px; }
+      .stage-copy p { margin:0; max-width:520px; color:#43646d; line-height:1.75; }
+      .badge { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px; background:#eff8f6; color:#1d7369; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+      .aside-note { position:absolute; top:26px; right:26px; width:260px; padding:18px; border-radius:24px; background:rgba(255,255,255,.86); z-index:3; }
+      .aside-note strong { display:block; } .aside-note p { margin:10px 0 0; font-size:13px; line-height:1.7; color:#56727b; }
+      .avatar-shell { position:absolute; inset:214px 24px 130px; border-radius:28px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.02)),url("https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat; }
+      .avatar-shell::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(17,29,30,.06),transparent 24%,rgba(17,29,30,.08)); z-index:1; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 16px 28px rgba(0,0,0,.16)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.012); }
+      .caption { position:absolute; left:50%; bottom:146px; transform:translateX(-50%); width:min(74%,700px); padding:15px 18px; border-radius:18px; background:rgba(255,255,255,.9); z-index:4; text-align:center; line-height:1.75; }
+      .caption[hidden] { display:none; }
+      .ticker { position:absolute; left:24px; right:24px; bottom:24px; z-index:4; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+      .ticker article { padding:16px; border-radius:18px; background:rgba(255,255,255,.88); }
+      .ticker b { display:block; font-size:14px; } .ticker span { display:block; margin-top:8px; color:#5a7882; font-size:12px; line-height:1.65; }
+      .desk { padding:22px; display:flex; flex-direction:column; gap:14px; }
+      .card { border:1px solid var(--line); border-radius:24px; background:#fff; padding:18px; }
+      .top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#e7eff1; font-size:12px; font-weight:800; }
+      .status-pill--online { background:#dff5ea; color:var(--green); } .status-pill--connecting { background:#fff2df; color:#9b6500; }
+      .status-pill--idle { background:#e7eff1; color:#607b85; }
+      .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .item { min-height:118px; padding:16px; border-radius:20px; background:#f7fbfc; border:1px solid var(--line); cursor:pointer; }
+      .item h3 { margin:0 0 8px; font-size:16px; } .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.7; }
+      .item.active { background:#eef8f6; border-color:rgba(28,143,130,.28); }
+      .timeline { display:grid; gap:10px; }
+      .timeline div { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #edf3f4; }
+      .timeline div:last-child { border-bottom:0; }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      button { min-height:48px; border:0; border-radius:16px; font:inherit; font-weight:800; cursor:pointer; }
+      .primary { color:#fff; background:linear-gradient(135deg,#178979,#2ea892); } .secondary { background:#f1f6f7; color:var(--text); border:1px solid var(--line); }
+      @media (max-width: 1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width: 760px) { .app { padding:10px; } .stage-copy h1 { font-size:34px; } .aside-note { position:relative; top:auto; right:auto; width:100%; margin-top:16px; } .avatar-shell { inset:310px 16px 188px; } .ticker, .grid, .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="stage-copy">
+          <div class="badge">居家陪伴</div>
+          <h1>今日照护安排</h1>
+          <p>今天下午以用药、血压和家属来电为主，重要提醒集中在同一屏里，查找和处理都更轻松。</p>
+        </div>
+        <aside class="aside-note">
+          <strong>今日重点</strong>
+          <p>先按时服药，再完成血压测量，晚饭前留意家属来电和语音留言。</p>
+        </aside>
+        <div class="avatar-shell">
+          <div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="陪伴助手实时形象" /></div>
+          <div id="avatarMount"></div>
+        </div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="ticker">
+          <article><b>14:30 用药提醒</b><span>饭后半小时服药，喝温水，完成后点一下已处理。</span></article>
+          <article><b>15:00 血压记录</b><span>坐下休息五分钟后再测，结果记在今天的健康卡里。</span></article>
+          <article><b>家属留言</b><span>晚上视频通话前别着急，孩子下班后会主动拨过来。</span></article>
+        </div>
+      </section>
+      <aside class="panel desk">
+        <section class="card top">
+          <div><strong>安然陪伴</strong><div style="margin-top:6px;color:var(--muted);font-size:13px;">今日照护看板</div></div>
+        <div id="statusPill" class="status-pill">准备就绪</div>
+        </section>
+        <section class="card">
+          <strong>待处理事项</strong>
+          <div class="grid" style="margin-top:14px;">
+            <button class="item active" data-script="下午三点测血压。现在先坐下休息五分钟，不要刚走动完就测，也不要一边说话一边测。袖口放松，手臂自然放在桌面上，保持和心脏差不多的高度。测完以后把高压、低压和心率记在今天的健康卡里。如果连续两次结果差异很大，就再休息一会儿复测一次，不要因为一次数字就紧张。记录时最好写上测量时间和当时状态，比如刚午睡、刚散步或刚吃完饭，后续家属和医生判断会更准确。"><h3>血压提醒</h3><p>下午三点整，坐下休息后测量。</p></button>
+            <button class="item" data-script="午饭后的药记得配温水服用。如果刚吃完饭，可以先缓一会儿，等胃里舒服一些再按照今天的剂量来。服药前先确认药盒日期和格子，避免重复吃或漏吃。吞咽时不要用茶、咖啡或饮料代替温水。吃完以后可以在页面上标记已处理，晚上家属查看记录时也能知道今天用药已经完成。如果发现药盒里数量和平时不一样，先不要自己补吃，拍照发给家属确认一下，再按医嘱处理。"><h3>用药提醒</h3><p>饭后半小时，温水送服。</p></button>
+            <button class="item" data-script="今天多云转晴，下午体感比较舒适，温度大约在二十二到二十六度之间。要是出门晒太阳，建议加一件薄外套，时间控制在二十到三十分钟，不要走太远。路上尽量选平整的人行道，带上手机和钥匙。如果觉得头晕、胸闷或者腿脚发软，就先回家休息，散步不是任务，舒服和安全更重要。可以优先走小区里熟悉的路线，避开台阶多、车辆多或地面湿滑的位置。"><h3>天气播报</h3><p>下午 22 到 26 度，适合短时散步。</p></button>
+            <button class="item" data-script="家属留言到了。孩子说今天会晚一点下班，但晚饭前会给你打电话，让你先别担心。下午这段时间可以按原计划服药、测血压，再简单准备晚饭。如果电话稍微晚一点，也不代表出事，可能只是路上耽误。页面会把留言放在这里，想再听一遍时可以回来查看，不用反复记在心里。等电话打来时，可以直接告诉孩子今天血压数值和有没有散步，这样沟通更省心。"><h3>家属留言</h3><p>新的语音留言已到达。</p></button>
+          </div>
+        </section>
+        <section class="card">
+          <strong>今日节奏</strong>
+          <div class="timeline" style="margin-top:12px;">
+            <div><span>14:30</span><span>按时服药</span></div>
+            <div><span>15:00</span><span>血压测量</span></div>
+            <div><span>17:30</span><span>晚间散步</span></div>
+          </div>
+        </section>
+        <section class="card" id="summary">下午以休息和按时测量为主，出门活动放在傍晚更舒服。</section>
+        <section class="actions">
+          <button id="connectBtn" class="primary">接入顾问</button>
+          <button id="remindBtn" class="secondary">主动提醒</button>
+        </section>
+      </aside>
+    </main>
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"care-companion", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线陪伴" });
+      const items = Array.from(document.querySelectorAll(".item"));
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        await app.connectAndSpeak("下午好。今天的安排不复杂，先按时服药，再在三点左右测一次血压，晚饭前留意家属来电。每件事都不用着急，页面右侧已经把时间和顺序列好。现在可以先坐下休息一下，喝几口温水，等身体状态平稳后再处理血压记录。完成一项就看下一项，不需要一次记住所有事情。如果今天精神不错，可以把散步安排在傍晚；如果觉得累，就把活动换成室内走动。");
+      });
+      document.getElementById("remindBtn").addEventListener("click", async () => {
+        summary.textContent = "先测血压，再回听家属留言，之后安排短时散步。";
+        await app.speak("提醒一下，现在最重要的是三点前后的血压测量。测量前先坐稳休息五分钟，手臂放平，袖口不要勒得太紧。测完以后把数字记下来，再回听家属留言。这样家属晚上查看时，能同时看到血压记录和留言处理情况。如果数字和平时差别比较大，不要马上紧张，先休息一会儿再复测一次。复测仍然异常时，再把两次数字一起告诉家属，方便判断是否需要进一步咨询。");
+      });
+      items.forEach((item) => item.addEventListener("click", async () => {
+        items.forEach((entry) => entry.classList.remove("active"));
+        item.classList.add("active");
+        summary.textContent = item.querySelector("p").textContent;
+        await app.speak(item.dataset.script);
+      }));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>云岭慢游</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root { --ink:#3d2f26; --line:rgba(82,56,38,.18); --sand:#f5ecdb; --gold:#b9813f; --pine:#305146; --paper:rgba(255,250,241,.84); }
+      * { box-sizing:border-box; }
+      body { margin:0; font-family:"Outfit","Noto Sans SC",sans-serif; color:var(--ink); background:linear-gradient(180deg,#f2e6d4,#ead9c1); }
+      .shell { min-height:100vh; display:grid; grid-template-columns:1.28fr .88fr; gap:18px; padding:18px; }
+      .panel { border:1px solid var(--line); border-radius:28px; background:var(--paper); backdrop-filter:blur(18px); overflow:hidden; box-shadow:0 24px 60px rgba(72,44,24,.12); }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:
+        radial-gradient(circle at 12% 18%, rgba(255,245,227,.72), transparent 26%),
+        radial-gradient(circle at 88% 10%, rgba(205,160,94,.18), transparent 20%),
+        linear-gradient(180deg,#efe3cf 0%, #e6d7bf 54%, #dcc6a8 100%); }
+      .stage::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(24,18,13,.2),rgba(24,18,13,0) 30%,rgba(24,18,13,.24)); pointer-events:none; }
+      .copy { position:absolute; top:28px; left:28px; right:28px; z-index:3; }
+      .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:rgba(255,248,236,.82); font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
+      .title { margin:16px 0 10px; max-width:560px; font-family:"Noto Serif SC",serif; font-size:44px; line-height:1.15; }
+      .sub { max-width:520px; margin:0; color:rgba(61,47,38,.82); line-height:1.75; }
+      .guide-note { position:absolute; top:34px; right:34px; width:260px; padding:18px; border-radius:24px; background:rgba(255,249,240,.84); border:1px solid rgba(255,255,255,.55); z-index:3; }
+      .guide-note strong { display:block; font-size:14px; }
+      .guide-note p { margin:10px 0 0; line-height:1.7; color:rgba(61,47,38,.78); font-size:13px; }
+      .avatar-shell { position:absolute; inset:216px 36px 122px 36px; border-radius:30px; overflow:hidden; background:
+        radial-gradient(circle at 22% 26%, rgba(255,241,215,.88), transparent 20%),
+        radial-gradient(circle at 76% 22%, rgba(193,145,90,.18), transparent 18%),
+        linear-gradient(180deg, #f4ece0 0%, #e7d8c4 56%, #ddc8ac 100%); }
+      .avatar-shell::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.1),transparent 28%,rgba(0,0,0,.12)); z-index:1; pointer-events:none; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; bottom:18px; left:50%; width:auto; height:min(76%,500px); transform:translateX(-50%); filter:drop-shadow(0 18px 24px rgba(0,0,0,.14)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.015); }
+      .caption { position:absolute; left:50%; bottom:136px; transform:translateX(-50%); width:min(76%,760px); z-index:4; padding:15px 18px; border-radius:18px; background:rgba(255,249,240,.88); border:1px solid rgba(255,255,255,.7); text-align:center; line-height:1.75; }
+      .caption[hidden] { display:none; }
+      .route-bar { position:absolute; left:28px; right:28px; bottom:24px; z-index:4; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+      .route-stop { padding:16px; border-radius:20px; background:rgba(255,248,239,.84); border:1px solid rgba(255,255,255,.7); }
+      .route-stop b { display:block; font-size:14px; }
+      .route-stop span { display:block; margin-top:8px; color:rgba(61,47,38,.74); font-size:12px; line-height:1.65; }
+      .desk { padding:22px; display:flex; flex-direction:column; gap:16px; }
+      .card { padding:18px; border-radius:24px; background:#fffaf1; border:1px solid var(--line); }
+      .header-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#efe1c9; font-size:12px; font-weight:700; }
+      .status-pill--connecting { background:#f2e1bf; }
+      .status-pill--online { background:#dfeee5; color:#215040; }
+      .status-pill--idle { background:#efe1c9; }
+      .map { height:190px; border-radius:22px; padding:20px; background:radial-gradient(circle at top left,rgba(185,129,63,.16),transparent 30%),linear-gradient(135deg,#fff7ea,#f3e7d2); position:relative; overflow:hidden; }
+      .map::before,.map::after { content:""; position:absolute; border-radius:999px; background:rgba(48,81,70,.18); }
+      .map::before { width:180px; height:180px; right:-60px; top:-70px; }
+      .map::after { width:240px; height:240px; left:-100px; bottom:-120px; }
+      .map-line { position:absolute; left:54px; right:48px; top:98px; height:2px; background:linear-gradient(90deg,var(--pine),rgba(48,81,70,.18)); }
+      .pin { position:absolute; top:84px; width:16px; height:16px; border-radius:50%; background:var(--gold); border:4px solid #fff; box-shadow:0 8px 18px rgba(185,129,63,.24); }
+      .pin:nth-child(2) { left:52px; } .pin:nth-child(3) { left:170px; } .pin:nth-child(4) { left:294px; } .pin:nth-child(5) { left:420px; }
+      .spot-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .spot { padding:16px; border-radius:20px; border:1px solid var(--line); background:#fffdf8; cursor:pointer; }
+      .spot h3 { margin:0 0 8px; font-size:16px; }
+      .spot p { margin:0; color:rgba(61,47,38,.76); line-height:1.7; font-size:13px; }
+      .spot.active { border-color:rgba(185,129,63,.45); background:#fff5e6; }
+      .spot .action-label { display:inline-flex; margin-top:12px; padding:7px 10px; border-radius:999px; background:rgba(142,91,45,.1); color:#70451f; font-size:12px; font-weight:800; }
+      .spot:not(:disabled):hover { transform:translateY(-1px); box-shadow:0 12px 24px rgba(90,62,34,.12); }
+      .spot:disabled .action-label { background:rgba(61,47,38,.08); color:rgba(61,47,38,.38); }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      button { min-height:48px; border:0; border-radius:16px; font:inherit; font-weight:700; cursor:pointer; }
+      .primary { background:linear-gradient(135deg,#8e5b2d,#c48e4d); color:#fff; }
+      .secondary { background:#f2eadc; color:var(--ink); border:1px solid var(--line); }
+      .summary { line-height:1.8; color:rgba(61,47,38,.82); }
+      @media (max-width: 1180px) { .shell { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width: 760px) { .shell { padding:10px; } .title { font-size:34px; } .guide-note { position:relative; top:auto; right:auto; width:100%; margin-top:16px; } .avatar-shell { inset:310px 16px 164px 16px; } .route-bar, .spot-grid, .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel stage">
+        <div class="copy">
+          <div class="eyebrow">景区服务</div>
+          <h1 class="title">古城半日游路线</h1>
+          <p class="sub">从古街入口进入，沿牌坊、戏台、书院巷和茶楼一路慢慢展开，第一次来访也能顺着路线轻松走完。</p>
+        </div>
+        <aside class="guide-note">
+          <strong>游览建议</strong>
+          <p>这条线更适合第一次到访，节奏偏慢，重点放在古街格局、临江看点和中途休息位置。</p>
+        </aside>
+        <div class="avatar-shell">
+          <div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="景区讲解员实时形象" /></div>
+          <div id="avatarMount"></div>
+        </div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="route-bar">
+          <article class="route-stop"><b>古街牌坊</b><span>先看城门与商埠格局，十分钟能快速进入场景。</span></article>
+          <article class="route-stop"><b>临江戏台</b><span>中段停留讲非遗故事，适合补一段人文记忆点。</span></article>
+          <article class="route-stop"><b>城西茶楼</b><span>最后坐下收尾，视野和休息感都更完整。</span></article>
+        </div>
+      </section>
+      <aside class="panel desk">
+        <section class="card header-row">
+          <div>
+            <strong>云岭慢游</strong>
+            <div style="margin-top:6px;color:rgba(61,47,38,.7);font-size:13px;">古城半日游路线台</div>
+          </div>
+          <div id="statusPill" class="status-pill">准备就绪</div>
+        </section>
+        <section class="card map">
+          <strong>半日游路线</strong>
+          <div style="margin-top:8px;color:rgba(61,47,38,.72);font-size:13px;">古街入口 → 临江戏台 → 书院巷 → 城西茶楼</div>
+          <div class="map-line"></div>
+          <div class="pin"></div><div class="pin"></div><div class="pin"></div><div class="pin"></div>
+        </section>
+        <section class="card">
+          <div class="header-row" style="margin-bottom:14px;">
+            <strong>景点卡片</strong>
+        <span style="font-size:12px;color:rgba(61,47,38,.62);">选择景点</span>
+          </div>
+          <div class="spot-grid">
+            <button class="spot active" data-script="从古街牌坊进入最顺。这里能看到城门、商埠和水系之间的关系，老城为什么沿水展开，会在第一眼变得清楚。建议先在牌坊前停两三分钟，看门楼高度、街巷宽度和两侧铺面，再往里走。这样后面经过戏台、书院巷和茶楼时，就不会只是拍照打卡，而是能把每一站放回古城生活的脉络里理解。拍照可以站在牌坊外侧偏左的位置，能同时带到门楼和街巷纵深。"><h3>古街牌坊</h3><p>城门、商埠和古城脉络最集中。</p><span class="action-label">讲解古街牌坊</span></button>
+            <button class="spot" data-script="临江戏台值得多停十分钟。它不是单独的一座建筑，而是老城节庆、戏曲表演和江边生活交汇的位置。站在戏台前，可以先看木构屋檐和台口，再看它面向江面的方向，最后观察周围茶摊和停留空间。这里的人文记忆很强，适合把非遗表演、临江风景和本地人的休闲方式连在一起看。如果刚好遇到排练或小型演出，可以把这里作为全程最重要的停留点。"><h3>临江戏台</h3><p>建筑、节庆和江景都在这里。</p><span class="action-label">讲解临江戏台</span></button>
+            <button class="spot" data-script="书院巷不要走太快。它的距离不长，但砖雕、门楣、墙面肌理和旧时书院生活都藏在细节里。可以先看巷口的尺度，再看门牌和窗格，最后留意墙上修补过的痕迹。这里不适合快步穿过，慢下来反而更容易看到老城教育、家族和街坊生活之间的关系，也能拍到更安静的画面。建议把手机镜头压低一点，顺着巷子纵深拍，画面会更有层次，也更能保留老街安静的气氛。"><h3>书院巷</h3><p>巷子短，但细节最耐看。</p><span class="action-label">讲解书院巷</span></button>
+            <button class="spot" data-script="城西茶楼建议作为最后一站。走完古街、戏台和书院巷之后，游客的体力和注意力都会下降，这时坐下来喝茶、看日落和街景，体验会更完整。茶楼视野比较开阔，能把刚才经过的街巷重新串起来。这里也适合整理照片、休息十五到二十分钟，再决定是否继续夜游或返回游客中心。如果同行有老人或孩子，这里也是调整节奏的安全停靠点。"><h3>城西茶楼</h3><p>适合收尾和休息。</p><span class="action-label">讲解城西茶楼</span></button>
+          </div>
+        </section>
+        <section class="card">
+          <strong>路线建议</strong>
+          <p id="summary" class="summary">第一次来这座城，建议选古街入口进、茶楼出。步行强度不大，拍照时段也更顺。</p>
+        </section>
+        <section class="actions">
+          <button id="connectBtn" class="primary">接入顾问</button>
+          <button id="routeBtn" class="secondary">推荐半日游</button>
+        </section>
+      </aside>
+    </main>
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/shared/xmov-client.js"></script>
+    <script>
+      const scenicApp = window.createXmovClient({
+        name: "scenic-guide",
+        mount: "#avatarMount",
+        fallback: "#avatarFallback",
+        caption: "#caption",
+        status: "#statusPill",
+        connect: "#connectBtn",
+        connectLabel: "接入顾问",
+        connectedLabel: "顾问已接入",
+    idleText: "准备就绪",
+    connectingText: "正在准备",
+        onlineText: "在线讲解",
+        lockFallback: true
+      });
+      const spots = Array.from(document.querySelectorAll(".spot"));
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        await scenicApp.connectAndSpeak("欢迎来到云岭古城。第一次来这里，建议不要把路线安排得太赶。半日慢游线可以从古街牌坊进入，先建立老城格局的整体印象；中段停在临江戏台，看建筑和节庆文化；再进入书院巷观察细节；最后到城西茶楼休息。这样步行强度不高，拍照、听故事和休息的节奏也更舒服。整个路线大约两到三个小时，适合边走边看，不需要频繁折返。");
+      });
+      document.getElementById("routeBtn").addEventListener("click", async () => {
+        const text = "半日游推荐从古街牌坊进入，先看城门、商埠和主街格局，建立整体印象；中段停在临江戏台，看木构建筑、非遗故事和江边视野；接着走书院巷，慢慢看砖雕、门楣和老街生活；最后到城西茶楼收尾。整条路线不用反复折返，休息点也比较自然。上午出发适合拍街巷光影，下午出发则适合把茶楼和日落放在结尾。如果同行有人体力一般，就把戏台和茶楼作为两次主要休息点。";
+        summary.textContent = "古街牌坊 → 临江戏台 → 书院巷 → 城西茶楼。这条路线步行强度低，休息点也更顺。";
+        await scenicApp.speak(text);
+      });
+      spots.forEach((spot) => {
+        spot.addEventListener("click", async () => {
+          spots.forEach((item) => item.classList.remove("active"));
+          spot.classList.add("active");
+          summary.textContent = spot.querySelector("p").textContent;
+          await scenicApp.speak(spot.dataset.script);
+        });
+      });
+    </script>
+  </body>
+</html>

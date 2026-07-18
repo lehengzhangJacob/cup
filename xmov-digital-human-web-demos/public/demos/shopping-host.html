@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>星选直播间</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      :root { --bg:#fff5f1; --ink:#251a2d; --accent:#ff5d5d; --deep:#ff8758; --line:#f1d6d0; --card:#fffdfc; }
+      * { box-sizing:border-box; } body { margin:0; font-family:"Inter","Noto Sans SC",sans-serif; color:var(--ink); background:linear-gradient(180deg,#fff8f3,#ffece2); }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.02fr .98fr; gap:18px; padding:18px; }
+      .panel { border-radius:32px; overflow:hidden; background:rgba(255,255,255,.88); box-shadow:0 24px 60px rgba(150,51,35,.1); }
+      .stage { position:relative; min-height:calc(100vh - 36px); background:radial-gradient(circle at top right,rgba(255,255,255,.28),transparent 22%),linear-gradient(135deg,#1d1624,#41273d 62%,#70303c); color:#fff; }
+      .head { position:absolute; top:24px; left:24px; right:24px; z-index:3; display:flex; justify-content:space-between; gap:16px; }
+      .badge { display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:rgba(255,255,255,.14); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; }
+      .flash { padding:10px 14px; border-radius:999px; background:#ff5c5c; font-size:12px; font-weight:800; }
+      .hero { position:absolute; top:88px; left:24px; right:24px; z-index:3; }
+      .hero h1 { max-width:560px; margin:0; font-size:46px; line-height:1.08; letter-spacing:-.04em; }
+      .hero p { max-width:500px; margin:14px 0 0; color:rgba(255,255,255,.78); line-height:1.74; }
+      .avatar-shell { position:absolute; inset:246px 24px 122px; border-radius:28px; overflow:hidden; background:radial-gradient(circle at top right,rgba(255,255,255,.18),transparent 32%),linear-gradient(180deg,#ff946d,#ff6e83 54%,#6c2443 100%); }
+      .avatar-shell::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,255,255,.08),transparent 26%,rgba(0,0,0,.12)); z-index:1; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 18px 26px rgba(0,0,0,.22)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.015); }
+      .caption { position:absolute; left:50%; bottom:140px; transform:translateX(-50%); width:min(76%,760px); padding:14px 16px; border-radius:18px; background:rgba(15,11,19,.62); z-index:4; text-align:center; line-height:1.72; }
+      .caption[hidden] { display:none; }
+      .metrics { position:absolute; left:24px; right:24px; bottom:24px; z-index:4; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+      .metrics article { padding:16px; border-radius:20px; background:rgba(255,255,255,.12); }
+      .metrics b { display:block; font-size:14px; } .metrics span { display:block; margin-top:8px; color:rgba(255,255,255,.72); font-size:12px; line-height:1.65; }
+      .desk { padding:22px; display:flex; flex-direction:column; gap:14px; }
+      .card { padding:18px; border-radius:24px; background:var(--card); border:1px solid var(--line); }
+      .top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#f7e5e2; font-size:12px; font-weight:800; }
+      .status-pill--online { background:#ffe4e4; color:#ca3838; } .status-pill--connecting { background:#fff0d8; color:#b06d00; } .status-pill--idle { background:#f7e5e2; color:#8b6560; }
+      .products { display:grid; gap:12px; }
+      .product { display:grid; grid-template-columns:96px 1fr auto; gap:14px; align-items:center; padding:14px; border-radius:20px; background:#fff; border:1px solid var(--line); cursor:pointer; }
+      .thumb { width:96px; height:96px; border-radius:18px; background:linear-gradient(135deg,#ffd8c7,#fff0ec); }
+      .product h3 { margin:0 0 6px; font-size:16px; } .product p { margin:0; color:#7b6360; font-size:13px; line-height:1.65; }
+      .price { text-align:right; font-weight:800; color:#ff5d5d; }
+      .product.active { border-color:rgba(255,93,93,.42); background:#fff7f5; }
+      .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; } button { min-height:48px; border:0; border-radius:16px; font:inherit; font-weight:800; cursor:pointer; }
+      .primary { background:linear-gradient(135deg,#ff6d58,#ff4472); color:#fff; } .secondary { background:#fff3ec; color:#8d4f43; border:1px solid var(--line); }
+      @media (max-width: 1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width: 760px) { .app { padding:10px; } .hero h1 { font-size:34px; } .avatar-shell { inset:286px 16px 188px; } .metrics, .actions { grid-template-columns:1fr; } .product { grid-template-columns:1fr; } .thumb { width:100%; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel stage">
+        <div class="head"><div class="badge">电商导购</div><div class="flash">限时加赠 · 02:15</div></div>
+        <div class="hero">
+          <h1>护肤专场直播</h1>
+          <p>清爽修护、防晒通勤和夜间补水三类单品，本场都有明确到手价和限时赠品。</p>
+        </div>
+        <div class="avatar-shell">
+          <div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="电商主播实时形象" /></div>
+          <div id="avatarMount"></div>
+        </div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="metrics">
+          <article><b>主推单品</b><span>轻感修护精华，适合换季干敏肌。</span></article>
+          <article><b>限时优惠</b><span>下单立减 60 元，前 200 单送旅行装。</span></article>
+          <article><b>购买建议</b><span>敏感换季选修护，日常通勤选防晒，夜间干燥选补水面膜。</span></article>
+        </div>
+      </section>
+      <aside class="panel desk">
+        <section class="card top">
+        <div><strong>星选直播间</strong><div style="margin-top:6px;color:#7b6360;font-size:13px;">护肤专场</div></div>
+        <div id="statusPill" class="status-pill">准备就绪</div>
+        </section>
+        <section class="card">
+          <strong>商品轮播</strong>
+          <div class="products" style="margin-top:14px;">
+            <button class="product active" data-script="这支轻感修护精华适合换季皮肤状态不稳定、容易干痒或上妆卡粉的人。它的优势是吸收快，不黏不闷，早晚都能用。早上可以放在防晒前，晚上可以放在面霜前，帮助皮肤维持稳定状态。今天到手价直接减六十，前两百单还有旅行装，加赠装适合出差或通勤包里随身带。如果你最近最明显的问题是泛红、干痒和底妆不服帖，先把预算放在修护精华上，比同时买一堆功能型产品更稳。"><div class="thumb"></div><div><h3>轻感修护精华</h3><p>主打修护屏障和轻薄肤感。</p></div><div class="price">¥219</div></button>
+            <button class="product" data-script="晨光清透防晒更适合每天通勤、坐办公室、需要带妆出门的人。它做得比较轻，不容易搓泥，也不会把底妆压得很厚。早上护肤最后一步使用，等成膜后再上底妆，会更服帖。如果你不喜欢泛白、油膜感和厚重肤感，这瓶会比高倍厚重型防晒更舒服。今天价格是一百五十九，适合补一支日常通勤装。每天要出门的人，防晒的使用频率会比面膜高很多，所以更建议把它当成基础消耗品来看。"><div class="thumb" style="background:linear-gradient(135deg,#ffe5a4,#fff6d8);"></div><div><h3>晨光清透防晒</h3><p>通勤防晒，不泛白。</p></div><div class="price">¥159</div></button>
+            <button class="product" data-script="夜间补水面膜适合晚上洗完脸以后皮肤紧绷、第二天早上容易起皮的人。它不是靠刺激感制造即时效果，而是通过厚敷给皮肤补一层水分和柔软度。建议一周用两到三次，睡前薄涂或局部厚敷都可以。第二天早上清水洗掉以后，再正常护肤上妆，脸会更柔软，底妆也更容易推开。如果白天护肤已经固定，只是晚上容易干，这支面膜更适合作为补充，不需要替代现有面霜。"><div class="thumb" style="background:linear-gradient(135deg,#d3d5ff,#f2f3ff);"></div><div><h3>夜间补水面膜</h3><p>睡前厚敷，第二天更柔软。</p></div><div class="price">¥129</div></button>
+          </div>
+        </section>
+        <section class="card" id="summary">轻感修护精华主打清爽修护，今天下单立减 60 元，前 200 单加赠旅行装。</section>
+        <section class="actions">
+          <button id="connectBtn" class="primary">接入顾问</button>
+          <button id="promoBtn" class="secondary">强调优惠</button>
+        </section>
+      </aside>
+    </main>
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"shopping-host", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"直播在线" });
+      const products = Array.from(document.querySelectorAll(".product"));
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        await app.connectAndSpeak("欢迎来到今天的护肤专场。本场三件单品分别解决换季修护、日常防晒和夜间补水。主推的轻感修护精华适合皮肤状态不稳定、上妆容易卡粉的人；晨光清透防晒适合通勤和带妆；夜间补水面膜适合睡前集中补水。可以先按自己的使用场景选择，不需要三件都买。我的建议是先判断最近一周最常出现的问题，再点对应单品听完整说明，这样不会被价格和赠品带偏。");
+      });
+      document.getElementById("promoBtn").addEventListener("click", async () => {
+        summary.textContent = "限时优惠：轻感修护精华下单立减 60 元，前 200 单加赠旅行装。";
+        await app.speak("今天主推的轻感修护精华下单直接立减六十，前两百单还有旅行装加赠。这个优惠更适合已经有修护需求的人，不建议为了凑单盲买。如果你最近换季泛红、干痒、上妆不服帖，可以优先看这支；如果主要需求是通勤防晒或夜间补水，那就分别看防晒和面膜。优惠窗口在这一轮，赠品数量结束后就只保留基础价格。已经确定要买修护精华的人可以现在下单；还没确认肤况的人，先切换另外两件商品比较使用频率。");
+      });
+      products.forEach((product) => product.addEventListener("click", async () => {
+        products.forEach((entry) => entry.classList.remove("active"));
+        product.classList.add("active");
+        summary.textContent = `${product.querySelector("h3").textContent}：${product.querySelector("p").textContent} ${product.querySelector(".price").textContent}`;
+        await app.speak(product.dataset.script);
+      }));
+    </script>
+  </body>
+</html>

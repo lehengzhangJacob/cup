@@ -1,0 +1,18 @@
+{
+  "name": "xmov-digital-human-web-demos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Web demo collection for XMOV / Xingyun digital human scenarios.",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "capture": "node scripts/capture-demos.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.54.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

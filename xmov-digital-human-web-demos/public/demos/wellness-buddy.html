@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>静息时刻</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+    <style>
+      :root { --base:#e4e9ef; --ink:#435160; --accent:#7289ff; --soft:#f5f7fa; }
+      * { box-sizing:border-box; } body { margin:0; font-family:"Plus Jakarta Sans","Noto Sans SC",sans-serif; color:var(--ink); background:#e4e9ef; }
+      .app { min-height:100vh; display:grid; grid-template-columns:1.05fr .95fr; gap:18px; padding:18px; }
+      .surface { border-radius:34px; background:var(--base); box-shadow:18px 18px 40px #cbd0d6,-18px -18px 40px #fdffff; overflow:hidden; }
+      .stage { position:relative; min-height:calc(100vh - 36px); }
+      .hero { position:absolute; top:28px; left:28px; right:28px; z-index:3; display:flex; justify-content:space-between; gap:18px; }
+      .hero h1 { margin:12px 0 10px; max-width:520px; font-size:42px; line-height:1.14; letter-spacing:-.04em; }
+      .hero p { margin:0; max-width:500px; line-height:1.74; color:#627180; }
+      .pill { display:inline-flex; padding:9px 14px; border-radius:999px; background:var(--base); box-shadow:inset 6px 6px 12px #d0d5db,inset -6px -6px 12px #f8fbff; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+      .note { width:250px; padding:18px; border-radius:24px; background:var(--base); box-shadow:12px 12px 24px #cbd0d6,-12px -12px 24px #fdffff; }
+      .note p { margin:8px 0 0; font-size:13px; line-height:1.7; color:#6b7884; }
+      .avatar-shell { position:absolute; inset:220px 28px 170px; border-radius:30px; overflow:hidden; background:radial-gradient(circle at 50% 40%,rgba(114,137,255,.18),transparent 28%),linear-gradient(180deg,#edf0f5,#dce2ea); box-shadow:inset 10px 10px 22px #cfd4da,inset -10px -10px 22px #f9fcff; }
+      .breath { position:absolute; left:50%; top:44%; width:220px; height:220px; border-radius:50%; transform:translate(-50%,-50%); background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.96),rgba(114,137,255,.28)); box-shadow:0 0 0 24px rgba(114,137,255,.08),0 0 0 56px rgba(114,137,255,.04); }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+      .fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; }
+      .fallback.is-visible { opacity:1; }
+.fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(72%,460px); transform:translateX(-50%); filter:drop-shadow(0 16px 24px rgba(67,81,96,.14)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.012); }
+      .caption { position:absolute; left:50%; bottom:184px; transform:translateX(-50%); width:min(72%,680px); padding:14px 16px; border-radius:18px; background:rgba(244,247,250,.92); z-index:4; text-align:center; line-height:1.72; box-shadow:8px 8px 18px #d0d5db,-8px -8px 18px #f8fbff; }
+      .caption[hidden] { display:none; }
+      .moods { position:absolute; left:28px; right:28px; bottom:28px; display:grid; grid-template-columns:repeat(4,1fr); gap:12px; z-index:4; }
+      .moods button { min-height:58px; border:0; border-radius:20px; background:var(--base); color:var(--ink); box-shadow:8px 8px 18px #cbd0d6,-8px -8px 18px #fdffff; font:700 14px/1 "Plus Jakarta Sans",sans-serif; cursor:pointer; }
+      .desk { padding:22px; display:flex; flex-direction:column; gap:14px; }
+      .card { padding:18px; border-radius:24px; background:var(--base); box-shadow:12px 12px 24px #cbd0d6,-12px -12px 24px #fdffff; }
+      .top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:var(--base); box-shadow:inset 6px 6px 12px #d0d5db,inset -6px -6px 12px #f8fbff; font-size:12px; font-weight:800; }
+      .status-pill--online { color:#4f65d5; } .status-pill--connecting { color:#9e7a11; }
+      .summary { line-height:1.8; color:#61707d; } .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .actions button { min-height:50px; border:0; border-radius:18px; font:700 15px/1 "Plus Jakarta Sans",sans-serif; cursor:pointer; background:var(--base); color:var(--ink); box-shadow:10px 10px 20px #cbd0d6,-10px -10px 20px #fdffff; }
+      @media (max-width:1180px) { .app { grid-template-columns:1fr; } .stage { min-height:760px; } }
+      @media (max-width:760px) { .app { padding:10px; } .hero { flex-direction:column; } .hero h1 { font-size:34px; } .note { width:100%; } .avatar-shell { inset:330px 16px 220px; } .moods, .actions { grid-template-columns:1fr 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="surface stage">
+        <div class="hero">
+          <div><div class="pill">情绪陪伴</div><h1>呼吸放松与短时陪伴</h1><p>先把呼吸和注意力慢慢收回来，身体节奏稳定后，再决定是否继续表达感受。</p></div>
+          <aside class="note"><strong>放松步骤</strong><p>先做一轮呼吸，再选一个当下更接近的状态，不急着解释整件事。</p></aside>
+        </div>
+        <div class="avatar-shell"><div class="breath"></div><div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="心理陪伴伙伴实时形象" /></div><div id="avatarMount"></div></div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="moods">
+          <button data-script="如果你有点焦虑，先不用急着解决所有事情。现在可以把注意力放回身体：吸气四秒，停一下，再慢慢呼气六秒。先做三轮，让呼吸从急变慢。接着只选一件最需要处理的小事，不要同时想明天、工作和人际关系。焦虑会把所有问题挤到一起，先拆小一点，身体稳定后再决定下一步。可以把那件小事写成一句话，今天只处理开头的五分钟。">有点焦虑</button>
+          <button data-script="如果你觉得很累，先不要责备自己效率低。疲惫通常说明身体和注意力已经消耗太久。现在可以把今天剩下的事情分成两类：必须今天完成的，只保留一件；可以明天处理的，先写下来放到一边。接下来喝点水，离开屏幕几分钟，让肩颈和眼睛都休息一下。恢复状态比硬撑更重要。真正需要完成的事情，可以等身体回一点电以后再继续，不必用透支换速度。">有点累</button>
+          <button data-script="如果你觉得委屈，现在先允许自己难受一下，不需要马上变得积极，也不需要立刻替别人找理由。可以先把最让你不舒服的那句话写下来，再写清楚它让你感到被忽视、被误解，还是被否定。情绪被看见以后，才更容易决定要不要沟通。现在先照顾自己，不急着做决定。等情绪稍微降下来，再决定要不要把感受告诉对方，或者只是给自己一点空间。">有点委屈</button>
+          <button data-script="想聊一聊的时候，可以先说最卡住的那句话，不需要一次解释完整件事。比如先说：我现在最在意的是哪一幕，或者哪句话一直在脑子里重复。说的时候不用追求逻辑完整，只要把心里最重的部分放出来。等这句话说清楚以后，再慢慢补背景、关系和后续打算。这样会比一开始就讲全部更轻松。如果说到一半不知道怎么继续，可以先停在那句话上，给自己一点时间。">想聊一聊</button>
+        </div>
+      </section>
+      <aside class="surface desk">
+      <section class="card top"><div><strong>静息时刻</strong><div style="margin-top:6px;color:#6b7884;font-size:13px;">短时陪伴模式</div></div><div id="statusPill" class="status-pill">准备就绪</div></section>
+        <section class="card" id="summary">先从呼吸练习开始，不急着分析原因。</section>
+        <section class="card"><strong>呼吸节奏</strong><div style="margin-top:10px;color:#61707d;line-height:1.8;">吸气四秒，停一下，再慢慢呼气六秒。先完成一轮，再决定是否继续表达感受。</div></section>
+        <section class="card"><strong>今晚安排</strong><div style="margin-top:10px;color:#61707d;line-height:1.8;">把最重要的一件事留给今天，其他事情往后放一放，先把身体状态缓下来。</div></section>
+        <section class="actions"><button id="connectBtn">接入顾问</button><button id="breathBtn">30 秒呼吸</button></section>
+      </aside>
+    </main>
+    <script src="/config.js"></script><script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script><script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"wellness-buddy", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线陪伴" });
+      const summary = document.getElementById("summary");
+      document.getElementById("connectBtn").addEventListener("click", async () => { await app.connectAndSpeak("你好。现在不用急着解释发生了什么，先把呼吸慢下来。先坐稳，双脚踩在地面上，肩膀放松，眼睛可以看向一个固定的位置。接下来只做一件事：把吸气和呼气拉长。身体稳定以后，再决定要不要继续说情绪、事情经过，或者今天最需要被照顾的部分。你可以先从一个最接近当下状态的按钮开始，不需要马上完整表达，也不用急着做判断。"); });
+      document.getElementById("breathBtn").addEventListener("click", async () => { summary.textContent = "呼吸节奏：吸气四秒，停一下，再缓慢呼气六秒。"; await app.speak("现在做一轮三十秒呼吸。先吸气四秒，感受空气慢慢进入胸口和腹部；停一下，不用憋得太用力；然后慢慢呼气六秒，把肩膀、下巴和手指都放松。重复三轮。过程中如果杂念出现，不需要赶走，只要把注意力带回数字和呼吸。先把身体放稳，情绪会更容易降下来。做完以后可以轻轻活动手指和肩膀，让身体知道这一轮已经结束，然后再决定要不要继续说话。"); });
+      document.querySelectorAll(".moods button").forEach((btn) => btn.addEventListener("click", async () => { summary.textContent = btn.dataset.script; await app.speak(btn.dataset.script); }));
+    </script>
+  </body>
+</html>

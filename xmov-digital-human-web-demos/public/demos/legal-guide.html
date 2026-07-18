@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知止普法</title><link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing:border-box; } body { margin:0; font-family:"Manrope","Noto Sans SC",sans-serif; color:#162233; background:#f4f6f8; }
+      .app { min-height:100vh; display:grid; grid-template-columns:360px 1fr; gap:18px; padding:18px; }
+      .panel { border:1px solid #d8e0e8; border-radius:28px; background:#fff; overflow:hidden; }
+      .nav { padding:22px; display:flex; flex-direction:column; gap:14px; }
+      .nav h1 { margin:0; font-family:"Noto Serif SC",serif; font-size:34px; line-height:1.2; }
+      .nav p { margin:0; color:#617083; line-height:1.75; }
+      .topic { padding:16px; border-radius:20px; border:1px solid #d8e0e8; background:#f8fafc; cursor:pointer; }
+      .topic h3 { margin:0 0 8px; font-size:16px; } .topic p { margin:0; color:#617083; font-size:13px; line-height:1.7; } .topic.active { background:#eef5fb; border-color:#9fc1df; }
+      .content { position:relative; min-height:calc(100vh - 36px); background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.04)),url("https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1600&q=80") center/cover no-repeat; }
+      .content-copy { position:absolute; top:26px; left:26px; right:26px; z-index:3; padding:18px 18px 0; border-radius:24px; background:rgba(255,255,255,.74); backdrop-filter:blur(10px); }
+      .content-copy h2 { margin:12px 0 10px; max-width:620px; font-size:42px; line-height:1.14; } .content-copy p { max-width:560px; margin:0; color:#405364; line-height:1.76; }
+      .badge { display:inline-flex; padding:8px 14px; border-radius:999px; background:rgba(255,255,255,.88); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+      .avatar-shell { position:absolute; inset:236px 26px 126px; border-radius:28px; overflow:hidden; background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.03)),url("https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80") center/cover no-repeat; }
+      #avatarMount { position:relative; z-index:2; width:100%; height:100%; }
+.fallback { position:absolute; inset:0; z-index:3; opacity:0; transition:opacity .2s ease; } .fallback.is-visible { opacity:1; } .fallback img { position:absolute; left:50%; bottom:18px; width:auto; height:min(78%,520px); transform:translateX(-50%); filter:drop-shadow(0 18px 24px rgba(0,0,0,.22)); }
+      .fallback.is-speaking img { transform:translateX(-50%) scale(1.012); }
+      .caption { position:absolute; left:50%; bottom:140px; transform:translateX(-50%); width:min(75%,710px); padding:14px 16px; border-radius:18px; background:rgba(255,255,255,.92); z-index:4; text-align:center; line-height:1.72; }
+      .caption[hidden] { display:none; }
+      .actions { position:absolute; left:26px; right:26px; bottom:24px; z-index:4; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .actions button { min-height:48px; border:0; border-radius:16px; font:800 14px/1 "Manrope",sans-serif; cursor:pointer; } .primary { background:#17324b; color:#fff; } .secondary { background:#edf3f8; color:#17324b; }
+      .status-pill { padding:10px 14px; border-radius:999px; background:#edf3f8; font-size:12px; font-weight:800; } .status-pill--online { background:#e3f1ec; color:#177056; } .status-pill--connecting { background:#fff0da; color:#a56b00; }
+      @media (max-width:1180px) { .app { grid-template-columns:1fr; } .content { min-height:760px; } }
+      @media (max-width:760px) { .app { padding:10px; } .content-copy h2 { font-size:34px; } .avatar-shell { inset:282px 16px 188px; } .actions { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel nav">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><h1>知止普法</h1><p>常见问题先说结论，再说处理步骤。</p></div><div id="statusPill" class="status-pill">准备就绪</div></div>
+        <button class="topic active" data-script="如果你在试用期被辞退，先不要只听口头通知。第一步确认公司给出的辞退理由，是能力不符合录用条件、岗位调整，还是其他原因；第二步保留劳动合同、录用通知、考勤、工资流水、聊天记录和绩效沟通材料；第三步要求公司给出书面说明。事情没讲清楚前，不要只凭一句口头通知就离开，也不要随便签不理解的文件。试用期问题的关键在录用条件和解除理由是否清楚，先把入职前后的文件对齐，再判断下一步怎么沟通。"><h3>试用期被辞退怎么办</h3><p>先确认理由，再留证据。</p></button>
+        <button class="topic" data-script="如果是租房合同纠纷，先把合同、付款凭证、押金记录、房屋照片和沟通记录整理到一起。重点看合同里关于押金退还、维修责任、提前解约和违约金的条款。沟通时不要只在电话里说，尽量用文字确认诉求和时间节点。如果涉及房屋损坏或押金扣除，最好保留入住和退租时的照片对比，这样更容易说明责任。租房问题通常卡在证据对比，退租前后的照片、维修记录和押金明细越完整，协商空间越清楚。"><h3>租房合同纠纷</h3><p>重点先看合同和付款凭证。</p></button>
+        <button class="topic" data-script="如果是消费维权，先把订单截图、付款记录、商品页面、聊天记录、物流信息和售后反馈都保存下来。接着明确诉求，是退款、换货、维修，还是要求平台介入。和商家沟通时尽量写清时间、问题和证据，不要只表达情绪。如果商家拖延，可以按平台规则发起投诉，并保留每一次处理结果，形成完整证据链。消费维权最重要的是让平台快速看懂问题，所以诉求要明确，证据要按购买、发现问题、沟通处理的顺序排列。"><h3>消费维权</h3><p>证据链要完整。</p></button>
+      </aside>
+      <section class="panel content">
+        <div class="content-copy"><div class="badge">法律普法</div><h2>劳动与合同常见问题</h2><p>先确认事实和证据，再决定沟通顺序和处理方式，常见问题可以先从这里快速理清。</p></div>
+        <div class="avatar-shell"><div id="avatarFallback" class="fallback is-visible"><img src="../assets/xmov-male-runtime-cutout.png" alt="法律咨询顾问实时形象" /></div><div id="avatarMount"></div></div>
+        <div id="caption" class="caption" hidden></div>
+        <div class="actions"><button id="connectBtn" class="primary">接入顾问</button><button id="stepsBtn" class="secondary">给我步骤</button></div>
+      </section>
+    </main>
+    <script src="/config.js"></script><script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script><script src="/shared/xmov-client.js"></script>
+    <script>
+const app = window.createXmovClient({ name:"legal-guide", mount:"#avatarMount", fallback:"#avatarFallback", caption:"#caption", status:"#statusPill", connect:"#connectBtn", connectLabel:"接入顾问", connectedLabel:"顾问已接入", idleText:"准备就绪", connectingText:"正在准备", onlineText:"在线解答" });
+      const topics = Array.from(document.querySelectorAll(".topic"));
+      document.getElementById("connectBtn").addEventListener("click", async () => { await app.connectAndSpeak("你好。遇到劳动、租房或消费纠纷时，先不要急着下结论。第一步确认事实，包括时间、地点、合同关系和对方说法；第二步保留证据，比如合同、付款记录、聊天截图、照片和通知；第三步再按正式流程沟通。这里提供的是基础普法思路，不替代律师意见，但可以帮你先把问题理清楚。你可以先选择最接近的纠纷类型，我会按对应场景提醒该留什么材料、先找谁沟通、哪些文件不要随便签。"); });
+      document.getElementById("stepsBtn").addEventListener("click", async () => { await app.speak("处理这类问题通常先做三件事。第一，确认事实，把时间线写清楚，不要只凭记忆争论。第二，保留证据，包括合同、付款记录、聊天截图、照片和通知。第三，走正式沟通流程，能用文字确认就不要只靠电话。事情没讲清楚之前，不要随便签署放弃权利或确认结清的文件。如果金额较大或情况复杂，再考虑咨询专业律师。下一步可以把所有材料按日期排序，先形成一页简短说明，再去沟通或咨询，效率会高很多。"); });
+      topics.forEach((topic) => topic.addEventListener("click", async () => { topics.forEach((item) => item.classList.remove("active")); topic.classList.add("active"); await app.speak(topic.dataset.script); }));
+    </script>
+  </body>
+</html>

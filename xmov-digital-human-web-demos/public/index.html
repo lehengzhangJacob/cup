@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f8fb" />
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>StudyBridge 留学申请顾问</title>
+    <style>
+      :root {
+        --bg: #f4f8fb;
+        --bg-soft: #edf4f8;
+        --surface: rgba(255, 255, 255, 0.92);
+        --surface-strong: #ffffff;
+        --surface-tint: #f6fbfc;
+        --line: #d7e3ea;
+        --line-strong: #bfd2dc;
+        --text: #102a43;
+        --text-soft: #52697a;
+        --text-faint: #748896;
+        --primary: #0f766e;
+        --primary-deep: #115e59;
+        --secondary: #0369a1;
+        --secondary-deep: #075985;
+        --accent: #c48a2e;
+        --success: #0f8a62;
+        --shadow: 0 22px 60px rgba(15, 37, 56, 0.08);
+        --shadow-soft: 0 14px 32px rgba(15, 37, 56, 0.06);
+        --radius-xl: 30px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(20, 184, 166, 0.11), transparent 24%),
+          radial-gradient(circle at top right, rgba(3, 105, 161, 0.1), transparent 22%),
+          linear-gradient(180deg, #f7fbfd 0%, #f1f6fa 46%, #eef4f7 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(16, 42, 67, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(16, 42, 67, 0.025) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(circle at center, black 28%, transparent 78%);
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        min-height: 100vh;
+        padding: 14px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 14px;
+        padding: 16px 22px;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(18px);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-mark {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        box-shadow: 0 14px 24px rgba(15, 118, 110, 0.22);
+      }
+
+      .brand-mark svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .brand-copy strong {
+        display: block;
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-copy span {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-faint);
+        font-size: 12px;
+      }
+
+      .topbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .meta-chip,
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.86);
+        color: var(--text-soft);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .meta-chip svg,
+      .status-chip::before {
+        flex: 0 0 auto;
+      }
+
+      .meta-chip svg {
+        width: 15px;
+        height: 15px;
+        color: var(--secondary);
+      }
+
+      .status-chip::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+      }
+
+      .status-chip.online {
+        color: #0d6b4f;
+        border-color: rgba(15, 138, 98, 0.18);
+        background: rgba(236, 253, 245, 0.94);
+      }
+
+      .status-chip.online::before {
+        background: var(--success);
+        box-shadow: 0 0 0 5px rgba(15, 138, 98, 0.12);
+      }
+
+      .status-chip.connecting {
+        color: #8a5a12;
+        border-color: rgba(196, 138, 46, 0.22);
+        background: rgba(255, 248, 235, 0.96);
+      }
+
+      .status-chip.connecting::before {
+        background: var(--accent);
+        box-shadow: 0 0 0 5px rgba(196, 138, 46, 0.12);
+      }
+
+      .status-chip.error {
+        color: #a61b1b;
+        border-color: rgba(220, 38, 38, 0.2);
+        background: rgba(254, 242, 242, 0.96);
+      }
+
+      .status-chip.error::before {
+        background: #dc2626;
+        box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.12);
+      }
+
+      .hero-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.24fr) minmax(400px, 0.92fr);
+        gap: 18px;
+        align-items: start;
+        min-height: calc(100vh - 112px);
+      }
+
+      .card {
+        position: relative;
+        border: 1px solid rgba(255, 255, 255, 0.88);
+        border-radius: var(--radius-xl);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .stage-card {
+        overflow: hidden;
+        height: calc(100vh - 112px);
+        min-height: 740px;
+        background:
+          radial-gradient(circle at 16% 15%, rgba(20, 184, 166, 0.08), transparent 24%),
+          radial-gradient(circle at 82% 10%, rgba(3, 105, 161, 0.08), transparent 20%),
+          linear-gradient(180deg, rgba(247, 251, 253, 0.96) 0%, rgba(241, 246, 250, 0.96) 100%);
+      }
+
+      .stage-card::after {
+        content: "";
+        position: absolute;
+        inset: 22px;
+        border-radius: 28px;
+        border: 1px solid rgba(191, 210, 220, 0.52);
+        pointer-events: none;
+      }
+
+      .stage-head {
+        position: absolute;
+        top: 24px;
+        left: 24px;
+        right: 24px;
+        z-index: 3;
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(15, 118, 110, 0.14);
+        background: rgba(240, 253, 250, 0.9);
+        color: var(--primary-deep);
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--primary);
+      }
+
+      .hero-title {
+        margin: 14px 0 0;
+        max-width: 500px;
+        font-size: clamp(30px, 3.1vw, 44px);
+        line-height: 1.12;
+        letter-spacing: -0.04em;
+        font-weight: 800;
+      }
+
+      .hero-copy {
+        margin: 14px 0 0;
+        max-width: 520px;
+        color: var(--text-soft);
+        font-size: 14px;
+        line-height: 1.72;
+      }
+
+      .hero-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .hero-tag {
+        min-height: 38px;
+        padding: 9px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(191, 210, 220, 0.7);
+        background: rgba(255, 255, 255, 0.86);
+        color: var(--text-soft);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .advisor-note {
+        width: min(300px, 32vw);
+        padding: 18px;
+        border-radius: 24px;
+        border: 1px solid rgba(191, 210, 220, 0.7);
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .advisor-note strong {
+        display: block;
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--primary-deep);
+      }
+
+      .advisor-note p {
+        margin: 10px 0 0;
+        color: var(--text-soft);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .advisor-ribbon {
+        margin-top: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--secondary-deep);
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .advisor-ribbon::before {
+        content: "";
+        width: 32px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(3, 105, 161, 0), rgba(3, 105, 161, 0.75), rgba(3, 105, 161, 0));
+      }
+
+      #avatarShell {
+        position: absolute;
+        inset: 248px 24px 128px 24px;
+        z-index: 1;
+        overflow: hidden;
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08)),
+          url("https://media.xingyun3d.com/xingyun3d/general/litehuman/background_2D/jushen_v1_black_and_gold_style_office_02.png")
+            center center / cover no-repeat,
+          linear-gradient(180deg, #eff5f7 0%, #e6edf1 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      }
+
+      #avatarShell::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(8, 18, 32, 0.26) 0%, rgba(8, 18, 32, 0.04) 24%, rgba(8, 18, 32, 0) 50%),
+          linear-gradient(0deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 22%);
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .avatar-fallback {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 240ms ease;
+      }
+
+      .avatar-fallback.visible {
+        opacity: 1;
+      }
+
+      .avatar-fallback.speaking img {
+        transform: translate(-50%, 0) scale(1.012);
+        filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.2));
+      }
+
+      .avatar-fallback img {
+        position: absolute;
+        left: 49%;
+        bottom: -6px;
+        width: min(38%, 258px);
+        max-height: 96%;
+        object-fit: contain;
+        transform: translate(-50%, 0) scale(1);
+        transform-origin: bottom center;
+        transition: transform 180ms ease, filter 180ms ease;
+        filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.16));
+      }
+
+      #avatarMount {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        z-index: 2;
+        transform: translateY(4px);
+      }
+
+      #avatarMount canvas,
+      #avatarMount video {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        object-fit: contain;
+      }
+
+      .speech-caption {
+        position: absolute;
+        left: 50%;
+        bottom: 144px;
+        z-index: 3;
+        transform: translateX(-50%);
+        width: min(78%, 760px);
+        padding: 15px 18px;
+        border-radius: 20px;
+        border: 1px solid rgba(191, 210, 220, 0.78);
+        background: rgba(255, 255, 255, 0.88);
+        color: var(--text);
+        text-align: center;
+        font-size: 14px;
+        line-height: 1.72;
+        box-shadow: 0 12px 28px rgba(15, 37, 56, 0.08);
+      }
+
+      .speech-caption[hidden] {
+        display: none;
+      }
+
+      .stage-bottom {
+        position: absolute;
+        left: 24px;
+        right: 24px;
+        bottom: 24px;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .info-card {
+        min-height: 100px;
+        padding: 16px 18px;
+        border-radius: 20px;
+        border: 1px solid rgba(191, 210, 220, 0.76);
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .info-card strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .info-card span {
+        display: block;
+        margin-top: 8px;
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .panel {
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: calc(100vh - 112px);
+        min-height: 740px;
+        overflow: auto;
+      }
+
+      .section {
+        padding: 18px;
+        border: 1px solid rgba(215, 227, 234, 0.86);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .section-kicker {
+        color: var(--secondary-deep);
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .section-title {
+        margin: 10px 0 0;
+        font-size: 26px;
+        line-height: 1.18;
+        letter-spacing: -0.03em;
+        font-weight: 800;
+      }
+
+      .section-copy {
+        margin: 10px 0 0;
+        color: var(--text-soft);
+        font-size: 14px;
+        line-height: 1.75;
+      }
+
+      .quick-picks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .quick-pick {
+        min-height: 40px;
+        padding: 9px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface-strong);
+        color: var(--text-soft);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: border-color 180ms ease, color 180ms ease, transform 180ms ease;
+      }
+
+      .quick-pick:hover {
+        border-color: rgba(15, 118, 110, 0.32);
+        color: var(--primary-deep);
+        transform: translateY(-1px);
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .section-head h2,
+      .section-head h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .section-head span {
+        color: var(--text-faint);
+        font-size: 12px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field.wide {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        color: var(--text-soft);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(247, 251, 253, 0.98);
+        color: var(--text);
+        font: inherit;
+        transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: rgba(15, 118, 110, 0.46);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.08);
+        background: #ffffff;
+      }
+
+      textarea {
+        min-height: 114px;
+        resize: vertical;
+        line-height: 1.72;
+      }
+
+      .action-row {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr 1fr;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      button {
+        min-height: 48px;
+        border: 0;
+        border-radius: 16px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease, background-color 180ms ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        color: white;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        box-shadow: 0 14px 24px rgba(3, 105, 161, 0.16);
+      }
+
+      .btn-secondary {
+        color: var(--secondary-deep);
+        background: #ecf7fb;
+        border: 1px solid rgba(3, 105, 161, 0.14);
+      }
+
+      .btn-tertiary {
+        color: var(--text-soft);
+        background: #f6fafc;
+        border: 1px solid var(--line);
+      }
+
+      .summary-card {
+        padding: 18px;
+        border-radius: 22px;
+        background:
+          linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(3, 105, 161, 0.08)),
+          #ffffff;
+        border: 1px solid rgba(191, 210, 220, 0.76);
+      }
+
+      .summary-card strong {
+        display: block;
+        color: var(--primary-deep);
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary-card p {
+        margin: 10px 0 0;
+        font-size: 15px;
+        line-height: 1.8;
+      }
+
+      .plan-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .plan-card {
+        min-height: 172px;
+        padding: 18px;
+        border: 1px solid rgba(215, 227, 234, 0.92);
+        border-radius: 20px;
+        background: rgba(246, 251, 252, 0.95);
+      }
+
+      .plan-card h4 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .plan-card p {
+        margin: 10px 0 0;
+        color: var(--text-soft);
+        font-size: 13px;
+        line-height: 1.78;
+      }
+
+      .proof-grid {
+        display: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 0;
+      }
+
+      .proof-card {
+        padding: 18px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.88);
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .proof-card strong {
+        display: block;
+        font-size: 15px;
+        font-weight: 800;
+      }
+
+      .proof-card p {
+        margin: 10px 0 0;
+        color: var(--text-soft);
+        font-size: 13px;
+        line-height: 1.76;
+      }
+
+      .proof-metric {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .proof-metric b {
+        font-family: "Lexend", "Noto Sans SC", sans-serif;
+        font-size: 34px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .proof-metric span {
+        color: var(--text-faint);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .quote {
+        position: relative;
+        padding-left: 18px;
+      }
+
+      .quote::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 2px;
+        bottom: 2px;
+        width: 3px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--primary), var(--secondary));
+      }
+
+      .quote footer {
+        margin-top: 12px;
+        color: var(--text-faint);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .sr-only {
+        display: none;
+      }
+
+      @media (max-width: 1260px) {
+        .hero-layout {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+
+        .stage-card {
+          height: 720px;
+          min-height: 720px;
+        }
+
+        .panel {
+          height: auto;
+          min-height: 0;
+          overflow: visible;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .page {
+          padding: 10px;
+        }
+
+        .topbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .topbar-meta {
+          justify-content: space-between;
+        }
+
+        .stage-head {
+          position: relative;
+          top: auto;
+          left: auto;
+          right: auto;
+          padding: 24px 24px 0;
+          flex-direction: column;
+        }
+
+        .advisor-note {
+          width: 100%;
+        }
+
+        #avatarShell {
+          inset: 302px 18px 168px 18px;
+        }
+
+        .stage-card {
+          height: 860px;
+          min-height: 860px;
+        }
+
+        .panel {
+          height: auto;
+          min-height: 0;
+          overflow: visible;
+        }
+
+        .stage-bottom,
+        .proof-grid,
+        .plan-grid,
+        .form-grid,
+        .action-row {
+          grid-template-columns: 1fr;
+        }
+
+        .speech-caption {
+          width: calc(100% - 36px);
+          bottom: 176px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .brand-copy strong {
+          font-size: 16px;
+        }
+
+        .hero-title {
+          font-size: 36px;
+        }
+
+        .stage-card {
+          height: 900px;
+          min-height: 900px;
+        }
+
+        #avatarShell {
+          inset: 338px 14px 202px 14px;
+        }
+
+        .speech-caption {
+          bottom: 210px;
+          font-size: 13px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 4 7v6c0 5 3.4 7.9 8 8 4.6-.1 8-3 8-8V7l-8-4Z"></path>
+              <path d="m9.5 12 1.7 1.7 3.8-4"></path>
+            </svg>
+          </div>
+          <div class="brand-copy">
+            <strong>StudyBridge 留学申请顾问</strong>
+            <span>顾问工作台</span>
+          </div>
+        </div>
+
+        <div class="topbar-meta">
+          <div class="meta-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 7h18"></path>
+              <path d="M7 3v8"></path>
+              <path d="M17 3v8"></path>
+              <rect x="4" y="5" width="16" height="15" rx="2"></rect>
+            </svg>
+            硕士申请规划
+          </div>
+          <div class="meta-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2v20"></path>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            英美港新咨询
+          </div>
+          <div id="statusPill" class="status-chip">顾问未上线</div>
+        </div>
+      </header>
+
+      <section class="hero-layout">
+        <section class="card stage-card">
+          <div class="stage-head">
+            <div>
+              <div class="eyebrow">硕士申请规划</div>
+              <h1 class="hero-title">留学申请顾问</h1>
+              <p class="hero-copy">
+                输入目标国家、专业方向、预算和背景，页面直接给出申请定位、时间安排和选校建议。
+              </p>
+              <div class="hero-tags">
+                <span class="hero-tag">申请定位</span>
+                <span class="hero-tag">选校建议</span>
+                <span class="hero-tag">时间规划</span>
+              </div>
+            </div>
+
+            <aside class="advisor-note">
+              <strong>顾问信息</strong>
+              <p>英美港新硕士申请路径、背景诊断、选校梯度划分与材料准备节奏。</p>
+              <div class="advisor-ribbon">1 对 1 咨询</div>
+            </aside>
+          </div>
+
+          <div id="avatarShell" aria-label="留学顾问数字人舞台">
+            <div id="avatarFallback" class="avatar-fallback" aria-hidden="true">
+              <img
+                src="./assets/xmov-male-runtime-cutout.png"
+                alt="留学顾问实时形象"
+              />
+            </div>
+            <div id="avatarMount"></div>
+          </div>
+
+          <div id="speechCaption" class="speech-caption" hidden aria-live="polite"></div>
+
+          <div class="stage-bottom">
+            <article class="info-card">
+              <strong>申请定位</strong>
+              <span>先判断你的背景与目标项目是否匹配，再确定申请策略和梯度。</span>
+            </article>
+            <article class="info-card">
+              <strong>时间安排</strong>
+              <span>围绕目标入学季安排语言、实习、文书和投递节奏，避免关键节点拖延。</span>
+            </article>
+            <article class="info-card">
+              <strong>下一步建议</strong>
+              <span>优先补强最影响录取判断的材料：成绩、语言、项目经历、推荐信和个人陈述。</span>
+            </article>
+          </div>
+        </section>
+
+        <aside class="card panel">
+          <section class="section">
+            <div class="section-kicker">开始规划</div>
+            <h2 class="section-title">填写申请信息</h2>
+            <p class="section-copy">
+              选择常见申请方向，或填写自己的计划，立即查看本次申请建议。
+            </p>
+            <div class="quick-picks">
+              <button class="quick-pick" data-preset="uk-finance" type="button">英国商科硕士</button>
+              <button class="quick-pick" data-preset="us-ai" type="button">美国 AI 硕士</button>
+              <button class="quick-pick" data-preset="hk-media" type="button">香港传媒硕士</button>
+              <button class="quick-pick" data-preset="sg-analytics" type="button">新加坡商业分析</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h3>申请信息录入</h3>
+              <span>填写后查看建议</span>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="targetCountry">目标国家 / 地区</label>
+                <select id="targetCountry">
+                  <option value="英国">英国</option>
+                  <option value="美国">美国</option>
+                  <option value="香港">香港</option>
+                  <option value="新加坡">新加坡</option>
+                  <option value="澳大利亚">澳大利亚</option>
+                  <option value="德国">德国</option>
+                  <option value="加拿大">加拿大</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="degreeLevel">申请层级</label>
+                <select id="degreeLevel">
+                  <option value="硕士">硕士</option>
+                  <option value="本科">本科</option>
+                  <option value="博士">博士</option>
+                  <option value="预科 / 转专业">预科 / 转专业</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="majorTrack">目标专业</label>
+                <input id="majorTrack" value="人工智能 / 计算机" />
+              </div>
+
+              <div class="field">
+                <label for="intakeSeason">目标入学季</label>
+                <select id="intakeSeason">
+                  <option value="2026 秋季">2026 秋季</option>
+                  <option value="2026 春季">2026 春季</option>
+                  <option value="2027 秋季">2027 秋季</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="budgetLevel">年预算</label>
+                <select id="budgetLevel">
+                  <option value="30-40 万人民币">30-40 万人民币</option>
+                  <option value="20-30 万人民币">20-30 万人民币</option>
+                  <option value="40-60 万人民币">40-60 万人民币</option>
+                  <option value="60 万人民币以上">60 万人民币以上</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="profileLevel">当前背景</label>
+                <select id="profileLevel">
+                  <option value="基础不错，可冲更高层次项目">基础不错，可冲更高层次项目</option>
+                  <option value="技术基础较强，可冲研究型项目">技术基础较强，可冲研究型项目</option>
+                  <option value="数理基础扎实，可冲就业导向项目">数理基础扎实，可冲就业导向项目</option>
+                  <option value="中等背景，需要稳扎稳打">中等背景，需要稳扎稳打</option>
+                  <option value="跨专业，需要强化解释与补充经历">跨专业，需要强化解释与补充经历</option>
+                </select>
+              </div>
+
+              <div class="field wide">
+                <label for="studentNotes">学生补充情况</label>
+                <textarea id="studentNotes" placeholder="例如：双非院校，GPA 3.4，有两段实习，雅思 6.5，想申请更偏就业导向的项目。">双非院校，GPA 3.5，有两段相关实习，雅思 6.5，希望申请更偏就业和实习资源强的项目。</textarea>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button id="connectBtn" class="btn-primary" type="button">接入顾问</button>
+              <button id="generateBtn" class="btn-secondary" type="button" disabled>生成方案</button>
+              <button id="introBtn" class="btn-tertiary" type="button" disabled>申请建议</button>
+            </div>
+          </section>
+
+          <section class="summary-card">
+            <strong>本次建议</strong>
+            <p id="summaryText">
+              选择申请方向后，这里会显示本次申请的核心判断。
+            </p>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h3>申请方案</h3>
+              <span>申请定位与行动建议</span>
+            </div>
+
+            <div class="plan-grid">
+              <article class="plan-card">
+                <h4>定位判断</h4>
+                <p id="planPositioning">这里会显示本次申请的定位判断和风险提示。</p>
+              </article>
+              <article class="plan-card">
+                <h4>时间规划</h4>
+                <p id="planTimeline">围绕目标入学季梳理准备节奏和倒排时间线。</p>
+              </article>
+              <article class="plan-card">
+                <h4>选校梯度</h4>
+                <p id="planSchoolMix">按冲刺、主申、保稳三层判断选校结构。</p>
+              </article>
+              <article class="plan-card">
+                <h4>下一步动作</h4>
+                <p id="planNextSteps">列出最优先准备的材料和下一步动作。</p>
+              </article>
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="proof-grid" aria-label="信任与证明模块">
+        <article class="proof-card">
+          <div class="proof-metric">
+            <b>3 层</b>
+            <span>选校梯度</span>
+          </div>
+          <strong>选校先分层，再看匹配度</strong>
+          <p>冲刺学校看资源和上限，主申学校看专业匹配，保稳学校看录取稳定性和毕业去向。</p>
+        </article>
+
+        <article class="proof-card quote">
+          <strong>申请不是只看排名，材料主线更重要。</strong>
+          <p>同一段经历要同时服务简历、文书和面试表达，先把最有说服力的经历写清楚。</p>
+          <footer>建议先完成简历初稿，再进入文书框架。</footer>
+        </article>
+
+        <article class="proof-card">
+          <div class="proof-metric">
+            <b>1 屏</b>
+            <span>核心交互</span>
+          </div>
+          <strong>先确定下一步，不盲目投递</strong>
+          <p>目标国家、预算、背景和入学季确认后，再决定语言考试、推荐信和投递批次。</p>
+        </article>
+      </section>
+
+      <div class="sr-only" id="debugHost"></div>
+    </main>
+
+    <script src="/config.js"></script>
+    <script src="https://media.xingyun3d.com/xingyun3d/general/litesdk/xmovAvatar@latest.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
