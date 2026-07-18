@@ -1,0 +1,30 @@
+# secrets & local env
+softcup_glmkey
+.env
+.env.*
+*.pem
+deploy/certs/
+
+# runtime / logs
+deploy/*.log
+deploy/*.pid
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# large archives / scraped page assets (keep 赛题文本)
+*.zip
+题目/*_files/
+题目/*_files/**
+data/**/*.db

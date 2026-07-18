@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>灵山小向导 · AI数字人导览</title>
+  <style>
+    :root {
+      --bg0: #0b1814;
+      --bg1: #163028;
+      --gold: #d4b26a;
+      --gold2: #9a7a35;
+      --text: #eef5f0;
+      --muted: #8aa399;
+      --card: rgba(18, 40, 33, 0.88);
+      --line: #2f5646;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 500px at 70% -10%, rgba(212,178,106,.18), transparent 55%),
+        linear-gradient(165deg, #0b1814 0%, #163028 45%, #0f241c 100%);
+    }
+    header {
+      padding: 16px 20px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+      color: var(--gold);
+      letter-spacing: .08em;
+      font-weight: 700;
+    }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 8px 16px 28px;
+      display: grid;
+      grid-template-columns: 1.15fr .95fr;
+      gap: 14px;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(6px);
+    }
+    .stage {
+      position: relative;
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 20%, rgba(212,178,106,.16), transparent 42%),
+        radial-gradient(circle at 50% 85%, rgba(47,86,70,.55), transparent 55%),
+        linear-gradient(180deg, #123028 0%, #0c1c17 100%);
+    }
+    .stage-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 2px 8px;
+      z-index: 3;
+    }
+    .badge {
+      font-size: 12px;
+      color: var(--gold);
+      border: 1px solid rgba(212,178,106,.4);
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.25);
+    }
+    .style-control { position: relative; }
+    .style-trigger {
+      width: auto !important;
+      padding: 6px 12px !important;
+      font-size: 12px !important;
+      background: #2f5646 !important;
+      color: var(--text) !important;
+      font-weight: 600 !important;
+    }
+    .style-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      width: 240px;
+      background: rgba(12, 28, 23, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      z-index: 20;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .style-group { margin-bottom: 10px; }
+    .style-group:last-child { margin-bottom: 0; }
+    .style-label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .style-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .style-options button {
+      width: auto !important;
+      padding: 6px 10px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      background: #1a3329 !important;
+      color: var(--text) !important;
+      border: 1px solid #3a6654 !important;
+    }
+    .style-options button[aria-pressed="true"] {
+      background: linear-gradient(135deg, var(--gold), var(--gold2)) !important;
+      color: #1a1205 !important;
+      border-color: transparent !important;
+    }
+    .model-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 420px;
+      width: 100%;
+    }
+    #live2dCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .model-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      background: rgba(8,18,14,.35);
+      z-index: 2;
+    }
+    .model-loading.is-hidden { display: none; }
+    .loader-ring {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid rgba(212,178,106,.25);
+      border-top-color: var(--gold);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    label { display:block; font-size:12px; color:var(--muted); margin: 0 0 6px; }
+    select, textarea, input, button {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #10241d;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    textarea { resize: vertical; min-height: 72px; }
+    .btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    button {
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--gold), var(--gold2));
+      color: #1a1205;
+    }
+    button.secondary { background: #2f5646; color: var(--text); font-weight: 600; }
+    button.danger { background: #8b3a3a; color: #fff; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #log {
+      white-space: pre-wrap;
+      line-height: 1.55;
+      min-height: 160px;
+      max-height: 42vh;
+      overflow: auto;
+      font-size: 14px;
+      background: rgba(0,0,0,.18);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .meta { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .rec-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #e74c3c;
+      margin-right: 6px;
+      box-shadow: 0 0 0 0 rgba(231,76,60,.6);
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(231,76,60,.55); }
+      70% { box-shadow: 0 0 0 10px rgba(231,76,60,0); }
+      100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>灵山小向导 · 灵曦</h1>
+      <p>Live2D 数字人 · 智谱 GLM / TTS / ASR · 景区知识库问答</p>
+    </div>
+  </header>
+  <main>
+    <section class="card stage">
+      <div class="stage-top">
+        <div class="badge">Haru Live2D · 口型同步</div>
+        <div class="style-control" id="styleControl">
+          <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
+          <div class="style-panel" id="stylePanel" hidden>
+            <div class="style-group">
+              <span class="style-label">神态</span>
+              <div class="style-options" id="expressionOptions">
+                <button type="button" data-expression="natural" aria-pressed="true">自然</button>
+                <button type="button" data-expression="gentle" aria-pressed="false">温柔</button>
+                <button type="button" data-expression="smile" aria-pressed="false">笑意</button>
+                <button type="button" data-expression="bright" aria-pressed="false">灵动</button>
+              </div>
+            </div>
+            <div class="style-group">
+              <span class="style-label">发色</span>
+              <div class="style-options" id="hairOptions">
+                <button type="button" data-hair="classic" aria-pressed="true">雾紫</button>
+                <button type="button" data-hair="chestnut" aria-pressed="false">茶棕</button>
+                <button type="button" data-hair="ink" aria-pressed="false">墨青</button>
+              </div>
+            </div>
+            <div class="style-group">
+              <span class="style-label">服装</span>
+              <div class="style-options" id="costumeOptions">
+                <button type="button" data-costume="classic" aria-pressed="true">云墨灰</button>
+                <button type="button" data-costume="jade" aria-pressed="false">灵山青</button>
+                <button type="button" data-costume="cinnabar" aria-pressed="false">朱砂红</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="model-wrap" id="modelWrap">
+        <canvas id="live2dCanvas" aria-label="Live2D 数字人"></canvas>
+        <div class="model-loading" id="modelLoading">
+          <span class="loader-ring"></span>
+          <span>正在载入灵曦 Haru…</span>
+        </div>
+      </div>
+      <div class="hint" id="avatarHint">数字人初始化中</div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <label>兴趣偏好</label>
+          <select id="interest">
+            <option value="历史">历史文化</option>
+            <option value="自然">自然风光</option>
+            <option value="亲子">亲子家庭</option>
+          </select>
+        </div>
+        <div>
+          <label>API 根地址</label>
+          <input id="base" value="" placeholder="默认当前站点" />
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>提问（可打字，也可点「点击说话」）</label>
+        <textarea id="q" rows="3">灵山大佛有多高？用了多少铜？</textarea>
+      </div>
+
+      <div class="btns">
+        <button id="ask">文字问答</button>
+        <button id="voice" class="secondary">点击说话</button>
+        <button id="rec" class="secondary">推荐路线</button>
+      </div>
+      <div class="btns" style="grid-template-columns:1fr; margin-top:8px;">
+        <label class="secondary" style="display:block; text-align:center; padding:10px 12px; border-radius:10px; background:#2f5646; color:var(--text); cursor:pointer; font-weight:600;">
+          上传语音文件（HTTP 可用）
+          <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.webm,.m4a" style="display:none" />
+        </label>
+      </div>
+      <div class="meta" id="status">就绪 · Live2D + 智谱语音</div>
+      <div class="meta" id="secureHint" style="color:#e0c07a;"></div>
+      <div style="margin-top:12px;">
+        <label>导览回复</label>
+        <div id="log"></div>
+      </div>
+      <p class="hint">流程：麦克风/上传 → ASR → 知识库问答 → GLM-TTS → Live2D 口型。<br/>
+        语音：点一次开始，说完再点结束。公网麦克风请用 <b>HTTPS:8443</b>。</p>
+    </section>
+  </main>
+
+  <script src="/static/vendor/live2dcubismcore.min.js"></script>
+  <script src="/static/vendor/pixi.min.js"></script>
+  <script src="/static/vendor/cubism4.min.js"></script>
+  <script src="/static/js/lingxi-live2d.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const base = () => ($("base").value.trim() || location.origin);
+    let sessionId = null;
+    let currentAudio = null;
+    let currentAudioCtx = null;
+    let currentObjectUrl = null;
+    let talking = false;
+    let speechToken = 0;
+
+    function setPressed(buttons, activeValue, dataName) {
+      buttons.forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.dataset[dataName] === activeValue));
+      });
+    }
+
+    /** 立刻打断当前 TTS / 口型（换造型、重新提问时调用） */
+    function stopSpeech(reason) {
+      speechToken += 1;
+      talking = false;
+      if (currentAudio) {
+        try {
+          currentAudio.onplay = null;
+          currentAudio.onended = null;
+          currentAudio.onerror = null;
+          currentAudio.pause();
+          currentAudio.removeAttribute("src");
+          currentAudio.load();
+        } catch (_) {}
+        currentAudio = null;
+      }
+      if (currentAudioCtx) {
+        try { currentAudioCtx.close(); } catch (_) {}
+        currentAudioCtx = null;
+      }
+      if (currentObjectUrl) {
+        try { URL.revokeObjectURL(currentObjectUrl); } catch (_) {}
+        currentObjectUrl = null;
+      }
+      if (window.LingxiLive2D) {
+        LingxiLive2D.stopSpeaking();
+        LingxiLive2D.setMouthFromAudio(0);
+      }
+      if (reason) $("status").textContent = reason;
+    }
+
+    // ---------- Live2D init ----------
+    async function bootLive2D() {
+      try {
+        await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
+        $("modelLoading").classList.add("is-hidden");
+        $("styleButton").disabled = false;
+        $("avatarHint").textContent = "灵曦已就绪（Haru · 口型跟随语音）";
+        $("status").textContent = "数字人就绪";
+      } catch (err) {
+        console.error(err);
+        $("modelLoading").innerHTML = "<strong>Live2D 载入失败</strong><span>" + String(err.message || err) + "</span>";
+        $("avatarHint").textContent = "Live2D 失败，文字/语音问答仍可用";
+      }
+    }
+
+    // style panel
+    const styleButton = $("styleButton");
+    const stylePanel = $("stylePanel");
+    styleButton.addEventListener("click", () => {
+      const open = stylePanel.hidden;
+      stylePanel.hidden = !open;
+      styleButton.setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("click", (e) => {
+      if (!$("styleControl").contains(e.target)) {
+        stylePanel.hidden = true;
+        styleButton.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    const expressionButtons = [...document.querySelectorAll("[data-expression]")];
+    const hairButtons = [...document.querySelectorAll("[data-hair]")];
+    const costumeButtons = [...document.querySelectorAll("[data-costume]")];
+
+    expressionButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        stopSpeech("已切换神态 · 语音已停止");
+        LingxiLive2D.setExpression(btn.dataset.expression);
+        setPressed(expressionButtons, btn.dataset.expression, "expression");
+      });
+    });
+    hairButtons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        stopSpeech("已切换发色 · 语音已停止");
+        await LingxiLive2D.setHair(btn.dataset.hair);
+        setPressed(hairButtons, btn.dataset.hair, "hair");
+      });
+    });
+    costumeButtons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        stopSpeech("已切换服装 · 语音已停止");
+        await LingxiLive2D.setCostume(btn.dataset.costume);
+        setPressed(costumeButtons, btn.dataset.costume, "costume");
+      });
+    });
+
+    function setEmotion(e) {
+      if (window.LingxiLive2D) LingxiLive2D.setEmotion(e || "calm");
+      const mapped = { smile: "smile", calm: "natural", solemn: "gentle", surprise: "bright" }[e] || "natural";
+      setPressed(expressionButtons, mapped, "expression");
+    }
+
+    function stripMeta(text) {
+      const lines = text.split(/\n/);
+      let emotionVal = null;
+      const kept = [];
+      for (const ln of lines) {
+        const t = ln.trim();
+        if (t.startsWith("{") && t.endsWith("}") && t.includes("emotion")) {
+          try {
+            const j = JSON.parse(t);
+            if (j.emotion) emotionVal = j.emotion;
+          } catch (_) {}
+          continue;
+        }
+        kept.push(ln);
+      }
+      return { text: kept.join("\n").trim(), emotion: emotionVal };
+    }
+
+    async function speak(text) {
+      if (!text) return;
+      stopSpeech();
+      const myToken = speechToken;
+      $("status").textContent = "合成语音中…";
+      const r = await fetch(base() + "/v1/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: "female", speed: 1.0 })
+      });
+      // 用户已换造型 / 重新提问：丢弃这份过期 TTS
+      if (myToken !== speechToken) return;
+      if (!r.ok) throw new Error(await r.text());
+      const blob = await r.blob();
+      if (myToken !== speechToken) return;
+      const url = URL.createObjectURL(blob);
+      currentObjectUrl = url;
+      const audio = new Audio(url);
+      currentAudio = audio;
+
+      const ctxA = new (window.AudioContext || window.webkitAudioContext)();
+      currentAudioCtx = ctxA;
+      const src = ctxA.createMediaElementSource(audio);
+      const analyser = ctxA.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      analyser.connect(ctxA.destination);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      talking = true;
+      LingxiLive2D.startSpeaking();
+
+      function tick() {
+        if (!talking || myToken !== speechToken) return;
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 2; i < 24; i++) sum += data[i];
+        const level = Math.min(1, (sum / 22) / 140);
+        LingxiLive2D.setMouthFromAudio(level);
+        requestAnimationFrame(tick);
+      }
+      audio.onplay = () => {
+        if (myToken !== speechToken) return;
+        ctxA.resume();
+        tick();
+        $("status").textContent = "灵曦播报中…";
+      };
+      audio.onended = () => {
+        if (myToken !== speechToken) return;
+        talking = false;
+        LingxiLive2D.stopSpeaking();
+        LingxiLive2D.setMouthFromAudio(0);
+        $("status").textContent = "播报完成";
+        if (currentObjectUrl === url) {
+          URL.revokeObjectURL(url);
+          currentObjectUrl = null;
+        }
+        currentAudio = null;
+      };
+      audio.onerror = () => {
+        if (myToken !== speechToken) return;
+        talking = false;
+        LingxiLive2D.stopSpeaking();
+        $("status").textContent = "语音播放失败";
+      };
+      if (myToken !== speechToken) {
+        stopSpeech();
+        return;
+      }
+      await audio.play();
+    }
+
+    async function askText(message) {
+      if (!message) return;
+      stopSpeech("思考中…");
+      const btn = $("ask");
+      btn.disabled = true;
+      $("log").textContent = "";
+      $("status").textContent = "思考中…";
+      setEmotion("calm");
+      try {
+        const r = await fetch(base() + "/v1/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            interest: $("interest").value,
+            session_id: sessionId,
+            stream: true
+          })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "", full = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split("\n\n");
+          buf = parts.pop();
+          for (const p of parts) {
+            const line = p.split("\n").find(l => l.startsWith("data: "));
+            if (!line) continue;
+            const ev = JSON.parse(line.slice(6));
+            if (ev.type === "meta") {
+              sessionId = ev.session_id;
+              $("status").textContent = "引用: " + (ev.citations || []).map(c => c.title).slice(0,3).join(" / ");
+            } else if (ev.type === "delta") {
+              full += ev.content;
+              const parsed = stripMeta(full);
+              $("log").textContent = parsed.text;
+              if (parsed.emotion) setEmotion(parsed.emotion);
+            } else if (ev.type === "done") {
+              $("status").textContent += ` · ${ev.latency_ms}ms`;
+            }
+          }
+        }
+        const parsed = stripMeta(full);
+        $("log").textContent = parsed.text;
+        if (parsed.emotion) setEmotion(parsed.emotion);
+        await speak(parsed.text);
+      } catch (e) {
+        $("log").textContent = String(e);
+        $("status").textContent = "失败";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    $("ask").onclick = () => askText($("q").value.trim());
+
+    $("rec").onclick = async () => {
+      stopSpeech("请求推荐…");
+      $("status").textContent = "请求推荐…";
+      const r = await fetch(base() + "/v1/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interest: $("interest").value })
+      });
+      const data = await r.json();
+      const route = data.route;
+      const text = `为您推荐「${route.name}」，约 ${route.duration_hours} 小时。${route.summary}途经：${route.stops.join(" → ")}。`;
+      $("log").textContent = text;
+      setEmotion("smile");
+      await speak(text);
+    };
+
+    // ---------- Voice input ----------
+    const canMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      && (window.isSecureContext || location.hostname === "localhost" || location.hostname === "127.0.0.1");
+
+    if (!canMic) {
+      $("secureHint").textContent = location.protocol === "http:"
+        ? "当前是 HTTP，浏览器禁用麦克风。请改用 HTTPS（:8443），或上传 wav/mp3。"
+        : "当前环境无法使用麦克风，请上传 wav/mp3。";
+      $("voice").textContent = "麦克风不可用";
+      $("voice").disabled = true;
+    }
+
+    function downsampleTo16k(float32, inputRate) {
+      if (inputRate === 16000) return float32;
+      const ratio = inputRate / 16000;
+      const newLen = Math.max(1, Math.floor(float32.length / ratio));
+      const out = new Float32Array(newLen);
+      for (let i = 0; i < newLen; i++) out[i] = float32[Math.floor(i * ratio)] || 0;
+      return out;
+    }
+
+    function encodeWavMono16k(float32, sampleRate) {
+      const data = downsampleTo16k(float32, sampleRate);
+      const pcm = new Int16Array(data.length);
+      let peak = 0;
+      for (let i = 0; i < data.length; i++) {
+        const s = Math.max(-1, Math.min(1, data[i]));
+        peak = Math.max(peak, Math.abs(s));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      if (peak > 0.001 && peak < 0.25) {
+        const gain = Math.min(4, 0.6 / peak);
+        for (let i = 0; i < pcm.length; i++) {
+          pcm[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * gain)));
+        }
+      }
+      const buffer = new ArrayBuffer(44 + pcm.length * 2);
+      const view = new DataView(buffer);
+      const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + pcm.length * 2, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, 16000, true);
+      view.setUint32(28, 32000, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, "data");
+      view.setUint32(40, pcm.length * 2, true);
+      let p = 44;
+      for (let i = 0; i < pcm.length; i++, p += 2) view.setInt16(p, pcm[i], true);
+      let acc = 0;
+      for (let i = 0; i < pcm.length; i++) acc += pcm[i] * pcm[i];
+      const rms = Math.sqrt(acc / Math.max(1, pcm.length));
+      return { blob: new Blob([buffer], { type: "audio/wav" }), rms, duration: pcm.length / 16000 };
+    }
+
+    async function blobToWav16k(blob) {
+      const ab = await blob.arrayBuffer();
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      await ctx.resume();
+      const audioBuf = await ctx.decodeAudioData(ab.slice(0));
+      let mono = audioBuf.getChannelData(0);
+      if (audioBuf.numberOfChannels > 1) {
+        const ch1 = audioBuf.getChannelData(1);
+        mono = new Float32Array(mono.length);
+        for (let i = 0; i < mono.length; i++) mono[i] = (audioBuf.getChannelData(0)[i] + ch1[i]) * 0.5;
+      }
+      const encoded = encodeWavMono16k(mono, audioBuf.sampleRate);
+      await ctx.close();
+      return encoded;
+    }
+
+    async function recognizeBlob(blob, filename) {
+      $("status").innerHTML = '<span class="rec-dot"></span>处理音频…';
+      const enc = await blobToWav16k(blob);
+      if (enc.duration < 0.6) throw new Error("录音太短，请至少说 1 秒");
+      if (enc.rms < 80) throw new Error("几乎没声音，请靠近麦克风再说一次");
+      $("status").innerHTML = '<span class="rec-dot"></span>识别中…';
+      const fd = new FormData();
+      fd.append("file", enc.blob, "speech.wav");
+      const r = await fetch(base() + "/v1/asr", { method: "POST", body: fd });
+      if (!r.ok) {
+        let msg = await r.text();
+        try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+        if (String(msg).includes("no audio segment")) {
+          throw new Error("未检测到有效语音。请说完 1～2 秒后再结束。");
+        }
+        throw new Error("识别失败: " + msg);
+      }
+      const data = await r.json();
+      const text = (data.text || "").trim();
+      if (!text) throw new Error("未识别到内容");
+      $("q").value = text;
+      $("status").textContent = "识别：" + text;
+      await askText(text);
+    }
+
+    let mediaRecorder = null;
+    let recStream = null;
+    let audioChunks = [];
+    let recording = false;
+    let recStartedAt = 0;
+
+    async function startRec() {
+      if (!canMic) {
+        $("status").textContent = "HTTP 下请用 HTTPS:8443 或上传 wav/mp3";
+        return;
+      }
+      if (recording) return;
+      stopSpeech();
+      recStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+      });
+      audioChunks = [];
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : (MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "");
+      mediaRecorder = mime ? new MediaRecorder(recStream, { mimeType: mime }) : new MediaRecorder(recStream);
+      mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) audioChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        try {
+          recStream.getTracks().forEach(t => t.stop());
+          if ((Date.now() - recStartedAt) / 1000 < 0.8) {
+            $("status").textContent = "录音太短，请至少说 1～2 秒";
+            return;
+          }
+          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+          await recognizeBlob(blob, "speech.webm");
+        } catch (err) {
+          $("status").textContent = String(err.message || err);
+        }
+      };
+      mediaRecorder.start(200);
+      recording = true;
+      recStartedAt = Date.now();
+      $("voice").classList.add("danger");
+      $("voice").textContent = "点击结束";
+      $("status").innerHTML = '<span class="rec-dot"></span>录音中…说完再点结束';
+    }
+
+    function stopRec() {
+      if (!recording) return;
+      recording = false;
+      $("voice").classList.remove("danger");
+      $("voice").textContent = canMic ? "点击说话" : "麦克风不可用";
+      if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+    }
+
+    if (canMic) {
+      $("voice").addEventListener("click", (e) => {
+        e.preventDefault();
+        if (recording) stopRec();
+        else startRec().catch(err => { $("status").textContent = String(err); });
+      });
+    }
+
+    $("audioFile").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      try {
+        await recognizeBlob(f, f.name || "audio.wav");
+      } catch (err) {
+        $("status").textContent = String(err.message || err);
+      } finally {
+        e.target.value = "";
+      }
+    });
+
+    bootLive2D();
+  </script>
+</body>
+</html>
