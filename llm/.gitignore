@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# 离线构建产物（可由 scripts/build_index.py 重新生成，不提交）
+index/
+
+# Word 临时锁文件
+~$*
+
+# 大体积原始行为数据（16MB，按需本地保留）
+景点景区旅游数据行为分析数据.xlsx

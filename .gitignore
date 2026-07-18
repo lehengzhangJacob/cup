@@ -9,6 +9,11 @@ deploy/certs/
 # runtime / logs
 deploy/*.log
 deploy/*.pid
+deploy/**/*.log
+deploy/**/*.pid
+LiveTalking/downloads/
+LiveTalking/models/wav2lip.pth
+LiveTalking/data/avatars/wav2lip256_avatar1/
 __pycache__/
 *.py[cod]
 .Python

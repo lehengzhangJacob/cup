@@ -40,6 +40,11 @@
       font-weight: 700;
     }
     header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .admin-link {
+      color: var(--gold); text-decoration: none; font-size: 12px;
+      border: 1px solid rgba(212,178,106,.42); border-radius: 999px; padding: 7px 12px;
+      background: rgba(0,0,0,.18);
+    }
     main {
       max-width: 1080px;
       margin: 0 auto;
@@ -144,6 +149,35 @@
       height: 100%;
       display: block;
     }
+    #liveTalkingVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      z-index: 2;
+      object-fit: contain;
+      object-position: center bottom;
+      background: #08120e;
+    }
+    #liveTalkingVideo.is-active { display: block; }
+    #liveTalkingAudio { display: none; }
+    #xmovMount {
+      position: absolute;
+      inset: 0;
+      display: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+    #xmovMount.is-active { display: block; }
+    #xmovMount canvas, #xmovMount video {
+      width: 100% !important;
+      height: 100% !important;
+      display: block !important;
+      object-fit: contain !important;
+      object-position: center bottom !important;
+    }
+    #live2dCanvas.is-hidden { display: none; }
     .model-loading {
       position: absolute;
       inset: 0;
@@ -200,6 +234,11 @@
       padding: 12px;
     }
     .meta { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+    .feature-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+    .file-action { display:block; text-align:center; padding:10px 12px; border-radius:10px; background:#2f5646; color:var(--text); cursor:pointer; font-weight:600; font-size:13px; }
+    .feedback { margin-top:12px; padding:11px; border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.12); }
+    .feedback-row { display:grid; grid-template-columns:110px 1fr auto; gap:8px; align-items:end; }
+    .feedback-row button { width:auto; white-space:nowrap; padding:10px 15px; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
     .rec-dot {
@@ -216,19 +255,21 @@
       70% { box-shadow: 0 0 0 10px rgba(231,76,60,0); }
       100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
     }
+    @media (max-width:560px) { .feedback-row { grid-template-columns:1fr; } .feedback-row button { width:100%; } }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>灵山小向导 · 灵曦</h1>
-      <p>Live2D 数字人 · 智谱 GLM / TTS / ASR · 景区知识库问答</p>
+      <p>LiveTalking 本地真人（Live2D 回退）· 智谱 GLM / ASR · 景区知识库问答</p>
     </div>
+    <a class="admin-link" href="/admin">景区管理后台 →</a>
   </header>
   <main>
     <section class="card stage">
       <div class="stage-top">
-        <div class="badge">Haru Live2D · 口型同步</div>
+        <div class="badge" id="avatarBadge">Haru Live2D · 正在连接本地数字人</div>
         <div class="style-control" id="styleControl">
           <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
           <div class="style-panel" id="stylePanel" hidden>
@@ -261,6 +302,9 @@
         </div>
       </div>
       <div class="model-wrap" id="modelWrap">
+        <video id="liveTalkingVideo" autoplay playsinline muted aria-label="LiveTalking 本地数字人"></video>
+        <audio id="liveTalkingAudio" autoplay></audio>
+        <div id="xmovMount" aria-label="XMOV 3D 数字人"></div>
         <canvas id="live2dCanvas" aria-label="Live2D 数字人"></canvas>
         <div class="model-loading" id="modelLoading">
           <span class="loader-ring"></span>
@@ -302,13 +346,25 @@
           <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.webm,.m4a" style="display:none" />
         </label>
       </div>
-      <div class="meta" id="status">就绪 · Live2D + 智谱语音</div>
+      <div class="feature-actions">
+        <label class="file-action">拍照识景导览<input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" /></label>
+        <button id="locate" class="secondary" type="button">我在灵山大佛附近</button>
+      </div>
+      <div class="meta" id="status">就绪 · 正在检测 LiveTalking 本地服务</div>
       <div class="meta" id="secureHint" style="color:#e0c07a;"></div>
       <div style="margin-top:12px;">
         <label>导览回复</label>
         <div id="log"></div>
       </div>
-      <p class="hint">流程：麦克风/上传 → ASR → 知识库问答 → GLM-TTS → Live2D 口型。<br/>
+      <div class="feedback">
+        <label>本次导览体验反馈</label>
+        <div class="feedback-row">
+          <select id="rating" aria-label="满意度"><option value="5">5分 · 非常满意</option><option value="4">4分 · 满意</option><option value="3">3分 · 一般</option><option value="2">2分 · 不满意</option><option value="1">1分 · 很不满意</option></select>
+          <input id="feedbackComment" maxlength="1000" placeholder="可填写建议或感受" />
+          <button id="sendFeedback" class="secondary" type="button">提交反馈</button>
+        </div>
+      </div>
+      <p class="hint">流程：麦克风/上传 → ASR → 知识库问答 → LiveTalking 本地口型播报（服务未就绪时回退 GLM-TTS + Live2D）。<br/>
         语音：点一次开始，说完再点结束。公网麦克风请用 <b>HTTPS:8443</b>。</p>
     </section>
   </main>
@@ -328,6 +384,20 @@
     let currentSpeechPipeline = null;
     let talking = false;
     let speechToken = 0;
+    const xmovState = {
+      avatar: null,
+      ready: false,
+      configured: false,
+      connecting: false,
+      interactionStartedAt: 0,
+    };
+    const liveTalkingState = {
+      pc: null,
+      sessionId: null,
+      ready: false,
+      connecting: false,
+      avatarId: null,
+    };
 
     function setPressed(buttons, activeValue, dataName) {
       buttons.forEach((btn) => {
@@ -385,6 +455,279 @@
         console.error(err);
         $("modelLoading").innerHTML = "<strong>Live2D 载入失败</strong><span>" + String(err.message || err) + "</span>";
         $("avatarHint").textContent = "Live2D 失败，文字/语音问答仍可用";
+      }
+    }
+
+
+    function activateLiveTalkingView() {
+      document.getElementById("liveTalkingVideo").classList.add("is-active");
+      document.getElementById("xmovMount").classList.remove("is-active");
+      document.getElementById("live2dCanvas").classList.add("is-hidden");
+      document.getElementById("avatarBadge").textContent = "LiveTalking · Wav2Lip 本地口型";
+      document.getElementById("avatarHint").textContent = "LiveTalking 本地数字人已连接（GPU 加速）";
+      document.getElementById("styleButton").disabled = true;
+      document.getElementById("stylePanel").hidden = true;
+    }
+
+    function fallbackToLive2D(message) {
+      document.getElementById("liveTalkingVideo").classList.remove("is-active");
+      document.getElementById("live2dCanvas").classList.remove("is-hidden");
+      document.getElementById("avatarBadge").textContent = "Haru Live2D · LiveTalking 回退";
+      document.getElementById("avatarHint").textContent = message || "LiveTalking 尚未就绪，当前使用 Haru";
+      document.getElementById("styleButton").disabled = false;
+    }
+
+    function ensureLiveTalkingPlayback() {
+      const video = document.getElementById("liveTalkingVideo");
+      const audio = document.getElementById("liveTalkingAudio");
+      if (video.srcObject) video.play().catch(() => {});
+      if (audio.srcObject) audio.play().catch(() => {});
+    }
+
+    async function waitForIceGathering(pc, timeoutMs = 3500) {
+      if (pc.iceGatheringState === "complete") return;
+      await new Promise(resolve => {
+        let timer = null;
+        const done = () => {
+          pc.removeEventListener("icegatheringstatechange", check);
+          if (timer) clearTimeout(timer);
+          resolve();
+        };
+        const check = () => {
+          if (pc.iceGatheringState === "complete") done();
+        };
+        pc.addEventListener("icegatheringstatechange", check);
+        timer = setTimeout(done, timeoutMs);
+      });
+    }
+
+    async function bootLiveTalking() {
+      if (liveTalkingState.ready || liveTalkingState.connecting) return liveTalkingState.ready;
+      liveTalkingState.connecting = true;
+      try {
+        const statusResponse = await fetch(base() + "/v1/livetalking/status", { cache: "no-store" });
+        if (!statusResponse.ok) throw new Error("LiveTalking 状态读取失败");
+        const status = await statusResponse.json();
+        liveTalkingState.avatarId = status.avatar_id || null;
+        if (!status.enabled || !status.ready) {
+          fallbackToLive2D("LiveTalking 正在后台安装或启动，当前使用 Haru");
+          return false;
+        }
+
+        document.getElementById("avatarHint").textContent = "正在建立 LiveTalking WebRTC 本地视频…";
+        const pc = new RTCPeerConnection({ sdpSemantics: "unified-plan" });
+        liveTalkingState.pc = pc;
+        let resolveConnected;
+        let rejectConnected;
+        const connected = new Promise((resolve, reject) => {
+          resolveConnected = resolve;
+          rejectConnected = reject;
+        });
+
+        pc.addEventListener("track", event => {
+          const stream = new MediaStream([event.track]);
+          if (event.track.kind === "video") {
+            const video = document.getElementById("liveTalkingVideo");
+            video.srcObject = stream;
+            video.play().catch(() => {});
+          } else {
+            const audio = document.getElementById("liveTalkingAudio");
+            audio.srcObject = stream;
+            audio.play().catch(() => {});
+          }
+        });
+        pc.addEventListener("connectionstatechange", () => {
+          const state = pc.connectionState;
+          if (state === "connected") {
+            liveTalkingState.ready = true;
+            activateLiveTalkingView();
+            document.getElementById("status").textContent = "LiveTalking 本地数字人就绪";
+            resolveConnected(true);
+          } else if (state === "failed") {
+            rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
+          } else if (state === "disconnected" || state === "closed") {
+            liveTalkingState.ready = false;
+            fallbackToLive2D("LiveTalking 连接已断开，当前使用 Haru");
+          }
+        });
+
+        pc.addTransceiver("video", { direction: "recvonly" });
+        pc.addTransceiver("audio", { direction: "recvonly" });
+        await pc.setLocalDescription(await pc.createOffer());
+        await waitForIceGathering(pc);
+        const offerResponse = await fetch(base() + "/v1/livetalking/offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sdp: pc.localDescription.sdp,
+            type: pc.localDescription.type,
+            avatar: liveTalkingState.avatarId,
+          }),
+        });
+        if (!offerResponse.ok) throw new Error(await offerResponse.text());
+        const answer = await offerResponse.json();
+        if (!answer.sdp || !answer.sessionid) throw new Error(answer.msg || "LiveTalking 未返回会话");
+        liveTalkingState.sessionId = String(answer.sessionid);
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: answer.type, sdp: answer.sdp }));
+        await Promise.race([
+          connected,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("LiveTalking 连接超时")), 12000)),
+        ]);
+        window.addEventListener("beforeunload", () => {
+          try { pc.close(); } catch (_) {}
+        }, { once: true });
+        return true;
+      } catch (error) {
+        console.error(error);
+        liveTalkingState.ready = false;
+        liveTalkingState.sessionId = null;
+        if (liveTalkingState.pc) {
+          try { liveTalkingState.pc.close(); } catch (_) {}
+        }
+        liveTalkingState.pc = null;
+        fallbackToLive2D("LiveTalking 暂不可用，已回退 Haru：" + String(error.message || error));
+        return false;
+      } finally {
+        liveTalkingState.connecting = false;
+      }
+    }
+
+    function loadExternalScript(src) {
+      if (window.XmovAvatar) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector("script[data-xmov-sdk]");
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", () => reject(new Error("XMOV SDK 加载失败")), { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.dataset.xmovSdk = "true";
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("XMOV SDK 加载失败"));
+        document.head.appendChild(script);
+      });
+    }
+
+    function activateXmovView() {
+      $("xmovMount").classList.add("is-active");
+      $("live2dCanvas").classList.add("is-hidden");
+      $("avatarBadge").textContent = "XMOV 3D 真人 · 原生口型同步";
+      $("styleButton").disabled = true;
+      $("stylePanel").hidden = true;
+    }
+
+    async function bootXmov() {
+      if (xmovState.ready || xmovState.connecting) return xmovState.ready;
+      xmovState.connecting = true;
+      try {
+        const response = await fetch(base() + "/v1/xmov/config", { cache: "no-store" });
+        if (!response.ok) throw new Error("XMOV 配置读取失败");
+        const config = await response.json();
+        xmovState.configured = !!config.configured;
+
+        if (!config.enabled) {
+          $("avatarBadge").textContent = "Haru Live2D · XMOV 未启用";
+          $("avatarHint").textContent = config.requires_browser_secret_opt_in
+            ? "XMOV 已配置，但浏览器密钥开关未开启；当前使用 Haru"
+            : "当前使用 Haru；配置 XMOV 凭据后可切换 3D 真人";
+          return false;
+        }
+
+        $("avatarHint").textContent = "正在连接 XMOV 3D 真人数字人…";
+        await loadExternalScript(config.sdk_url);
+        if (!window.XmovAvatar) throw new Error("XMOV SDK 未提供 XmovAvatar");
+
+        const headers = config.auth_header
+          ? { Authorization: config.auth_header }
+          : undefined;
+        const avatar = new window.XmovAvatar({
+          containerId: "#xmovMount",
+          appId: config.app_id,
+          appSecret: config.app_secret,
+          gatewayServer: config.gateway_server,
+          headers,
+          hardwareAcceleration: "prefer-hardware",
+          enableDebugger: false,
+          enableLogger: false,
+          config: {
+            init_events: [
+              {
+                type: "SetCharacterCanvasAnchor",
+                x_location: 0,
+                y_location: 0,
+                width: 1,
+                height: 1,
+              },
+            ],
+          },
+          onWidgetEvent(data) {
+            if (data && data.type === "subtitle_on" && data.text) {
+              console.debug("[XMOV subtitle]", data.text);
+            }
+          },
+          onVoiceStateChange(status) {
+            const value = String(status || "").toLowerCase();
+            if (value === "start" || value === "voice_start") {
+              talking = true;
+              if (currentSpeechPipeline && currentSpeechPipeline.kind === "xmov") {
+                currentSpeechPipeline.handleVoiceStart();
+              }
+              const openMs = xmovState.interactionStartedAt
+                ? Math.round(performance.now() - xmovState.interactionStartedAt)
+                : 0;
+              $("status").textContent = openMs
+                ? "XMOV 播报中 · 总开口 " + openMs + "ms"
+                : "XMOV 播报中…";
+            }
+            if (value === "end" || value === "voice_end") {
+              talking = false;
+              if (currentSpeechPipeline && currentSpeechPipeline.kind === "xmov") {
+                currentSpeechPipeline.handleVoiceEnd();
+              } else {
+                $("status").textContent = "播报完成";
+              }
+            }
+          },
+          onMessage(message) {
+            if (message && message.code && message.code !== 0) {
+              console.error("[XMOV]", message);
+            }
+          },
+          onStatusChange(status) {
+            console.debug("[XMOV status]", status);
+          },
+        });
+
+        xmovState.avatar = avatar;
+        await avatar.init({
+          initModel: "normal",
+          onDownloadProgress(progress) {
+            $("avatarHint").textContent = "XMOV 资源加载 " + Math.round(Number(progress) || 0) + "%";
+          },
+        });
+
+        xmovState.ready = true;
+        activateXmovView();
+        $("avatarHint").textContent = "XMOV 3D 真人已就绪（语音、口型、表情、动作同步）";
+        $("status").textContent = "XMOV 数字人就绪";
+        window.addEventListener("beforeunload", () => {
+          try { avatar.destroy(); } catch (_) {}
+        }, { once: true });
+        return true;
+      } catch (error) {
+        console.error(error);
+        xmovState.ready = false;
+        xmovState.avatar = null;
+        $("xmovMount").classList.remove("is-active");
+        $("live2dCanvas").classList.remove("is-hidden");
+        $("avatarBadge").textContent = "Haru Live2D · XMOV 回退";
+        $("avatarHint").textContent = "XMOV 初始化失败，已自动回退 Haru：" + String(error.message || error);
+        return false;
+      } finally {
+        xmovState.connecting = false;
       }
     }
 
@@ -465,7 +808,7 @@
       return samples;
     }
 
-    function createSpeechPipeline(interactionStartedAt = performance.now()) {
+    function createPcmSpeechPipeline(interactionStartedAt = performance.now()) {
       const myToken = speechToken;
       const queue = [];
       let finished = false;
@@ -658,6 +1001,240 @@
       return pipeline;
     }
 
+
+    function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now()) {
+      const myToken = speechToken;
+      const sessionId = liveTalkingState.sessionId;
+      let sent = 0;
+      let finished = false;
+      let cancelled = false;
+      let settled = false;
+      let sawSpeaking = false;
+      let silentPolls = 0;
+      let monitorFailures = 0;
+      let monitorPromise = null;
+      let queueTail = Promise.resolve();
+      let resolveDone;
+      const done = new Promise(resolve => { resolveDone = resolve; });
+      const fiveSecondNotice = setTimeout(() => {
+        if (!settled && !cancelled && myToken === speechToken) {
+          document.getElementById("status").textContent = "LiveTalking 总响应超过 5 秒，仍在准备播报…";
+        }
+      }, Math.max(0, 5000 - (performance.now() - interactionStartedAt)));
+
+      function settle(statusText) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(fiveSecondNotice);
+        talking = false;
+        if (currentSpeechPipeline === pipeline) currentSpeechPipeline = null;
+        if (statusText && myToken === speechToken) {
+          document.getElementById("status").textContent = statusText;
+        }
+        resolveDone();
+      }
+
+      async function postJson(path, payload) {
+        const response = await fetch(base() + path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        return await response.json();
+      }
+
+      async function monitorSpeaking() {
+        while (!cancelled && !settled && myToken === speechToken) {
+          try {
+            const result = await postJson("/v1/livetalking/is-speaking", { session_id: sessionId });
+            const speaking = !!result.data;
+            monitorFailures = 0;
+            if (speaking) {
+              silentPolls = 0;
+              if (!sawSpeaking) {
+                sawSpeaking = true;
+                talking = true;
+                clearTimeout(fiveSecondNotice);
+                const openMs = Math.round(performance.now() - interactionStartedAt);
+                document.getElementById("status").textContent = "LiveTalking 播报中 · 总开口 " + openMs + "ms";
+              }
+            } else if (sawSpeaking && finished) {
+              silentPolls += 1;
+              if (silentPolls >= 4) {
+                settle("播报完成");
+                return;
+              }
+            }
+            if (finished && !sawSpeaking && performance.now() - interactionStartedAt > 20000) {
+              settle("LiveTalking 20 秒内未检测到开口");
+              return;
+            }
+          } catch (error) {
+            monitorFailures += 1;
+            if (monitorFailures >= 5) {
+              console.error(error);
+              settle("LiveTalking 状态查询失败");
+              return;
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+      }
+
+      function enqueue(text) {
+        const segment = String(text || "").replace(/\s+/g, " ").trim();
+        if (!segment || finished || cancelled || myToken !== speechToken) return;
+        ensureLiveTalkingPlayback();
+        const interrupt = sent === 0;
+        sent += 1;
+        if (interrupt) {
+          document.getElementById("status").textContent = "首句已送入 LiveTalking，准备本地口型…";
+        }
+        queueTail = queueTail.then(() => postJson("/v1/livetalking/speak", {
+          session_id: sessionId,
+          text: segment,
+          interrupt,
+        })).catch(error => {
+          console.error(error);
+          settle("LiveTalking 播报失败：" + String(error.message || error));
+        });
+        if (!monitorPromise) monitorPromise = monitorSpeaking();
+      }
+
+      function finish() {
+        finished = true;
+        if (!sent) settle();
+      }
+
+      function cancel() {
+        if (cancelled) return;
+        cancelled = true;
+        if (sessionId) {
+          postJson("/v1/livetalking/interrupt", { session_id: sessionId }).catch(() => {});
+        }
+        settle();
+      }
+
+      const pipeline = {
+        kind: "livetalking",
+        enqueue,
+        finish,
+        cancel,
+        done,
+      };
+      currentSpeechPipeline = pipeline;
+      return pipeline;
+    }
+
+    function createXmovSpeechPipeline(interactionStartedAt = performance.now()) {
+      const myToken = speechToken;
+      const avatar = xmovState.avatar;
+      let started = false;
+      let finished = false;
+      let cancelled = false;
+      let voiceEnded = false;
+      let settled = false;
+      let resolveDone;
+      const done = new Promise(resolve => { resolveDone = resolve; });
+      const fiveSecondNotice = setTimeout(() => {
+        if (!settled && !cancelled && myToken === speechToken) {
+          document.getElementById("status").textContent = "XMOV 总响应超过 5 秒，仍在准备播报…";
+        }
+      }, Math.max(0, 5000 - (performance.now() - interactionStartedAt)));
+
+      function settle(statusText) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(fiveSecondNotice);
+        if (currentSpeechPipeline === pipeline) currentSpeechPipeline = null;
+        if (statusText && myToken === speechToken) $("status").textContent = statusText;
+        resolveDone();
+      }
+
+      function enqueue(text) {
+        const segment = String(text || "").replace(/\s+/g, " ").trim();
+        if (!segment || finished || cancelled || myToken !== speechToken) return;
+        try {
+          xmovState.interactionStartedAt = interactionStartedAt;
+          avatar.speak(segment, !started, false);
+          started = true;
+          $("status").textContent = "首句已送入 XMOV，准备真人播报…";
+        } catch (error) {
+          console.error(error);
+          cancel();
+          if (myToken === speechToken) {
+            $("status").textContent = "XMOV 播报失败：" + String(error.message || error);
+          }
+        }
+      }
+
+      function finish() {
+        if (finished || cancelled) return;
+        finished = true;
+        if (!started) {
+          settle();
+          return;
+        }
+        try {
+          avatar.speak("", false, true);
+          if (voiceEnded) settle("播报完成");
+        } catch (error) {
+          console.error(error);
+          settle("XMOV 结束语音流失败");
+        }
+      }
+
+      function cancel() {
+        if (cancelled) return;
+        cancelled = true;
+        try {
+          if (typeof avatar.interactiveidle === "function") avatar.interactiveidle();
+          else if (typeof avatar.idle === "function") avatar.idle();
+        } catch (error) {
+          console.debug("[XMOV interrupt]", error);
+        }
+        settle();
+      }
+
+      function handleVoiceEnd() {
+        voiceEnded = true;
+        if (finished) settle("播报完成");
+      }
+
+      function handleVoiceStart() {
+        clearTimeout(fiveSecondNotice);
+      }
+
+      try {
+        if (typeof avatar.interactiveidle === "function") avatar.interactiveidle();
+      } catch (_) {}
+
+      const pipeline = {
+        kind: "xmov",
+        enqueue,
+        finish,
+        cancel,
+        handleVoiceStart,
+        handleVoiceEnd,
+        done,
+      };
+      currentSpeechPipeline = pipeline;
+      return pipeline;
+    }
+
+    function createSpeechPipeline(interactionStartedAt = performance.now()) {
+      if (liveTalkingState.ready && liveTalkingState.sessionId) {
+        activateLiveTalkingView();
+        return createLiveTalkingSpeechPipeline(interactionStartedAt);
+      }
+      if (xmovState.ready && xmovState.avatar) {
+        activateXmovView();
+        return createXmovSpeechPipeline(interactionStartedAt);
+      }
+      return createPcmSpeechPipeline(interactionStartedAt);
+    }
+
     function speak(text, interactionStartedAt = performance.now()) {
       if (!text) return Promise.resolve();
       stopSpeech();
@@ -766,7 +1343,10 @@
       }
     }
 
-    $("ask").onclick = () => askText($("q").value.trim());
+    $("ask").onclick = () => {
+      ensureLiveTalkingPlayback();
+      askText($("q").value.trim());
+    };
 
     $("rec").onclick = async () => {
       stopSpeech("请求推荐…");
@@ -941,12 +1521,14 @@
     if (canMic) {
       $("voice").addEventListener("click", (e) => {
         e.preventDefault();
+        ensureLiveTalkingPlayback();
         if (recording) stopRec();
         else startRec().catch(err => { $("status").textContent = String(err); });
       });
     }
 
     $("audioFile").addEventListener("change", async (e) => {
+      ensureLiveTalkingPlayback();
       const f = e.target.files && e.target.files[0];
       if (!f) return;
       try {
@@ -958,7 +1540,83 @@
       }
     });
 
-    bootLive2D();
+    $("photoFile").addEventListener("change", async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      stopSpeech("正在识别景点…");
+      $("status").textContent = "视觉大模型正在识别景点…";
+      const form = new FormData();
+      form.append("file", file);
+      const question = $("q").value.trim() || "这是哪个景点？请为我讲解。";
+      try {
+        const response = await fetch(base() + "/v1/vision/guide?question=" + encodeURIComponent(question), {
+          method: "POST",
+          body: form,
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const parsed = stripMeta(data.answer || "");
+        $("log").textContent = parsed.text;
+        $("status").textContent = "识景完成 · 引用：" + (data.citations || []).map(x => x.title).slice(0, 3).join(" / ");
+        if (parsed.emotion) setEmotion(parsed.emotion);
+        void speak(parsed.text);
+      } catch (error) {
+        $("status").textContent = "识景失败";
+        $("log").textContent = String(error.message || error);
+      } finally {
+        event.target.value = "";
+      }
+    });
+
+    $("locate").addEventListener("click", async () => {
+      try {
+        const response = await fetch(base() + "/v1/locate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "manual", spot_name: "灵山大佛" }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const question = `我现在位于${data.spot_name}附近，请介绍这个景点并告诉我接下来适合去哪里。`;
+        $("q").value = question;
+        await askText(question);
+      } catch (error) {
+        $("status").textContent = "定位失败：" + String(error.message || error);
+      }
+    });
+
+    $("sendFeedback").addEventListener("click", async () => {
+      const button = $("sendFeedback");
+      button.disabled = true;
+      try {
+        const response = await fetch(base() + "/v1/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            rating: Number($("rating").value),
+            comment: $("feedbackComment").value.trim(),
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        $("feedbackComment").value = "";
+        $("status").textContent = data.message || "感谢您的反馈";
+        button.textContent = "已提交";
+        setTimeout(() => { button.textContent = "提交反馈"; }, 1600);
+      } catch (error) {
+        $("status").textContent = "反馈提交失败：" + String(error.message || error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    void bootLive2D().then(async () => {
+      if (await bootLiveTalking()) return;
+      const retryTimer = setInterval(async () => {
+        if (await bootLiveTalking()) clearInterval(retryTimer);
+      }, 10000);
+    });
   </script>
 </body>
 </html>

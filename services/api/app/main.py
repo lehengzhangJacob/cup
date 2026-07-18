@@ -1,22 +1,44 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import sqlite3
 import time
 import uuid
+import wave
+import zipfile
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .config import CORS_ORIGINS, DATA_DIR, LOG_DB, TTS_VOICE, load_api_key
+from .config import (
+    CORS_ORIGINS,
+    DATA_DIR,
+    DOCS_DIR,
+    LOG_DB,
+    LIVETALKING_AVATAR_ID,
+    LIVETALKING_ENABLED,
+    LIVETALKING_URL,
+    TTS_VOICE,
+    ROOT,
+    UPLOADS_DIR,
+    XMOV_APP_ID,
+    XMOV_APP_SECRET,
+    XMOV_AUTH_HEADER,
+    XMOV_BROWSER_CONFIG_ENABLED,
+    XMOV_SDK_URL,
+    XMOV_SESSION_GATEWAY_URL,
+    load_api_key,
+)
 from .kb import ROUTES, kb
 from .zhipu import zhipu
 
@@ -59,6 +81,36 @@ class TTSRequest(BaseModel):
     speed: float = 1.0
 
 
+class LiveTalkingOfferRequest(BaseModel):
+    sdp: str = Field(..., min_length=1)
+    type: str = "offer"
+    avatar: Optional[str] = None
+
+
+class LiveTalkingSpeakRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1, max_length=2000)
+    interrupt: bool = False
+
+
+class LiveTalkingSessionRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+
+
+class FeedbackRequest(BaseModel):
+    session_id: Optional[str] = None
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field("", max_length=1000)
+
+
+class AvatarSettingsRequest(BaseModel):
+    display_name: str = Field("灵山小向导", min_length=1, max_length=30)
+    avatar_id: str = Field(LIVETALKING_AVATAR_ID, min_length=1, max_length=100)
+    voice: str = Field(TTS_VOICE, min_length=1, max_length=50)
+    costume: str = Field("禅意导游", max_length=50)
+    expression: str = Field("亲切自然", max_length=50)
+
+
 def _db() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(LOG_DB)
@@ -74,11 +126,90 @@ def _db() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feedback (
+            id TEXT PRIMARY KEY,
+            session_id TEXT,
+            rating INTEGER NOT NULL,
+            comment TEXT,
+            sentiment TEXT,
+            created_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avatar_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            display_name TEXT NOT NULL,
+            avatar_id TEXT NOT NULL,
+            voice TEXT NOT NULL,
+            costume TEXT NOT NULL,
+            expression TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
     conn.commit()
     return conn
 
 
+def _infer_sentiment(text: str, rating: Optional[int] = None) -> str:
+    if rating is not None:
+        if rating >= 4:
+            return "positive"
+        if rating <= 2:
+            return "negative"
+    positive = ("喜欢", "满意", "很好", "不错", "漂亮", "方便", "感谢", "推荐", "开心")
+    negative = ("不满", "失望", "不好", "太慢", "拥挤", "排队", "投诉", "贵", "累", "生气")
+    positive_hits = sum(word in text for word in positive)
+    negative_hits = sum(word in text for word in negative)
+    if positive_hits > negative_hits:
+        return "positive"
+    if negative_hits > positive_hits:
+        return "negative"
+    return "neutral"
+
+
+def _avatar_settings() -> dict[str, str]:
+    conn = _db()
+    row = conn.execute(
+        "SELECT display_name, avatar_id, voice, costume, expression, updated_at "
+        "FROM avatar_settings WHERE id=1"
+    ).fetchone()
+    conn.close()
+    if row:
+        return {
+            "display_name": row[0],
+            "avatar_id": row[1],
+            "voice": row[2],
+            "costume": row[3],
+            "expression": row[4],
+            "updated_at": row[5],
+        }
+    return {
+        "display_name": "灵山小向导",
+        "avatar_id": LIVETALKING_AVATAR_ID,
+        "voice": TTS_VOICE,
+        "costume": "禅意导游",
+        "expression": "亲切自然",
+        "updated_at": "",
+    }
+
+
+def _available_avatars() -> list[str]:
+    avatar_dir = ROOT / "LiveTalking" / "data" / "avatars"
+    if not avatar_dir.exists():
+        return [LIVETALKING_AVATAR_ID]
+    avatars = sorted(path.name for path in avatar_dir.iterdir() if path.is_dir())
+    return avatars or [LIVETALKING_AVATAR_ID]
+
+
 def _log(session_id: str, role: str, content: str, meta: Optional[dict] = None) -> None:
+    stored_meta = dict(meta or {})
+    if role == "user" and "sentiment" not in stored_meta:
+        stored_meta["sentiment"] = _infer_sentiment(content)
     conn = _db()
     conn.execute(
         "INSERT INTO chat_logs VALUES (?,?,?,?,?,?)",
@@ -87,7 +218,7 @@ def _log(session_id: str, role: str, content: str, meta: Optional[dict] = None) 
             session_id,
             role,
             content,
-            json.dumps(meta or {}, ensure_ascii=False),
+            json.dumps(stored_meta, ensure_ascii=False),
             datetime.now(timezone.utc).isoformat(),
         ),
     )
@@ -112,22 +243,28 @@ async def _retrieve(query: str):
     return kb.hybrid_search(query, query_vec=query_vec, top_k=5)
 
 
+async def _refresh_embeddings() -> bool:
+    if not kb.chunks:
+        return False
+    try:
+        texts = [c.text[:800] for c in kb.chunks]
+        embeddings: list[list[float]] = []
+        for i in range(0, len(texts), 16):
+            embeddings.extend(await zhipu.embed(texts[i : i + 16]))
+        kb.set_embeddings(embeddings)
+        return True
+    except Exception as exc:
+        print(f"[warn] embedding refresh skipped: {exc}")
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_api_key()
     kb.load()
     # try build embeddings if missing (best effort, keyword still works)
     if kb.chunks and not any(c.embedding for c in kb.chunks):
-        try:
-            texts = [c.text[:800] for c in kb.chunks]
-            # batch to avoid huge payload
-            embs: list[list[float]] = []
-            batch = 16
-            for i in range(0, len(texts), batch):
-                embs.extend(await zhipu.embed(texts[i : i + batch]))
-            kb.set_embeddings(embs)
-        except Exception as e:
-            print(f"[warn] embedding skipped: {e}")
+        await _refresh_embeddings()
     yield
 
 
@@ -155,6 +292,138 @@ async def health():
         "has_embeddings": bool(kb.chunks and kb.chunks[0].embedding),
         "time": datetime.now(timezone.utc).isoformat(),
     }
+
+
+
+@app.get("/v1/xmov/config")
+async def xmov_config():
+    """Return browser SDK config only after an explicit secret-exposure opt-in."""
+    configured = bool(XMOV_APP_ID and XMOV_APP_SECRET and XMOV_SESSION_GATEWAY_URL)
+    enabled = XMOV_BROWSER_CONFIG_ENABLED and configured
+    result = {
+        "enabled": enabled,
+        "configured": configured,
+        "requires_browser_secret_opt_in": configured and not XMOV_BROWSER_CONFIG_ENABLED,
+    }
+    if enabled:
+        result.update(
+            {
+                "app_id": XMOV_APP_ID,
+                "app_secret": XMOV_APP_SECRET,
+                "gateway_server": XMOV_SESSION_GATEWAY_URL,
+                "auth_header": XMOV_AUTH_HEADER,
+                "sdk_url": XMOV_SDK_URL,
+            }
+        )
+    return result
+
+
+async def _livetalking_post(path: str, payload: dict, timeout: float = 10.0) -> dict:
+    if not LIVETALKING_ENABLED:
+        raise HTTPException(503, "LiveTalking is disabled")
+    try:
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            response = await client.post(f"{LIVETALKING_URL}{path}", json=payload)
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(503, f"LiveTalking unavailable: {exc}") from exc
+    if isinstance(data, dict) and data.get("code") not in (None, 0):
+        raise HTTPException(502, data.get("msg") or "LiveTalking request failed")
+    return data
+
+
+@app.get("/v1/livetalking/status")
+async def livetalking_status():
+    avatar_id = _avatar_settings()["avatar_id"]
+    if not LIVETALKING_ENABLED:
+        return {"enabled": False, "ready": False}
+    try:
+        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
+            response = await client.get(f"{LIVETALKING_URL}/api/admin/config")
+        response.raise_for_status()
+        return {
+            "enabled": True,
+            "ready": True,
+            "avatar_id": avatar_id,
+        }
+    except httpx.HTTPError as exc:
+        return {
+            "enabled": True,
+            "ready": False,
+            "avatar_id": avatar_id,
+            "detail": str(exc),
+        }
+
+
+@app.post("/v1/livetalking/offer")
+async def livetalking_offer(req: LiveTalkingOfferRequest):
+    payload = req.model_dump(exclude_none=True)
+    payload["avatar"] = payload.get("avatar") or _avatar_settings()["avatar_id"]
+    return await _livetalking_post("/offer", payload, timeout=20.0)
+
+
+@app.post("/v1/livetalking/speak")
+async def livetalking_speak(req: LiveTalkingSpeakRequest):
+    if req.interrupt:
+        await _livetalking_post(
+            "/interrupt_talk",
+            {"sessionid": req.session_id},
+        )
+
+    uploaded_audio = False
+    try:
+        async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+            async for event in zhipu.tts_stream(
+                req.text.strip(),
+                voice=_avatar_settings()["voice"],
+                speed=1.0,
+            ):
+                choices = event.get("choices") or []
+                delta = choices[0].get("delta", {}) if choices else {}
+                encoded = delta.get("content")
+                if not encoded:
+                    continue
+
+                wav_file = io.BytesIO()
+                with wave.open(wav_file, "wb") as output:
+                    output.setnchannels(1)
+                    output.setsampwidth(2)
+                    output.setframerate(int(delta.get("return_sample_rate") or 24000))
+                    output.writeframes(base64.b64decode(encoded))
+
+                response = await client.post(
+                    f"{LIVETALKING_URL}/humanaudio",
+                    data={"sessionid": req.session_id},
+                    files={"file": ("speech.wav", wav_file.getvalue(), "audio/wav")},
+                )
+                response.raise_for_status()
+                data = response.json()
+                if isinstance(data, dict) and data.get("code") not in (None, 0):
+                    raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
+                uploaded_audio = True
+    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+        raise HTTPException(502, f"LiveTalking streaming TTS failed: {exc}") from exc
+
+    if not uploaded_audio:
+        raise HTTPException(502, "GLM-TTS returned no PCM audio")
+    return {"code": 0, "msg": "ok"}
+
+
+@app.post("/v1/livetalking/interrupt")
+async def livetalking_interrupt(req: LiveTalkingSessionRequest):
+    return await _livetalking_post(
+        "/interrupt_talk",
+        {"sessionid": req.session_id},
+    )
+
+
+@app.post("/v1/livetalking/is-speaking")
+async def livetalking_is_speaking(req: LiveTalkingSessionRequest):
+    return await _livetalking_post(
+        "/is_speaking",
+        {"sessionid": req.session_id},
+    )
 
 
 @app.get("/v1/routes")
@@ -229,7 +498,147 @@ async def kb_stats():
 @app.post("/v1/kb/rebuild")
 async def kb_rebuild():
     n = kb.rebuild_from_docs()
-    return {"ok": True, "chunks": n}
+    embedded = await _refresh_embeddings()
+    return {"ok": True, "chunks": n, "embedded": embedded}
+
+
+def _knowledge_documents() -> list[dict[str, Any]]:
+    documents: list[dict[str, Any]] = []
+    for directory, category, editable in (
+        (DOCS_DIR, "官方资料", False),
+        (UPLOADS_DIR, "管理员上传", True),
+    ):
+        if not directory.exists():
+            continue
+        for path in sorted(directory.iterdir()):
+            if not path.is_file() or path.suffix.lower() not in {".docx", ".txt", ".md"}:
+                continue
+            stat = path.stat()
+            documents.append(
+                {
+                    "name": path.name,
+                    "category": category,
+                    "editable": editable,
+                    "size": stat.st_size,
+                    "updated_at": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+            )
+    return documents
+
+
+@app.get("/v1/admin/kb/documents")
+async def admin_kb_documents():
+    return {"documents": _knowledge_documents(), "chunk_count": len(kb.chunks)}
+
+
+@app.post("/v1/admin/kb/documents")
+async def admin_kb_upload(file: UploadFile = File(...)):
+    filename = Path(file.filename or "").name
+    if not filename or filename in {".", ".."}:
+        raise HTTPException(400, "文件名无效")
+    if Path(filename).suffix.lower() not in {".docx", ".txt", ".md"}:
+        raise HTTPException(400, "仅支持 DOCX、TXT、Markdown 知识文档")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "文件为空")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(400, "文件不能超过 10MB")
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    destination = UPLOADS_DIR / filename
+    destination.write_bytes(raw)
+    try:
+        chunks = kb.rebuild_from_docs()
+    except (ValueError, OSError, zipfile.BadZipFile) as exc:
+        destination.unlink(missing_ok=True)
+        kb.rebuild_from_docs()
+        raise HTTPException(400, f"知识文档解析失败：{exc}") from exc
+    embedded = await _refresh_embeddings()
+    return {
+        "ok": True,
+        "name": filename,
+        "chunks": chunks,
+        "embedded": embedded,
+        "message": "知识库已更新",
+    }
+
+
+@app.delete("/v1/admin/kb/documents/{filename}")
+async def admin_kb_delete(filename: str):
+    safe_name = Path(filename).name
+    if safe_name != filename or not safe_name:
+        raise HTTPException(400, "文件名无效")
+    target = UPLOADS_DIR / safe_name
+    if not target.exists() or not target.is_file():
+        raise HTTPException(404, "只能删除管理员上传的文档")
+    target.unlink()
+    chunks = kb.rebuild_from_docs()
+    embedded = await _refresh_embeddings()
+    return {"ok": True, "chunks": chunks, "embedded": embedded}
+
+
+@app.get("/v1/admin/avatar")
+async def admin_avatar_get():
+    return {
+        "settings": _avatar_settings(),
+        "available_avatars": _available_avatars(),
+        "available_voices": ["female", "male", "tongtong", "chuichui"],
+    }
+
+
+@app.put("/v1/admin/avatar")
+async def admin_avatar_update(req: AvatarSettingsRequest):
+    available = _available_avatars()
+    if req.avatar_id not in available:
+        raise HTTPException(400, f"数字人形象不存在：{req.avatar_id}")
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _db()
+    conn.execute(
+        """
+        INSERT INTO avatar_settings
+            (id, display_name, avatar_id, voice, costume, expression, updated_at)
+        VALUES (1,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+            display_name=excluded.display_name,
+            avatar_id=excluded.avatar_id,
+            voice=excluded.voice,
+            costume=excluded.costume,
+            expression=excluded.expression,
+            updated_at=excluded.updated_at
+        """,
+        (
+            req.display_name.strip(),
+            req.avatar_id,
+            req.voice,
+            req.costume,
+            req.expression,
+            now,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "settings": _avatar_settings()}
+
+
+@app.post("/v1/feedback")
+async def feedback(req: FeedbackRequest):
+    sentiment = _infer_sentiment(req.comment, req.rating)
+    conn = _db()
+    conn.execute(
+        "INSERT INTO feedback VALUES (?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()),
+            req.session_id or "anonymous",
+            req.rating,
+            req.comment.strip(),
+            sentiment,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "sentiment": sentiment, "message": "感谢您的反馈"}
 
 
 @app.post("/v1/chat")
@@ -288,7 +697,11 @@ async def tts(req: TTSRequest):
     lines = [ln for ln in text.splitlines() if not ln.strip().startswith("{")]
     speak = "\n".join(lines).strip() or text
     try:
-        audio = await zhipu.tts(speak, voice=req.voice or TTS_VOICE, speed=req.speed)
+        audio = await zhipu.tts(
+            speak,
+            voice=req.voice or _avatar_settings()["voice"],
+            speed=req.speed,
+        )
     except Exception as e:
         raise HTTPException(502, f"tts failed: {e}") from e
     return Response(content=audio, media_type="audio/wav")
@@ -305,7 +718,7 @@ async def tts_stream(req: TTSRequest):
         try:
             async for event in zhipu.tts_stream(
                 speak,
-                voice=req.voice or TTS_VOICE,
+                voice=req.voice or _avatar_settings()["voice"],
                 speed=req.speed,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -416,25 +829,122 @@ async def vision_guide(file: UploadFile = File(...), question: str = "这是灵�
 @app.get("/v1/stats/overview")
 async def stats_overview():
     conn = _db()
-    cur = conn.execute("SELECT COUNT(*) FROM chat_logs WHERE role='user'")
-    users = cur.fetchone()[0]
-    cur = conn.execute(
-        "SELECT content FROM chat_logs WHERE role='user' ORDER BY created_at DESC LIMIT 200"
-    )
-    recent = [r[0] for r in cur.fetchall()]
+    user_rows = conn.execute(
+        "SELECT session_id, content, meta, created_at FROM chat_logs "
+        "WHERE role='user' ORDER BY created_at DESC"
+    ).fetchall()
+    assistant_rows = conn.execute(
+        "SELECT meta FROM chat_logs WHERE role='assistant' ORDER BY created_at DESC LIMIT 500"
+    ).fetchall()
+    feedback_rows = conn.execute(
+        "SELECT rating, comment, sentiment, created_at FROM feedback "
+        "ORDER BY created_at DESC"
+    ).fetchall()
     conn.close()
-    # naive hot keywords
+
+    now = datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    week_start = (now.date() - timedelta(days=6)).isoformat()
+    recent_questions = [row[1] for row in user_rows[:200]]
+    today_sessions = {row[0] for row in user_rows if row[3][:10] == today}
+    week_sessions = {row[0] for row in user_rows if row[3][:10] >= week_start}
+
     hot = ["灵山大佛", "梵宫", "九龙灌浴", "祥符禅寺", "路线", "五印坛城"]
-    counts = {k: sum(1 for q in recent if k in q) for k in hot}
+    counts = {key: sum(1 for question in recent_questions if key in question) for key in hot}
+
+    daily = []
+    for offset in range(6, -1, -1):
+        day = (now.date() - timedelta(days=offset)).isoformat()
+        day_rows = [row for row in user_rows if row[3][:10] == day]
+        daily.append(
+            {
+                "date": day,
+                "turns": len(day_rows),
+                "visitors": len({row[0] for row in day_rows}),
+            }
+        )
+
+    sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
+    for _, content, meta_text, _ in user_rows[:500]:
+        try:
+            sentiment = json.loads(meta_text or "{}").get("sentiment")
+        except json.JSONDecodeError:
+            sentiment = None
+        sentiment = sentiment or _infer_sentiment(content)
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+    for _, _, sentiment, _ in feedback_rows:
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+
+    ratings = [row[0] for row in feedback_rows]
+    satisfaction_trend = []
+    for offset in range(6, -1, -1):
+        day = (now.date() - timedelta(days=offset)).isoformat()
+        values = [row[0] for row in feedback_rows if row[3][:10] == day]
+        satisfaction_trend.append(
+            {
+                "date": day,
+                "score": round(sum(values) / len(values), 2) if values else None,
+                "count": len(values),
+            }
+        )
+
+    latencies = []
+    for (meta_text,) in assistant_rows:
+        try:
+            latency = json.loads(meta_text or "{}").get("latency_ms")
+        except json.JSONDecodeError:
+            latency = None
+        if isinstance(latency, (int, float)):
+            latencies.append(float(latency))
+
+    suggestions = []
+    if sentiment_counts.get("negative", 0) > sentiment_counts.get("positive", 0):
+        suggestions.append("负向反馈偏多，建议复核高频问题回答与现场排队体验。")
+    if counts.get("路线", 0) > 0:
+        suggestions.append("路线咨询活跃，可在入口增加分众路线二维码和预计时长提示。")
+    if counts.get("九龙灌浴", 0) > 0:
+        suggestions.append("九龙灌浴关注度较高，建议突出表演时刻和最佳观看位置。")
+    if not suggestions:
+        suggestions.append("当前服务运行平稳，建议持续扩充高频问题知识库并收集满意度。")
+
     return {
-        "service_turns": users,
+        "service_turns": len(user_rows),
+        "unique_visitors": len({row[0] for row in user_rows}),
+        "today_visitors": len(today_sessions),
+        "week_visitors": len(week_sessions),
+        "avg_satisfaction": round(sum(ratings) / len(ratings), 2) if ratings else None,
+        "feedback_count": len(feedback_rows),
+        "avg_response_ms": round(sum(latencies) / len(latencies)) if latencies else None,
         "hot_topics": sorted(
             [{"name": k, "count": v} for k, v in counts.items()],
             key=lambda x: x["count"],
             reverse=True,
         ),
+        "sentiment": sentiment_counts,
+        "daily_service": daily,
+        "satisfaction_trend": satisfaction_trend,
+        "recent_questions": recent_questions[:10],
+        "recent_feedback": [
+            {
+                "rating": row[0],
+                "comment": row[1],
+                "sentiment": row[2],
+                "created_at": row[3],
+            }
+            for row in feedback_rows[:10]
+        ],
+        "service_suggestions": suggestions,
         "routes": ROUTES,
     }
+
+
+@app.get("/admin")
+@app.get("/admin/")
+async def admin_index():
+    admin_path = STATIC_DIR / "admin.html"
+    if admin_path.exists():
+        return FileResponse(admin_path)
+    raise HTTPException(404, "管理后台页面尚未生成")
 
 
 @app.get("/")

@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from .config import DOCS_DIR, KB_PATH
+from .config import DOCS_DIR, KB_PATH, UPLOADS_DIR
 
 
 NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -37,6 +37,11 @@ def _docx_paragraphs(path: Path) -> list[str]:
         if line:
             paras.append(line)
     return paras
+
+
+def _text_paragraphs(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def _split_chunks(paras: list[str], source: str, max_len: int = 450) -> list[Chunk]:
@@ -174,9 +179,35 @@ class KnowledgeBase:
         all_chunks: list[Chunk] = []
         if not DOCS_DIR.exists():
             raise FileNotFoundError(f"docs dir missing: {DOCS_DIR}")
-        for path in sorted(DOCS_DIR.glob("*.docx")):
-            paras = _docx_paragraphs(path)
-            all_chunks.extend(_split_chunks(paras, path.name))
+        source_dirs = [(DOCS_DIR, "官方资料"), (UPLOADS_DIR, "管理员上传")]
+        for source_dir, source_label in source_dirs:
+            if not source_dir.exists():
+                continue
+            # The official package contains DOCX and exported TXT copies with
+            # the same stem. Index only one representation to avoid duplicate
+            # retrieval results; prefer DOCX, then Markdown, then plain text.
+            priority = {".docx": 0, ".md": 1, ".txt": 2}
+            candidates = sorted(
+                (
+                    path
+                    for path in source_dir.iterdir()
+                    if path.is_file() and path.suffix.lower() in priority
+                ),
+                key=lambda path: (path.stem, priority[path.suffix.lower()]),
+            )
+            unique_paths: dict[str, Path] = {}
+            for path in candidates:
+                unique_paths.setdefault(path.stem, path)
+            paths = list(unique_paths.values())
+            for path in paths:
+                paras = (
+                    _docx_paragraphs(path)
+                    if path.suffix.lower() == ".docx"
+                    else _text_paragraphs(path)
+                )
+                all_chunks.extend(
+                    _split_chunks(paras, f"{source_label}/{path.name}")
+                )
         # append route cards as chunks
         for r in ROUTES:
             text = (
