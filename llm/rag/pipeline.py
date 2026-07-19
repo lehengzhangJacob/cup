@@ -379,8 +379,7 @@ class RAGPipeline:
         return result
 
     def stats(self) -> dict[str, Any]:
-        with self._retriever_lock:
-            retriever_stats = self._retriever.stats()
+        retriever_stats = self._retriever.stats()
         return {
             **retriever_stats,
             "model": LLM_MODEL,
