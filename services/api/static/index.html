@@ -1023,8 +1023,10 @@
       wav2lip256_avatar1: "经典人物",
     };
     let liveTalkingStartPromise = null;
-    const preferHttpTransport = () =>
-      new URLSearchParams(location.search).get("transport") !== "webrtc";
+    let liveTalkingRecoveryPromise = null;
+    let liveTalkingPlaybackRequested = false;
+    const forceHttpTransport = () =>
+      new URLSearchParams(location.search).get("transport") === "http";
     const DEFAULT_AVATAR_REACTION = {
       id: "calm", label: "自然讲解", expression: "natural", voice_speed: 1.0,
       tone: "自然、清晰", prefix: "",
@@ -1205,10 +1207,16 @@
     }
 
     function ensureLiveTalkingPlayback() {
+      liveTalkingPlaybackRequested = true;
       const video = document.getElementById("liveTalkingVideo");
       const audio = document.getElementById("liveTalkingAudio");
-      if (video.srcObject) video.play().catch(() => {});
-      if (audio.srcObject) audio.play().catch(() => {});
+      if (video.srcObject) {
+        if (liveTalkingState.transport === "webrtc") video.muted = false;
+        video.play().catch(() => {});
+      }
+      if (liveTalkingState.transport !== "webrtc" && audio.srcObject) {
+        audio.play().catch(() => {});
+      }
     }
 
     async function bootLiveTalkingHttp() {
@@ -1251,6 +1259,40 @@
       return true;
     }
 
+    async function recoverLiveTalkingToHttp(message) {
+      if (liveTalkingState.transport === "http" && liveTalkingState.ready) return true;
+      if (liveTalkingRecoveryPromise) return liveTalkingRecoveryPromise;
+      liveTalkingRecoveryPromise = (async () => {
+        const oldPc = liveTalkingState.pc;
+        const oldSessionId = liveTalkingState.sessionId;
+        const oldTransport = liveTalkingState.transport;
+        liveTalkingState.pc = null;
+        liveTalkingState.sessionId = null;
+        liveTalkingState.ready = false;
+        if (oldPc) {
+          try { oldPc.close(); } catch (_) {}
+        }
+        if (oldSessionId) {
+          fetch(base() + "/v1/livetalking/close", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: oldSessionId, transport: oldTransport }),
+          }).catch(() => {});
+        }
+        fallbackToLive2D(message || "WebRTC 连接中断，正在切换本地 HTTP 链路…");
+        try {
+          return await bootLiveTalkingHttp();
+        } catch (error) {
+          console.error(error);
+          fallbackToLive2D("数字人链路暂时不可用，已切换到轻量模式");
+          return false;
+        }
+      })().finally(() => {
+        liveTalkingRecoveryPromise = null;
+      });
+      return liveTalkingRecoveryPromise;
+    }
+
     function renderAvatarOptions(avatarIds, selectedId) {
       const select = document.getElementById("avatarSelect");
       const preferredOrder = [
@@ -1288,8 +1330,9 @@
       image.onerror = null;
       image.removeAttribute("src");
       if (liveTalkingState.pc) {
-        try { liveTalkingState.pc.close(); } catch (_) {}
+        const oldPc = liveTalkingState.pc;
         liveTalkingState.pc = null;
+        try { oldPc.close(); } catch (_) {}
       }
       liveTalkingState.ready = false;
       liveTalkingState.sessionId = null;
@@ -1303,7 +1346,7 @@
             body: JSON.stringify({ session_id: oldSessionId, transport: oldTransport }),
           });
         }
-        await bootLiveTalkingHttp();
+        await bootLiveTalking();
         document.getElementById("status").textContent = "已切换为" + (avatarLabels[selectedId] || selectedId);
       } catch (error) {
         console.error(error);
@@ -1338,6 +1381,7 @@
       }
       if (liveTalkingState.ready || liveTalkingState.connecting) return liveTalkingState.ready;
       liveTalkingState.connecting = true;
+      let attemptedWebRtc = false;
       try {
         const statusResponse = await fetch(base() + "/v1/livetalking/status", {
           cache: "no-store",
@@ -1359,10 +1403,11 @@
           return false;
         }
 
-        if (preferHttpTransport()) {
+        if (forceHttpTransport()) {
           return await bootLiveTalkingHttp();
         }
 
+        attemptedWebRtc = true;
         document.getElementById("avatarHint").textContent = "正在连接灵曦…";
         liveTalkingState.transport = "webrtc";
         const iceServers = Array.isArray(status.ice_servers)
@@ -1378,6 +1423,7 @@
           iceTransportPolicy: hasTurnRelay ? "relay" : "all",
         });
         liveTalkingState.pc = pc;
+        const remoteStream = new MediaStream();
         let resolveConnected;
         let rejectConnected;
         const connected = new Promise((resolve, reject) => {
@@ -1386,18 +1432,19 @@
         });
 
         pc.addEventListener("track", event => {
-          const stream = new MediaStream([event.track]);
-          if (event.track.kind === "video") {
-            const video = document.getElementById("liveTalkingVideo");
-            video.srcObject = stream;
-            video.play().catch(() => {});
-          } else {
-            const audio = document.getElementById("liveTalkingAudio");
-            audio.srcObject = stream;
-            audio.play().catch(() => {});
+          if (!remoteStream.getTracks().some(track => track.id === event.track.id)) {
+            remoteStream.addTrack(event.track);
           }
+          const video = document.getElementById("liveTalkingVideo");
+          if (video.srcObject !== remoteStream) {
+            video.srcObject = remoteStream;
+            video.muted = !liveTalkingPlaybackRequested;
+          }
+          document.getElementById("liveTalkingAudio").srcObject = null;
+          video.play().catch(() => {});
         });
         pc.addEventListener("connectionstatechange", () => {
+          if (liveTalkingState.pc !== pc) return;
           const state = pc.connectionState;
           if (state === "connected") {
             liveTalkingState.ready = true;
@@ -1407,10 +1454,19 @@
             }
             resolveConnected(true);
           } else if (state === "failed") {
-            rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
-          } else if (state === "disconnected" || state === "closed") {
-            liveTalkingState.ready = false;
-            fallbackToLive2D("连接暂时中断，已切换到轻量模式");
+            if (!liveTalkingState.ready) {
+              rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
+            } else {
+              void recoverLiveTalkingToHttp("WebRTC 连接失败，正在切换本地 HTTP 链路…");
+            }
+          } else if (state === "disconnected") {
+            setTimeout(() => {
+              if (liveTalkingState.pc === pc && pc.connectionState === "disconnected") {
+                void recoverLiveTalkingToHttp("WebRTC 连接中断，正在切换本地 HTTP 链路…");
+              }
+            }, 1500);
+          } else if (state === "closed") {
+            void recoverLiveTalkingToHttp("WebRTC 已关闭，正在切换本地 HTTP 链路…");
           }
         });
 
@@ -1438,14 +1494,15 @@
           new Promise((_, reject) => setTimeout(() => reject(new Error("LiveTalking 连接超时")), 12000)),
         ]);
         window.addEventListener("beforeunload", () => {
-          const closingSessionId = liveTalkingState.sessionId;
+          const closingSessionId = String(answer.sessionid);
+          if (liveTalkingState.pc === pc) liveTalkingState.pc = null;
           if (closingSessionId) {
             fetch(base() + "/v1/livetalking/close", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 session_id: closingSessionId,
-                transport: liveTalkingState.transport,
+                transport: "webrtc",
               }),
               keepalive: true,
             }).catch(() => {});
@@ -1458,10 +1515,11 @@
         liveTalkingState.ready = false;
         const failedSessionId = liveTalkingState.sessionId;
         liveTalkingState.sessionId = null;
-        if (liveTalkingState.pc) {
-          try { liveTalkingState.pc.close(); } catch (_) {}
-        }
+        const failedPc = liveTalkingState.pc;
         liveTalkingState.pc = null;
+        if (failedPc) {
+          try { failedPc.close(); } catch (_) {}
+        }
         if (failedSessionId) {
           fetch(base() + "/v1/livetalking/close", {
             method: "POST",
@@ -1471,6 +1529,14 @@
               transport: liveTalkingState.transport,
             }),
           }).catch(() => {});
+        }
+        if (attemptedWebRtc) {
+          document.getElementById("status").textContent = "WebRTC 不可用，正在切换本地 HTTP 链路…";
+          try {
+            return await bootLiveTalkingHttp();
+          } catch (fallbackError) {
+            console.error(fallbackError);
+          }
         }
         fallbackToLive2D("灵曦暂时无法连接，已切换到轻量模式");
         await bootLive2D();
@@ -1504,8 +1570,9 @@
           $("avatarHint").textContent = "灵曦正在准备…";
           const result = await warmLiveTalkingService();
           if (result.started && liveTalkingState.pc) {
-            try { liveTalkingState.pc.close(); } catch (_) {}
+            const oldPc = liveTalkingState.pc;
             liveTalkingState.pc = null;
+            try { oldPc.close(); } catch (_) {}
             liveTalkingState.sessionId = null;
             liveTalkingState.ready = false;
           }
@@ -1999,9 +2066,6 @@
       let nextStartAt = 0;
       let audioStarted = false;
       let streamController = null;
-      // Server-side mouth generation trails the PCM chunk by ~420 ms. The
-      // browser's MJPEG decode/paint path adds roughly another 80 ms.
-      const syncDelaySeconds = 0.50;
       let resolveDone;
       const done = new Promise(resolve => { resolveDone = resolve; });
       const fiveSecondNotice = setTimeout(() => {
@@ -2082,6 +2146,22 @@
         }
       }
 
+      async function waitForMouthStart() {
+        const deadline = performance.now() + 2500;
+        while (!cancelled && myToken === speechToken && performance.now() < deadline) {
+          try {
+            const result = await postJson("/v1/livetalking/is-speaking", { session_id: sessionId });
+            if (result.data) return true;
+          } catch (_) {}
+          await new Promise(resolve => setTimeout(resolve, 60));
+        }
+        return false;
+      }
+
+      async function waitForVideoPaint() {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+
       async function scheduleSyncedAudioEvent(rawEvent) {
         const dataLine = rawEvent.split("\n").find(line => line.startsWith("data:"));
         if (!dataLine) return false;
@@ -2108,12 +2188,12 @@
         source.connect(ctxA.destination);
         if (!audioStarted) {
           audioStarted = true;
-          nextStartAt = ctxA.currentTime + syncDelaySeconds;
+          await waitForMouthStart();
+          await waitForVideoPaint();
+          nextStartAt = ctxA.currentTime + 0.02;
           clearTimeout(fiveSecondNotice);
           talking = true;
-          const openMs = Math.round(
-            performance.now() - interactionStartedAt + syncDelaySeconds * 1000
-          );
+          const openMs = Math.round(performance.now() - interactionStartedAt);
           document.getElementById("status").textContent =
             (avatarLabels[liveTalkingState.avatarId] || "数字人")
             + "播报中 · 总开口 " + openMs + "ms";
@@ -2425,6 +2505,7 @@
     async function speak(text, interactionStartedAt = performance.now()) {
       if (!text) return Promise.resolve();
       stopSpeech();
+      ensureLiveTalkingPlayback();
       try {
         await ensureLiveTalkingOnDemand();
       } catch (error) {
@@ -2440,6 +2521,7 @@
     async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null, spotId = null) {
       if (!message) return;
       stopSpeech("正在连接数字人并思考…");
+      ensureLiveTalkingPlayback();
       const btn = $("ask");
       btn.disabled = true;
       $("log").textContent = "";
