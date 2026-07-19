@@ -43,7 +43,9 @@ class BaseASR:
         self.stride_left_size = opt.l
         self.stride_right_size = opt.r
         #self.context_size = 10
-        self.feat_queue = Queue(maxsize=2)
+        # One feature batch is enough to keep the GPU busy without letting the
+        # mouth animation run hundreds of milliseconds behind live audio.
+        self.feat_queue = Queue(maxsize=1)
 
         #self.warm_up()
 

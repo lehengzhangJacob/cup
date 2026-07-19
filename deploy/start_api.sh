@@ -18,6 +18,7 @@ API_SSL_PORT="${API_SSL_PORT:-8443}"
 API_SSL_BACKEND_PORT="${API_SSL_BACKEND_PORT:-9443}"
 ADMIN_SSL_PORT="${ADMIN_SSL_PORT:-8444}"
 ADMIN_HTTP_PORT="${ADMIN_HTTP_PORT:-8011}"
+ADMIN_HOST="${ADMIN_HOST:-$API_HOST}"
 
 # Validate public security settings before stopping a healthy deployment.
 admin_password="${ADMIN_PASSWORD:-}"
@@ -98,12 +99,17 @@ nohup "$PYTHON" -m uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" \
   > "$ROOT/deploy/api.log" 2>&1 &
 echo $! > "$ROOT/deploy/api.pid"
 
-nohup "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$API_SSL_BACKEND_PORT" \
+ssl_listen_port="$API_SSL_BACKEND_PORT"
+if ! [[ "$LOCAL_TURN_ENABLED" =~ ^(1|true|yes)$ ]]; then
+  ssl_listen_port="$API_SSL_PORT"
+fi
+
+nohup "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$ssl_listen_port" \
   --ssl-keyfile "$KEY" --ssl-certfile "$CERT" \
   > "$ROOT/deploy/api-ssl.log" 2>&1 &
 echo $! > "$ROOT/deploy/api-ssl.pid"
 
-nohup "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port "$ADMIN_SSL_PORT" \
+nohup "$PYTHON" -m uvicorn app.main:app --host "$ADMIN_HOST" --port "$ADMIN_SSL_PORT" \
   --ssl-keyfile "$KEY" --ssl-certfile "$CERT" \
   > "$ROOT/deploy/admin-ssl.log" 2>&1 &
 echo $! > "$ROOT/deploy/admin-ssl.pid"
@@ -127,7 +133,7 @@ else
 fi
 
 for _ in {1..20}; do
-  if curl -kfsS "https://127.0.0.1:${API_SSL_BACKEND_PORT}/health" >/dev/null 2>&1 \
+  if curl -kfsS "https://127.0.0.1:${ssl_listen_port}/health" >/dev/null 2>&1 \
     && curl -kfsS "https://127.0.0.1:${ADMIN_SSL_PORT}/health" >/dev/null 2>&1 \
     && curl -fsS "http://127.0.0.1:${ADMIN_HTTP_PORT}/health" >/dev/null 2>&1; then
     break
@@ -135,9 +141,11 @@ for _ in {1..20}; do
   sleep 0.5
 done
 
-nohup env MUX_PORT="$API_SSL_PORT" HTTPS_BACKEND_PORT="$API_SSL_BACKEND_PORT" \
-  "$PYTHON" "$MUX_SCRIPT" > "$ROOT/deploy/mux.log" 2>&1 &
-echo $! > "$ROOT/deploy/api-mux.pid"
+if [[ "$LOCAL_TURN_ENABLED" =~ ^(1|true|yes)$ ]]; then
+  nohup env MUX_PORT="$API_SSL_PORT" HTTPS_BACKEND_PORT="$API_SSL_BACKEND_PORT" \
+    "$PYTHON" "$MUX_SCRIPT" > "$ROOT/deploy/mux.log" 2>&1 &
+  echo $! > "$ROOT/deploy/api-mux.pid"
+fi
 
 for _ in {1..20}; do
   if curl -fsS "http://127.0.0.1:${API_PORT}/health" >/dev/null 2>&1 \
@@ -151,6 +159,10 @@ done
 curl -fsS "http://127.0.0.1:${API_PORT}/health"
 echo
 echo "HTTP  http://127.0.0.1:${API_PORT}/"
-echo "HTTPS + TURN/TCP https://127.0.0.1:${API_SSL_PORT}/"
+if [[ "$LOCAL_TURN_ENABLED" =~ ^(1|true|yes)$ ]]; then
+  echo "HTTPS + TURN/TCP https://127.0.0.1:${API_SSL_PORT}/"
+else
+  echo "HTTPS DIRECT https://127.0.0.1:${API_SSL_PORT}/"
+fi
 echo "ADMIN HTTPS https://127.0.0.1:${ADMIN_SSL_PORT}/admin"
 echo "ADMIN TUNNEL ORIGIN http://127.0.0.1:${ADMIN_HTTP_PORT}/admin"

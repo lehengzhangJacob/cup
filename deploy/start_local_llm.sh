@@ -10,7 +10,8 @@ if [[ -f "$PUBLIC_ENV" ]]; then
   set +a
 fi
 
-TRANSFORMERS="${LOCAL_LLM_TRANSFORMERS:-/home/gmn/.conda/envs/ccc/bin/transformers}"
+CCC_PYTHON_BIN="${CCC_PYTHON:-/home/gmn/.conda/envs/ccc/bin/python}"
+TRANSFORMERS="${LOCAL_LLM_TRANSFORMERS:-${CCC_PYTHON_BIN%/*}/transformers}"
 HOST="${LOCAL_LLM_HOST:-127.0.0.1}"
 PORT="${LOCAL_LLM_PORT:-8021}"
 GPU="${LOCAL_LLM_GPU:-2}"

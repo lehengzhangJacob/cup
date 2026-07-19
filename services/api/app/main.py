@@ -107,10 +107,16 @@ class LiveTalkingSpeakRequest(BaseModel):
     session_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1, max_length=2000)
     interrupt: bool = False
+    return_audio: bool = False
 
 
 class LiveTalkingSessionRequest(BaseModel):
     session_id: str = Field(..., min_length=1)
+    transport: Optional[Literal["http", "webrtc"]] = None
+
+
+class LiveTalkingHttpSessionRequest(BaseModel):
+    avatar: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):
@@ -576,6 +582,7 @@ async def livetalking_status(request: Request):
         "ready": False,
         "on_demand": True,
         "avatar_id": avatar_id,
+        "available_avatars": _available_avatars(),
         "turn": turn,
         "ice_servers": ice_servers,
     }
@@ -616,12 +623,80 @@ async def livetalking_offer(req: LiveTalkingOfferRequest):
     return await _livetalking_post("/offer", payload, timeout=20.0)
 
 
+@app.post("/v1/livetalking/session")
+async def livetalking_http_session(req: LiveTalkingHttpSessionRequest):
+    payload = {"avatar": req.avatar or _avatar_settings()["avatar_id"]}
+    data = await _livetalking_post("/session", payload, timeout=120.0)
+    session_id = str(data.get("sessionid") or "")
+    if not session_id:
+        raise HTTPException(502, "LiveTalking did not return an HTTP session")
+    return {
+        "code": 0,
+        "session_id": session_id,
+        "mjpeg_url": f"/v1/livetalking/mjpeg?session_id={session_id}",
+        "transport": "http",
+    }
+
+
+@app.get("/v1/livetalking/mjpeg")
+async def livetalking_mjpeg(session_id: str):
+    if not LIVETALKING_ENABLED:
+        raise HTTPException(503, "LiveTalking is disabled")
+
+    async def stream():
+        async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
+            async with client.stream(
+                "GET",
+                f"{LIVETALKING_URL}/mjpeg",
+                params={"sessionid": session_id},
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_raw(chunk_size=65536):
+                    yield chunk
+
+    return StreamingResponse(
+        stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-cache, no-store, no-transform",
+            "Pragma": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/v1/livetalking/frame.jpg")
+async def livetalking_frame_jpg(session_id: str):
+    if not LIVETALKING_ENABLED:
+        raise HTTPException(503, "LiveTalking is disabled")
+    try:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
+            response = await client.get(
+                f"{LIVETALKING_URL}/frame.jpg",
+                params={"sessionid": session_id},
+            )
+        if response.status_code == 404:
+            raise HTTPException(404, "session not found")
+        if response.status_code >= 400 or not response.content:
+            raise HTTPException(503, "no frame yet")
+        return Response(
+            content=response.content,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"LiveTalking frame proxy failed: {exc}") from exc
+
+
 async def _stream_tts_to_livetalking(
     session_id: str,
     text: str,
     *,
     interrupt: bool,
-) -> None:
+    return_audio: bool = False,
+) -> dict[str, Any]:
     if interrupt:
         await _livetalking_post(
             "/interrupt_talk",
@@ -630,9 +705,10 @@ async def _stream_tts_to_livetalking(
 
     speech_text = _speech_text(text)
     if not speech_text:
-        return
+        return {"code": 0, "msg": "ok"}
 
     total_pcm_bytes = 0
+    pcm_audio = bytearray()
     sample_rate: Optional[int] = None
     chunk_count = 0
     tts_started_at = asyncio.get_running_loop().time()
@@ -663,16 +739,38 @@ async def _stream_tts_to_livetalking(
                 raise RuntimeError("GLM-TTS returned invalid base64 PCM audio") from exc
             if not pcm_chunk:
                 continue
+            if return_audio:
+                pcm_audio.extend(pcm_chunk)
             chunk_count += 1
             total_pcm_bytes += len(pcm_chunk)
             if total_pcm_bytes > 32 * 1024 * 1024:
                 raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
 
-            # Forward each decoded TTS chunk immediately. The previous code waited
-            # for the whole sentence, adding the complete first-sentence duration
-            # to time-to-first-audio even though both upstream and downstream are
-            # capable of streaming/queueing.
-            wav_audio = _pcm16_mono_wav(pcm_chunk, sample_rate)
+            if not return_audio:
+                # WebRTC carries audio itself, so forward each TTS chunk at once.
+                wav_audio = _pcm16_mono_wav(pcm_chunk, sample_rate)
+                response = await client.post(
+                    f"{LIVETALKING_URL}/humanaudio",
+                    data={"sessionid": session_id},
+                    files={"file": ("speech.wav", wav_audio, "audio/wav")},
+                )
+                response.raise_for_status()
+                data = response.json()
+                if isinstance(data, dict) and data.get("code") not in (None, 0):
+                    raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
+                _mark_livetalking_used()
+                if first_upload_ms is None:
+                    first_upload_ms = round(
+                        (asyncio.get_running_loop().time() - tts_started_at) * 1000
+                    )
+
+        if not total_pcm_bytes or sample_rate is None:
+            raise RuntimeError("GLM-TTS returned no PCM audio")
+
+        if return_audio:
+            # HTTP video has no media audio track. Queue the complete sentence and
+            # return the same WAV to the browser so voice and mouth start together.
+            wav_audio = _pcm16_mono_wav(bytes(pcm_audio), sample_rate)
             response = await client.post(
                 f"{LIVETALKING_URL}/humanaudio",
                 data={"sessionid": session_id},
@@ -683,13 +781,9 @@ async def _stream_tts_to_livetalking(
             if isinstance(data, dict) and data.get("code") not in (None, 0):
                 raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
             _mark_livetalking_used()
-            if first_upload_ms is None:
-                first_upload_ms = round(
-                    (asyncio.get_running_loop().time() - tts_started_at) * 1000
-                )
-
-        if not total_pcm_bytes or sample_rate is None:
-            raise RuntimeError("GLM-TTS returned no PCM audio")
+            first_upload_ms = round(
+                (asyncio.get_running_loop().time() - tts_started_at) * 1000
+            )
 
         print(
             "[livetalking] streamed TTS audio: "
@@ -698,6 +792,96 @@ async def _stream_tts_to_livetalking(
             f"first_upload_ms={first_upload_ms} "
             f"total_ms={round((asyncio.get_running_loop().time() - tts_started_at) * 1000)}"
         )
+
+    result: dict[str, Any] = {"code": 0, "msg": "ok"}
+    if return_audio and pcm_audio and sample_rate is not None:
+        wav_audio = _pcm16_mono_wav(bytes(pcm_audio), sample_rate)
+        result["audio_wav_base64"] = base64.b64encode(wav_audio).decode("ascii")
+        result["sample_rate"] = sample_rate
+    return result
+
+
+async def _stream_synced_tts_to_livetalking(
+    session_id: str,
+    text: str,
+    *,
+    interrupt: bool,
+):
+    """Feed each GLM-TTS PCM chunk to Wav2Lip and yield it to the browser."""
+    if interrupt:
+        await _livetalking_post(
+            "/interrupt_talk",
+            {"sessionid": session_id},
+        )
+
+    speech_text = _speech_text(text)
+    if not speech_text:
+        return
+
+    total_pcm_bytes = 0
+    chunk_count = 0
+    sample_rate: Optional[int] = None
+    started_at = asyncio.get_running_loop().time()
+    first_chunk_ms: Optional[int] = None
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+        async for event in zhipu.tts_stream(
+            speech_text,
+            voice=_avatar_settings()["voice"],
+            speed=LIVETALKING_TTS_SPEED,
+        ):
+            choices = event.get("choices") or []
+            delta = choices[0].get("delta", {}) if choices else {}
+            encoded = delta.get("content")
+            if not encoded:
+                continue
+
+            event_sample_rate = int(delta.get("return_sample_rate") or 24000)
+            if sample_rate is None:
+                sample_rate = event_sample_rate
+            elif event_sample_rate != sample_rate:
+                raise RuntimeError(
+                    f"GLM-TTS sample rate changed from {sample_rate} to {event_sample_rate}"
+                )
+
+            try:
+                pcm_chunk = base64.b64decode(encoded, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise RuntimeError("GLM-TTS returned invalid base64 PCM audio") from exc
+            if not pcm_chunk:
+                continue
+
+            total_pcm_bytes += len(pcm_chunk)
+            chunk_count += 1
+            if total_pcm_bytes > 32 * 1024 * 1024:
+                raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
+
+            wav_audio = _pcm16_mono_wav(pcm_chunk, event_sample_rate)
+            response = await client.post(
+                f"{LIVETALKING_URL}/humanaudio",
+                data={"sessionid": session_id},
+                files={"file": ("speech.wav", wav_audio, "audio/wav")},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and data.get("code") not in (None, 0):
+                raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
+
+            _mark_livetalking_used()
+            if first_chunk_ms is None:
+                first_chunk_ms = round(
+                    (asyncio.get_running_loop().time() - started_at) * 1000
+                )
+            yield event
+
+    if not total_pcm_bytes:
+        raise RuntimeError("GLM-TTS returned no PCM audio")
+    print(
+        "[livetalking] synced TTS stream: "
+        f"session={session_id} chunks={chunk_count} "
+        f"samples={total_pcm_bytes // 2} sample_rate={sample_rate} "
+        f"first_chunk_ms={first_chunk_ms} "
+        f"total_ms={round((asyncio.get_running_loop().time() - started_at) * 1000)}"
+    )
 
 
 _livetalking_speech_workers: dict[str, asyncio.Task[None]] = {}
@@ -752,14 +936,42 @@ def _start_livetalking_speech_worker(
 @app.post("/v1/livetalking/speak")
 async def livetalking_speak(req: LiveTalkingSpeakRequest):
     try:
-        await _stream_tts_to_livetalking(
+        return await _stream_tts_to_livetalking(
             req.session_id,
             req.text,
             interrupt=req.interrupt,
+            return_audio=req.return_audio,
         )
     except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         raise HTTPException(502, f"LiveTalking streaming TTS failed: {exc}") from exc
-    return {"code": 0, "msg": "ok"}
+
+
+@app.post("/v1/livetalking/speak-stream")
+async def livetalking_speak_stream(req: LiveTalkingSpeakRequest):
+    async def event_gen():
+        try:
+            async for event in _stream_synced_tts_to_livetalking(
+                req.session_id,
+                req.text,
+                interrupt=req.interrupt,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+            error = {
+                "error": {
+                    "message": f"LiveTalking streaming TTS failed: {exc}"
+                }
+            }
+            yield f"data: {json.dumps(error, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/v1/livetalking/interrupt")
@@ -785,8 +997,9 @@ async def livetalking_is_speaking(req: LiveTalkingSessionRequest):
 @app.post("/v1/livetalking/close")
 async def livetalking_close(req: LiveTalkingSessionRequest):
     _cancel_livetalking_speech_worker(req.session_id)
+    path = "/session/close" if req.transport == "http" else "/close_session"
     return await _livetalking_post(
-        "/close_session",
+        path,
         {"sessionid": req.session_id},
     )
 
@@ -1036,6 +1249,7 @@ async def chat(req: ChatRequest):
         answer = str(result.get("answer") or "")
         citations = result.get("citations") or []
         latency_ms = int(result.get("latency_ms") or 0)
+        effective_model_route = str(result.get("model_route") or req.model_route)
         _log(
             session_id,
             "assistant",
@@ -1044,7 +1258,7 @@ async def chat(req: ChatRequest):
                 "latency_ms": latency_ms,
                 "chunk_ids": [c.get("id") for c in citations if isinstance(c, dict)],
                 "history_turns": result.get("history_turns", 0),
-                "model_route": req.model_route,
+                "model_route": effective_model_route,
             },
         )
         return {
@@ -1054,7 +1268,7 @@ async def chat(req: ChatRequest):
             "history_turns": result.get("history_turns", 0),
             "retrieval_ms": result.get("retrieval_ms", 0),
             "latency_ms": latency_ms,
-            "model_route": req.model_route,
+            "model_route": effective_model_route,
         }
 
     async def event_gen():
@@ -1062,6 +1276,7 @@ async def chat(req: ChatRequest):
         citations: list[dict[str, Any]] = []
         latency_ms = 0
         history_turns = 0
+        effective_model_route = req.model_route
         speech_queue = (
             _start_livetalking_speech_worker(req.livetalking_session_id)
             if req.livetalking_session_id
@@ -1081,6 +1296,7 @@ async def chat(req: ChatRequest):
                 if event_type == "meta":
                     citations = event.get("citations") or []
                     history_turns = int(event.get("history_turns") or 0)
+                    effective_model_route = str(event.get("model_route") or req.model_route)
                     event["session_id"] = session_id
                 elif event_type == "delta":
                     token = str(event.get("content") or "")
@@ -1117,7 +1333,7 @@ async def chat(req: ChatRequest):
                     "latency_ms": latency_ms,
                     "chunk_ids": [c.get("id") for c in citations if isinstance(c, dict)],
                     "history_turns": history_turns,
-                    "model_route": req.model_route,
+                    "model_route": effective_model_route,
                 },
             )
 
@@ -1394,7 +1610,10 @@ async def admin_login_page(request: Request):
 async def index():
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
-        return FileResponse(index_path)
+        return FileResponse(
+            index_path,
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     return {
         "name": "Lingshan AI Guide API",
         "docs": "/docs",

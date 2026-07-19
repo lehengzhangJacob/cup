@@ -1,7 +1,9 @@
 # secrets & local env
 softcup_glmkey
+glmkey
 glm_api
 deepseek_key
+deepseekkey
 .env
 .env.*
 deploy/public.env
@@ -18,6 +20,8 @@ deploy/**/start.lock
 LiveTalking/downloads/
 LiveTalking/models/wav2lip.pth
 LiveTalking/data/avatars/wav2lip256_avatar1/
+LiveTalking/avatars/wav2lip/face_detection/detection/sfd/s3fd.pth
+deploy/livetalking/
 __pycache__/
 *.py[cod]
 .Python

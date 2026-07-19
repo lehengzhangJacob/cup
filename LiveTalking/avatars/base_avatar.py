@@ -82,7 +82,9 @@ class BaseAvatar:
         self.__loadcustom()
 
         self.batch_size = opt.batch_size
-        self.res_frame_queue = Queue(self.batch_size*2)
+        # Keep only one inference batch ahead. Larger buffers improve bulk
+        # throughput but add visible A/V latency for interactive HTTP playback.
+        self.res_frame_queue = Queue(maxsize=self.batch_size)
         self.render_event = Event()
 
         _tts_modules = {
@@ -504,4 +506,3 @@ class BaseAvatar:
 
         process_quit_event.set()
         process_thread.join()
-

@@ -20,7 +20,8 @@ while [[ -n "$service_pid" ]] && kill -0 "$service_pid" 2>/dev/null; do
   if [[ -f "$LAST_USED_FILE" ]]; then
     last_used="$(stat -c %Y "$LAST_USED_FILE")"
     now="$(date +%s)"
-    if (( now - last_used >= IDLE_SECONDS )); then
+    # Zero or a negative value disables idle shutdown and keeps the avatar hot.
+    if (( IDLE_SECONDS > 0 && now - last_used >= IDLE_SECONDS )); then
       kill "$service_pid" 2>/dev/null || true
       for _ in {1..50}; do
         kill -0 "$service_pid" 2>/dev/null || break

@@ -91,6 +91,34 @@
       background: rgba(0,0,0,.25);
     }
     .style-control { position: relative; }
+    .stage-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .avatar-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 29px;
+      padding: 4px 8px;
+      color: var(--pine-deep);
+      border: 1px solid rgba(31, 90, 79, .32);
+      background: rgba(255, 252, 245, .9);
+      font-size: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .avatar-picker select {
+      width: auto;
+      max-width: 150px;
+      padding: 2px 20px 2px 4px;
+      color: var(--pine-deep);
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+    }
     .style-trigger {
       width: auto !important;
       padding: 6px 12px !important;
@@ -161,6 +189,18 @@
       background: #08120e;
     }
     #liveTalkingVideo.is-active { display: block; }
+    #liveTalkingMjpeg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      z-index: 2;
+      object-fit: contain;
+      object-position: center bottom;
+      background: #08120e;
+    }
+    #liveTalkingMjpeg.is-active { display: block; }
     #liveTalkingAudio { display: none; }
     #xmovMount {
       position: absolute;
@@ -492,7 +532,7 @@
       min-height: auto;
       width: 100%;
     }
-    #live2dCanvas, #liveTalkingVideo, #xmovMount { filter: drop-shadow(0 24px 20px rgba(31, 54, 41, .16)); }
+    #live2dCanvas, #liveTalkingVideo, #liveTalkingMjpeg, #xmovMount { filter: drop-shadow(0 24px 20px rgba(31, 54, 41, .16)); }
     #liveTalkingVideo { background: transparent; }
     .model-loading { color: var(--pine-deep); background: rgba(245, 240, 230, .5); }
     .loader-ring { border-color: rgba(31, 90, 79, .2); border-top-color: var(--cinnabar); }
@@ -723,9 +763,13 @@
     <section class="card stage">
       <div class="stage-top">
         <div class="badge" id="avatarBadge">灵曦 · 正在准备</div>
-        <div class="style-control" id="styleControl">
-          <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
-          <div class="style-panel" id="stylePanel" hidden>
+        <div class="stage-actions">
+          <label class="avatar-picker" for="avatarSelect">人物
+            <select id="avatarSelect" disabled aria-label="选择数字人人物"></select>
+          </label>
+          <div class="style-control" id="styleControl">
+            <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
+            <div class="style-panel" id="stylePanel" hidden>
             <div class="style-group">
               <span class="style-label">神态</span>
               <div class="style-options" id="expressionOptions">
@@ -751,11 +795,13 @@
                 <button type="button" data-costume="cinnabar" aria-pressed="false">朱砂红</button>
               </div>
             </div>
+            </div>
           </div>
         </div>
       </div>
       <div class="model-wrap" id="modelWrap">
         <video id="liveTalkingVideo" autoplay playsinline muted aria-label="灵曦数字人"></video>
+        <img id="liveTalkingMjpeg" alt="灵曦 HTTP 数字人" />
         <audio id="liveTalkingAudio" autoplay></audio>
         <div id="xmovMount" aria-label="灵曦数字人"></div>
         <canvas id="live2dCanvas" aria-label="灵曦数字人"></canvas>
@@ -926,8 +972,19 @@
       ready: false,
       connecting: false,
       avatarId: null,
+      transport: null,
+    };
+    const avatarLabels = {
+      lingshan_guide_v1: "女导游 · 山寺",
+      lingshan_guide_v2: "女导游 · 青绿",
+      lingshan_guide_v3: "男导游 · 青绿",
+      lingshan_guide_v4: "男向导 · 户外",
+      wav2lip256_zen_avatar1: "灰袍灵曦",
+      wav2lip256_avatar1: "经典人物",
     };
     let liveTalkingStartPromise = null;
+    const preferHttpTransport = () =>
+      new URLSearchParams(location.search).get("transport") !== "webrtc";
 
     const savedModelRoute = localStorage.getItem("lingshan-model-route");
     if (savedModelRoute === "cloud" || savedModelRoute === "local") {
@@ -949,9 +1006,17 @@
         const localRoute = data.routes && data.routes.local;
         const localOption = $("modelRoute").querySelector('option[value="local"]');
         if (localRoute && localOption) {
-          localOption.textContent = localRoute.ready
-            ? "本地 Qwen2-7B（服务就绪）"
-            : "本地 Qwen2-7B（按需启动）";
+          const available = localRoute.available !== false;
+          localOption.disabled = !available;
+          localOption.textContent = !available
+            ? "本地模型（本机未安装）"
+            : (localRoute.ready ? "本地 Qwen2-7B（服务就绪）" : "本地 Qwen2-7B（按需启动）");
+          if (!available && $("modelRoute").value === "local") {
+            $("modelRoute").value = "cloud";
+            localStorage.setItem("lingshan-model-route", "cloud");
+            sessionId = null;
+            $("status").textContent = "本地模型未安装，已切换 GLM API";
+          }
         }
       } catch (_) {}
     }
@@ -1017,22 +1082,32 @@
 
 
     function activateLiveTalkingView() {
+      const httpMode = liveTalkingState.transport === "http";
+      const avatarLabel = avatarLabels[liveTalkingState.avatarId] || "数字人";
       document.getElementById("modelLoading").classList.add("is-hidden");
-      document.getElementById("liveTalkingVideo").classList.add("is-active");
+      document.getElementById("liveTalkingVideo").classList.toggle("is-active", !httpMode);
+      document.getElementById("liveTalkingMjpeg").classList.toggle("is-active", httpMode);
       document.getElementById("xmovMount").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.add("is-hidden");
-      document.getElementById("avatarBadge").textContent = "灵曦 · 正在讲解";
-      document.getElementById("avatarHint").textContent = "灵曦已连接";
+      document.getElementById("avatarBadge").textContent = httpMode
+        ? avatarLabel + " · HTTP 实时数字人"
+        : avatarLabel + " · 正在讲解";
+      document.getElementById("avatarHint").textContent = httpMode
+        ? avatarLabel + "已连接（无需 WebRTC）"
+        : avatarLabel + "已连接";
       document.getElementById("styleButton").disabled = true;
+      document.getElementById("styleControl").hidden = true;
       document.getElementById("stylePanel").hidden = true;
     }
 
     function fallbackToLive2D(message) {
       document.getElementById("liveTalkingVideo").classList.remove("is-active");
+      document.getElementById("liveTalkingMjpeg").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.remove("is-hidden");
       document.getElementById("avatarBadge").textContent = "灵曦 · 已准备";
       document.getElementById("avatarHint").textContent = message || "灵曦已准备好";
       document.getElementById("styleButton").disabled = false;
+      document.getElementById("styleControl").hidden = false;
     }
 
     function ensureLiveTalkingPlayback() {
@@ -1040,6 +1115,108 @@
       const audio = document.getElementById("liveTalkingAudio");
       if (video.srcObject) video.play().catch(() => {});
       if (audio.srcObject) audio.play().catch(() => {});
+    }
+
+    async function bootLiveTalkingHttp() {
+      const avatarLabel = avatarLabels[liveTalkingState.avatarId] || "数字人";
+      document.getElementById("avatarHint").textContent = "正在建立" + avatarLabel + " HTTP 视频…";
+      const response = await fetch(base() + "/v1/livetalking/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: liveTalkingState.avatarId }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      const sessionId = String(data.session_id || "");
+      if (!sessionId) throw new Error("LiveTalking 未返回 HTTP 会话");
+      liveTalkingState.sessionId = sessionId;
+      liveTalkingState.transport = "http";
+      liveTalkingState.ready = true;
+      const image = document.getElementById("liveTalkingMjpeg");
+      image.src = base() + "/v1/livetalking/mjpeg?session_id="
+        + encodeURIComponent(sessionId) + "&t=" + Date.now();
+      image.onerror = () => {
+        if (liveTalkingState.transport !== "http" || liveTalkingState.sessionId !== sessionId) return;
+        setTimeout(() => {
+          if (liveTalkingState.transport === "http" && liveTalkingState.sessionId === sessionId) {
+            image.src = base() + "/v1/livetalking/mjpeg?session_id="
+              + encodeURIComponent(sessionId) + "&t=" + Date.now();
+          }
+        }, 1000);
+      };
+      window.addEventListener("beforeunload", () => {
+        fetch(base() + "/v1/livetalking/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, transport: "http" }),
+          keepalive: true,
+        }).catch(() => {});
+      }, { once: true });
+      activateLiveTalkingView();
+      document.getElementById("status").textContent = avatarLabel + "已准备好";
+      return true;
+    }
+
+    function renderAvatarOptions(avatarIds, selectedId) {
+      const select = document.getElementById("avatarSelect");
+      const preferredOrder = [
+        "lingshan_guide_v1",
+        "lingshan_guide_v2",
+        "lingshan_guide_v3",
+        "lingshan_guide_v4",
+        "wav2lip256_zen_avatar1",
+        "wav2lip256_avatar1",
+      ];
+      const available = new Set(Array.isArray(avatarIds) ? avatarIds : []);
+      const ordered = preferredOrder.filter(id => available.has(id));
+      for (const id of [...available].sort()) {
+        if (!ordered.includes(id)) ordered.push(id);
+      }
+      select.replaceChildren(...ordered.map(id => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = avatarLabels[id] || id;
+        return option;
+      }));
+      if (ordered.includes(selectedId)) select.value = selectedId;
+      select.disabled = ordered.length < 2;
+    }
+
+    async function switchLiveTalkingAvatar(avatarId) {
+      const selectedId = String(avatarId || "");
+      if (!selectedId || selectedId === liveTalkingState.avatarId) return;
+      const select = document.getElementById("avatarSelect");
+      select.disabled = true;
+      stopSpeech("正在切换数字人人物…");
+      const oldSessionId = liveTalkingState.sessionId;
+      const oldTransport = liveTalkingState.transport;
+      const image = document.getElementById("liveTalkingMjpeg");
+      image.onerror = null;
+      image.removeAttribute("src");
+      if (liveTalkingState.pc) {
+        try { liveTalkingState.pc.close(); } catch (_) {}
+        liveTalkingState.pc = null;
+      }
+      liveTalkingState.ready = false;
+      liveTalkingState.sessionId = null;
+      liveTalkingState.avatarId = selectedId;
+      localStorage.setItem("lingshan-avatar-id", selectedId);
+      try {
+        if (oldSessionId) {
+          await fetch(base() + "/v1/livetalking/close", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: oldSessionId, transport: oldTransport }),
+          });
+        }
+        await bootLiveTalkingHttp();
+        document.getElementById("status").textContent = "已切换为" + (avatarLabels[selectedId] || selectedId);
+      } catch (error) {
+        console.error(error);
+        fallbackToLive2D("人物切换失败，已回退轻量模式");
+      } finally {
+        select.disabled = select.options.length < 2;
+      }
     }
 
     async function waitForIceGathering(pc, timeoutMs = 3500) {
@@ -1066,13 +1243,25 @@
         const statusResponse = await fetch(base() + "/v1/livetalking/status", { cache: "no-store" });
         if (!statusResponse.ok) throw new Error("LiveTalking 状态读取失败");
         const status = await statusResponse.json();
-        liveTalkingState.avatarId = status.avatar_id || null;
+        const availableAvatars = Array.isArray(status.available_avatars)
+          ? status.available_avatars
+          : [status.avatar_id].filter(Boolean);
+        const savedAvatarId = localStorage.getItem("lingshan-avatar-id");
+        liveTalkingState.avatarId = availableAvatars.includes(savedAvatarId)
+          ? savedAvatarId
+          : (status.avatar_id || availableAvatars[0] || null);
+        renderAvatarOptions(availableAvatars, liveTalkingState.avatarId);
         if (!status.enabled || !status.ready) {
           fallbackToLive2D("灵曦正在准备，您可以先开始提问");
           return false;
         }
 
+        if (preferHttpTransport()) {
+          return await bootLiveTalkingHttp();
+        }
+
         document.getElementById("avatarHint").textContent = "正在连接灵曦…";
+        liveTalkingState.transport = "webrtc";
         const iceServers = Array.isArray(status.ice_servers)
           ? status.ice_servers
           : (status.turn ? [status.turn] : []);
@@ -1110,7 +1299,7 @@
           if (state === "connected") {
             liveTalkingState.ready = true;
             activateLiveTalkingView();
-            document.getElementById("status").textContent = "灵曦已准备好";
+            document.getElementById("status").textContent = (avatarLabels[liveTalkingState.avatarId] || "数字人") + "已准备好";
             resolveConnected(true);
           } else if (state === "failed") {
             rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
@@ -1148,7 +1337,10 @@
             fetch(base() + "/v1/livetalking/close", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ session_id: closingSessionId }),
+              body: JSON.stringify({
+                session_id: closingSessionId,
+                transport: liveTalkingState.transport,
+              }),
               keepalive: true,
             }).catch(() => {});
           }
@@ -1168,7 +1360,10 @@
           fetch(base() + "/v1/livetalking/close", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: failedSessionId }),
+            body: JSON.stringify({
+              session_id: failedSessionId,
+              transport: liveTalkingState.transport,
+            }),
           }).catch(() => {});
         }
         fallbackToLive2D("灵曦暂时无法连接，已切换到轻量模式");
@@ -1342,6 +1537,9 @@
     // style panel
     const styleButton = $("styleButton");
     const stylePanel = $("stylePanel");
+    $("avatarSelect").addEventListener("change", event => {
+      void switchLiveTalkingAvatar(event.target.value);
+    });
     styleButton.addEventListener("click", () => {
       const open = stylePanel.hidden;
       stylePanel.hidden = !open;
@@ -1616,7 +1814,7 @@
 
     function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now(), serverDriven = false) {
       const myToken = speechToken;
-      const sessionId = liveTalkingState.sessionId;
+      let sessionId = liveTalkingState.sessionId;
       let sent = 0;
       let finished = false;
       let cancelled = false;
@@ -1626,6 +1824,13 @@
       let monitorFailures = 0;
       let monitorPromise = null;
       let queueTail = Promise.resolve();
+      let ctxA = null;
+      let nextStartAt = 0;
+      let audioStarted = false;
+      let streamController = null;
+      // Server-side mouth generation trails the PCM chunk by ~420 ms. The
+      // browser's MJPEG decode/paint path adds roughly another 80 ms.
+      const syncDelaySeconds = 0.50;
       let resolveDone;
       const done = new Promise(resolve => { resolveDone = resolve; });
       const fiveSecondNotice = setTimeout(() => {
@@ -1639,6 +1844,15 @@
         settled = true;
         clearTimeout(fiveSecondNotice);
         talking = false;
+        if (streamController) {
+          streamController.abort();
+          streamController = null;
+        }
+        if (ctxA) {
+          if (currentAudioCtx === ctxA) currentAudioCtx = null;
+          try { ctxA.close(); } catch (_) {}
+          ctxA = null;
+        }
         if (currentSpeechPipeline === pipeline) currentSpeechPipeline = null;
         if (statusText && myToken === speechToken) {
           document.getElementById("status").textContent = statusText;
@@ -1697,33 +1911,160 @@
         }
       }
 
+      async function scheduleSyncedAudioEvent(rawEvent) {
+        const dataLine = rawEvent.split("\n").find(line => line.startsWith("data:"));
+        if (!dataLine) return false;
+        const event = JSON.parse(dataLine.slice(5).trim());
+        if (event.error) throw new Error(event.error.message || "流式语音合成失败");
+        const choice = event.choices && event.choices[0];
+        const delta = choice && choice.delta;
+        if (!delta || !delta.content) return false;
+
+        const sampleRate = Number(delta.return_sample_rate) || 24000;
+        const samples = decodePcm16Base64(delta.content);
+        if (!samples.length) return false;
+        if (!ctxA) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          ctxA = new AudioCtx({ sampleRate });
+          currentAudioCtx = ctxA;
+          await ctxA.resume();
+        }
+
+        const audioBuffer = ctxA.createBuffer(1, samples.length, sampleRate);
+        audioBuffer.copyToChannel(samples, 0);
+        const source = ctxA.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctxA.destination);
+        if (!audioStarted) {
+          audioStarted = true;
+          nextStartAt = ctxA.currentTime + syncDelaySeconds;
+          clearTimeout(fiveSecondNotice);
+          talking = true;
+          const openMs = Math.round(
+            performance.now() - interactionStartedAt + syncDelaySeconds * 1000
+          );
+          document.getElementById("status").textContent =
+            (avatarLabels[liveTalkingState.avatarId] || "数字人")
+            + "播报中 · 总开口 " + openMs + "ms";
+        }
+        const startAt = Math.max(nextStartAt, ctxA.currentTime + 0.02);
+        source.start(startAt);
+        nextStartAt = startAt + audioBuffer.duration;
+        return true;
+      }
+
+      async function streamSyncedSegment(text, interrupt) {
+        const controller = new AbortController();
+        streamController = controller;
+        currentTtsController = controller;
+        let gotAudio = false;
+        let streamBuffer = "";
+        const firstFrameDeadline = setTimeout(() => {
+          if (!gotAudio) controller.abort();
+        }, 3900);
+        try {
+          const response = await fetch(base() + "/v1/livetalking/speak-stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId, text, interrupt }),
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(await response.text());
+          if (!response.body) throw new Error("当前浏览器不支持流式响应");
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          while (!cancelled && myToken === speechToken) {
+            const { value, done: streamDone } = await reader.read();
+            if (streamDone) break;
+            streamBuffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+            const events = streamBuffer.split("\n\n");
+            streamBuffer = events.pop() || "";
+            for (const rawEvent of events) {
+              gotAudio = (await scheduleSyncedAudioEvent(rawEvent)) || gotAudio;
+            }
+          }
+          if (streamBuffer.trim()) {
+            gotAudio = (await scheduleSyncedAudioEvent(streamBuffer)) || gotAudio;
+          }
+          if (!gotAudio && !cancelled) throw new Error("流式语音没有返回音频");
+        } catch (error) {
+          if (cancelled || myToken !== speechToken) return;
+          if (error && error.name === "AbortError") {
+            throw new Error("单句语音首帧超过 4 秒");
+          }
+          throw error;
+        } finally {
+          clearTimeout(firstFrameDeadline);
+          if (streamController === controller) streamController = null;
+          if (currentTtsController === controller) currentTtsController = null;
+        }
+      }
+
       function enqueue(text) {
         const segment = String(text || "").replace(/\s+/g, " ").trim();
         if (!segment || finished || cancelled || myToken !== speechToken) return;
         ensureLiveTalkingPlayback();
         const interrupt = sent === 0;
         sent += 1;
-        if (interrupt) {
-          document.getElementById("status").textContent = "首句已送入 LiveTalking，准备本地口型…";
-        }
         if (serverDriven) {
+          if (interrupt) {
+            document.getElementById("status").textContent = "首句已送入 LiveTalking，准备本地口型…";
+          }
           if (!monitorPromise) monitorPromise = monitorSpeaking();
           return;
         }
-        queueTail = queueTail.then(() => postJson("/v1/livetalking/speak", {
-          session_id: sessionId,
-          text: segment,
-          interrupt,
-        })).catch(error => {
+        const httpMode = liveTalkingState.transport === "http";
+        if (interrupt) {
+          document.getElementById("status").textContent = httpMode
+            ? "首句语音合成中…"
+            : "首句已送入 LiveTalking，准备本地口型…";
+        }
+        queueTail = queueTail.then(async () => {
+          if (cancelled || myToken !== speechToken) return;
+          try {
+            if (httpMode) {
+              await streamSyncedSegment(segment, interrupt);
+            } else {
+              await postJson("/v1/livetalking/speak", {
+                session_id: sessionId,
+                text: segment,
+                interrupt,
+                return_audio: false,
+              });
+            }
+          } catch (error) {
+            const missingSession = /session not found/i.test(String(error && (error.message || error)));
+            if (!httpMode || !missingSession) throw error;
+            document.getElementById("status").textContent = "数字人会话已断开，正在自动重连…";
+            liveTalkingState.ready = false;
+            liveTalkingState.sessionId = null;
+            await bootLiveTalkingHttp();
+            sessionId = liveTalkingState.sessionId;
+            await streamSyncedSegment(segment, interrupt);
+          }
+        }).catch(error => {
           console.error(error);
           settle("LiveTalking 播报失败：" + String(error.message || error));
         });
-        if (!monitorPromise) monitorPromise = monitorSpeaking();
+        if (!httpMode && !monitorPromise) monitorPromise = monitorSpeaking();
       }
 
       function finish() {
         finished = true;
         if (!sent) settle();
+        if (liveTalkingState.transport === "http") {
+          queueTail.then(async () => {
+            if (ctxA && audioStarted) {
+              const remainingMs = Math.max(
+                0,
+                (nextStartAt - ctxA.currentTime) * 1000 + 80
+              );
+              await new Promise(resolve => setTimeout(resolve, remainingMs));
+            }
+            if (!cancelled && myToken === speechToken) settle("播报完成");
+          }).catch(() => {});
+        }
       }
 
       function cancel() {
@@ -1871,7 +2212,7 @@
 
     async function askText(message, interactionStartedAt = performance.now()) {
       if (!message) return;
-      stopSpeech("正在按需启动数字人…");
+      stopSpeech("正在连接常驻数字人…");
       const btn = $("ask");
       btn.disabled = true;
       $("log").textContent = "";
@@ -1885,7 +2226,11 @@
       }
       $("status").textContent = "思考中…";
 
-      const serverDrivenSpeech = !!(liveTalkingState.ready && liveTalkingState.sessionId);
+      const serverDrivenSpeech = !!(
+        liveTalkingState.ready
+        && liveTalkingState.sessionId
+        && liveTalkingState.transport !== "http"
+      );
       const pipeline = createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech });
       let speechCursor = 0;
 
@@ -2386,10 +2731,9 @@
       }
     });
 
-    // Keep the page GPU-free until the visitor starts an interaction.
     void refreshModelRoutes();
-    $("modelLoading").querySelector("span:last-child").textContent = "灵曦正在准备…";
-    void bootLive2D();
+    $("modelLoading").querySelector("span:last-child").textContent = "正在连接常驻数字人…";
+    void bootLive2D().then(() => ensureLiveTalkingOnDemand());
   </script>
 </body>
 </html>

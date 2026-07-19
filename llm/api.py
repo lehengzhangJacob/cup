@@ -89,13 +89,15 @@ def create_app(
     @app.get("/v1/model-routes")
     async def model_routes():
         health_url = f"{LOCAL_LLM_BASE_URL.removesuffix('/v1')}/health"
+        local_available = (Path(LOCAL_LLM_MODEL) / "config.json").is_file()
         local_ready = False
-        try:
-            async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
-                response = await client.get(health_url)
-                local_ready = response.is_success
-        except httpx.HTTPError:
-            pass
+        if local_available:
+            try:
+                async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
+                    response = await client.get(health_url)
+                    local_ready = response.is_success
+            except httpx.HTTPError:
+                pass
         return {
             "default": "cloud",
             "routes": {
@@ -108,10 +110,12 @@ def create_app(
                 "local": {
                     "label": "本地 Qwen2-7B",
                     "model": Path(LOCAL_LLM_MODEL).name,
+                    "available": local_available,
                     "ready": local_ready,
                     "uses_local_gpu": True,
                     "idle_unload": True,
-                    "auto_start": True,
+                    "auto_start": local_available,
+                    "detail": None if local_available else "本机未安装本地模型权重",
                 },
             },
         }
@@ -121,6 +125,10 @@ def create_app(
         session_id = req.session_id or str(uuid.uuid4())
         context = _user_context(req)
         lock = session_lock(request, session_id)
+        model_route = req.model_route
+        if model_route == "local" and not (Path(LOCAL_LLM_MODEL) / "config.json").is_file():
+            logger.warning("Local model is unavailable; falling back to cloud generation")
+            model_route = "cloud"
 
         if not req.stream:
             try:
@@ -129,7 +137,7 @@ def create_app(
                         req.message,
                         session_id=session_id,
                         user_context=context,
-                        model_route=req.model_route,
+                        model_route=model_route,
                     )
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
@@ -143,7 +151,7 @@ def create_app(
                 "history_turns": result.history_turns,
                 "retrieval_ms": result.retrieval_ms,
                 "latency_ms": result.latency_ms,
-                "model_route": req.model_route,
+                "model_route": model_route,
             }
 
         async def event_stream() -> AsyncIterator[str]:
@@ -153,12 +161,12 @@ def create_app(
                         req.message,
                         session_id=session_id,
                         user_context=context,
-                        model_route=req.model_route,
+                        model_route=model_route,
                     ):
                         data = event.as_dict()
                         if event.type == "meta":
                             data["session_id"] = session_id
-                            data["model_route"] = req.model_route
+                            data["model_route"] = model_route
                         yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
             except asyncio.CancelledError:
                 raise

@@ -4,6 +4,9 @@
 
 import json
 import asyncio
+from threading import Event, Thread
+from typing import Dict
+
 from aiohttp import web
 
 from utils.logger import logger
@@ -30,8 +33,24 @@ def json_error(msg: str, code: int = -1):
     )
 
 
-from server.session_manager import session_manager
+from server.session_manager import MaxSessionError, session_manager
 from server.avatar_routes import setup_avatar_routes
+
+_http_render_quit: Dict[str, Event] = {}
+_http_stream_clients: Dict[str, int] = {}
+_http_cleanup_tasks: Dict[str, asyncio.Task] = {}
+_HTTP_DISCONNECT_GRACE_SECONDS = 30
+
+
+async def _release_http_session_after_grace(sessionid: str) -> None:
+    """Keep the renderer alive briefly so an MJPEG client can reconnect."""
+    try:
+        await asyncio.sleep(_HTTP_DISCONNECT_GRACE_SECONDS)
+        if _http_stream_clients.get(sessionid, 0) == 0:
+            _http_cleanup_tasks.pop(sessionid, None)
+            _release_http_session(sessionid)
+    except asyncio.CancelledError:
+        pass
 
 def get_session(request, sessionid: str):
     """从 app 中获取 session 实例"""
@@ -190,6 +209,134 @@ async def admin_sessions(request):
         return json_error(str(e))
 
 
+async def create_http_session(request):
+    """创建同源 HTTP/MJPEG 会话，避免公网 WebRTC/TURN 依赖。"""
+    try:
+        try:
+            params = await request.json()
+        except Exception:
+            params = {}
+        if not isinstance(params, dict):
+            params = {}
+        sessionid = await session_manager.create_session(params)
+        avatar = session_manager.get_session(sessionid)
+        if avatar is None:
+            return json_error("failed to create session")
+        quit_event = Event()
+        _http_render_quit[sessionid] = quit_event
+        Thread(
+            target=avatar.render,
+            args=(quit_event,),
+            daemon=True,
+            name=f"http-render-{sessionid[:8]}",
+        ).start()
+        logger.info("HTTP session ready sessionid=%s", sessionid)
+        return web.json_response({"code": 0, "msg": "ok", "sessionid": sessionid})
+    except MaxSessionError as exc:
+        return json_error(str(exc))
+    except Exception as exc:
+        logger.exception("create_http_session exception:")
+        return json_error(str(exc))
+
+
+def _release_http_session(sessionid: str) -> None:
+    cleanup_task = _http_cleanup_tasks.pop(sessionid, None)
+    if cleanup_task is not None:
+        try:
+            current_task = asyncio.current_task()
+        except RuntimeError:
+            current_task = None
+        if cleanup_task is not current_task:
+            cleanup_task.cancel()
+    _http_stream_clients.pop(sessionid, None)
+    quit_event = _http_render_quit.pop(sessionid, None)
+    if quit_event:
+        quit_event.set()
+    session_manager.remove_session(sessionid)
+
+
+async def close_http_session(request):
+    try:
+        params = await request.json()
+        _release_http_session(str(params.get("sessionid", "")))
+        return json_ok()
+    except Exception as exc:
+        logger.exception("close_http_session exception:")
+        return json_error(str(exc))
+
+
+async def frame_jpeg(request):
+    sessionid = request.query.get("sessionid", "")
+    avatar = session_manager.get_session(sessionid)
+    if avatar is None or not hasattr(avatar, "output"):
+        return web.Response(status=404, text="session not found")
+    getter = getattr(avatar.output, "get_latest_jpeg", None)
+    jpeg = getter() if callable(getter) else None
+    if not jpeg:
+        return web.Response(status=503, text="no frame yet")
+    return web.Response(
+        body=jpeg,
+        content_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def mjpeg_stream(request):
+    sessionid = request.query.get("sessionid", "")
+    cleanup_task = _http_cleanup_tasks.pop(sessionid, None)
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+    avatar = session_manager.get_session(sessionid)
+    if avatar is None or not hasattr(avatar, "output"):
+        return web.Response(status=404, text="session not found")
+
+    _http_stream_clients[sessionid] = _http_stream_clients.get(sessionid, 0) + 1
+
+    response = web.StreamResponse(
+        headers={
+            "Content-Type": "multipart/x-mixed-replace; boundary=frame",
+            "Cache-Control": "no-cache, no-store, no-transform, must-revalidate",
+            "Pragma": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+    last_jpeg = None
+    try:
+        await response.prepare(request)
+        while request.transport and not request.transport.is_closing():
+            getter = getattr(avatar.output, "get_latest_jpeg", None)
+            jpeg = getter() if callable(getter) else None
+            if jpeg and jpeg != last_jpeg:
+                last_jpeg = jpeg
+                await response.write(
+                    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(jpeg)).encode()
+                    + b"\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
+                )
+            await asyncio.sleep(0.04)
+    except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
+        pass
+    except Exception as exc:
+        logger.warning("MJPEG stream ended: %s", exc)
+    finally:
+        remaining = max(0, _http_stream_clients.get(sessionid, 1) - 1)
+        if remaining:
+            _http_stream_clients[sessionid] = remaining
+        else:
+            _http_stream_clients.pop(sessionid, None)
+            previous_task = _http_cleanup_tasks.pop(sessionid, None)
+            if previous_task is not None:
+                previous_task.cancel()
+            if session_manager.get_session(sessionid) is not None:
+                _http_cleanup_tasks[sessionid] = asyncio.create_task(
+                    _release_http_session_after_grace(sessionid)
+                )
+    return response
+
+
 # ─── 路由注册 ──────────────────────────────────────────────────────────────
 
 def setup_routes(app):
@@ -204,6 +351,10 @@ def setup_routes(app):
     app.router.add_post("/record", record)
     app.router.add_post("/interrupt_talk", interrupt_talk)
     app.router.add_post("/is_speaking", is_speaking)
+    app.router.add_post("/session", create_http_session)
+    app.router.add_post("/session/close", close_http_session)
+    app.router.add_get("/mjpeg", mjpeg_stream)
+    app.router.add_get("/frame.jpg", frame_jpeg)
     app.router.add_get("/api/admin/config", admin_config)
     app.router.add_get("/api/admin/sessions", admin_sessions)
 
