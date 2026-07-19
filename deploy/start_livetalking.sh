@@ -47,6 +47,10 @@ stop_watchdog() {
     watchdog_pid="$(tr -dc '0-9' < "$WATCHDOG_PID_FILE")"
     if [[ -n "$watchdog_pid" ]] && kill -0 "$watchdog_pid" 2>/dev/null; then
       kill "$watchdog_pid" 2>/dev/null || true
+      for _ in {1..20}; do
+        kill -0 "$watchdog_pid" 2>/dev/null || break
+        sleep 0.05
+      done
     fi
     rm -f "$WATCHDOG_PID_FILE"
   fi
@@ -61,6 +65,9 @@ if [[ -f "$PID_FILE" ]]; then
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
     if [[ "$RESTART" =~ ^(1|true|yes)$ ]]; then
       echo "Restarting LiveTalking PID $old_pid"
+      # Stop the old watcher before replacing its service PID. Otherwise it
+      # can observe the intentional shutdown and delete the new PID file.
+      stop_watchdog
       kill "$old_pid"
       for _ in {1..50}; do
         kill -0 "$old_pid" 2>/dev/null || break
