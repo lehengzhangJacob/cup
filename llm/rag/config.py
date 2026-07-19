@@ -26,12 +26,47 @@ FAISS_INDEX    = INDEX_DIR / "faiss.index"
 METADATA_JSON  = INDEX_DIR / "metadata.json"
 
 EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "BAAI/bge-m3").strip()
-EMBED_DEVICE = os.getenv("RAG_EMBED_DEVICE", "").strip() or None
+EMBED_DEVICE = os.getenv("RAG_EMBED_DEVICE", "cpu").strip() or "cpu"
+EMBED_SOCKET = Path(
+    os.getenv(
+        "RAG_EMBED_SOCKET",
+        str(PROJECT_ROOT / "deploy" / "rag-embedder.sock"),
+    )
+).expanduser()
+EMBED_STATUS_FILE = Path(
+    os.getenv(
+        "RAG_EMBED_STATUS_FILE",
+        str(PROJECT_ROOT / "deploy" / "rag-embedder-status.json"),
+    )
+).expanduser()
+EMBED_GPU_CANDIDATES = tuple(
+    int(value.strip())
+    for value in os.getenv("RAG_EMBED_GPU_CANDIDATES", "0,1,2,3").split(",")
+    if value.strip().isdigit()
+)
+EMBED_GPU_MIN_FREE_MB = int(os.getenv("RAG_EMBED_GPU_MIN_FREE_MB", "2048"))
+EMBED_GPU_IDLE_SECONDS = float(
+    os.getenv("RAG_EMBED_GPU_IDLE_SECONDS", "180")
+)
+EMBED_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_EMBED_REQUEST_TIMEOUT_SECONDS", "30")
+)
 LLM_BASE_URL = os.getenv(
     "RAG_LLM_BASE_URL",
     "https://open.bigmodel.cn/api/paas/v4/",
 ).rstrip("/")
-LLM_MODEL = os.getenv("RAG_LLM_MODEL", "glm-4.7-flash").strip()
+LLM_MODEL = os.getenv("RAG_LLM_MODEL", "glm-4-flash-250414").strip()
+LLM_FALLBACK_MODELS = tuple(
+    model.strip()
+    for model in os.getenv(
+        "RAG_LLM_FALLBACK_MODELS",
+        "glm-4-flash",
+    ).split(",")
+    if model.strip()
+)
+LLM_FIRST_TOKEN_TIMEOUT_SECONDS = float(
+    os.getenv("RAG_LLM_FIRST_TOKEN_TIMEOUT_SECONDS", "2")
+)
 LLM_API_KEY = os.getenv("GLM_API_KEY", "").strip() or os.getenv(
     "ZHIPU_API_KEY", ""
 ).strip()

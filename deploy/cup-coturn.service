@@ -1,0 +1,17 @@
+[Unit]
+Description=CUP Huawei Cloud TURN server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=LD_LIBRARY_PATH=/home/softcup/to_public/coturn-package/root/usr/lib/x86_64-linux-gnu
+ExecStart=/home/softcup/to_public/coturn-package/root/usr/bin/turnserver -c /home/softcup/to_public/coturn/turnserver.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

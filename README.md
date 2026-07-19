@@ -16,7 +16,7 @@ LiveTalking Wav2Lip 本地数字人、本地景区 RAG 知识库、云端/本地
 - 游客麦克风端：`https://<服务器IP>:8443/`
 - 景区管理后台：`https://<服务器IP>:8444/admin`
 - OpenAPI 文档：`http://<服务器IP>:8001/docs`
-- 安卓 APK：`https://lingshanguide.de5.net/static/downloads/lingshan-guide-v1.0.1.apk`
+- 安卓 APK：`http://139.159.150.134:20080/static/downloads/lingshan-guide-v1.0.2.apk`
 
 当前服务器局域网 IP 为 `192.168.200.27`。浏览器不在服务器本机时，不要使用
 `localhost`。
@@ -32,7 +32,7 @@ cd /home/gmn/codes/cup
 
 bash deploy/start_api.sh
 
-# 可选：预热或立即停止 LiveTalking（默认物理 GPU 2）
+# 可选：启动 CPU 待机实例或完全停止 LiveTalking
 bash deploy/start_livetalking.sh
 bash deploy/stop_livetalking.sh
 ```
@@ -42,8 +42,9 @@ bash deploy/stop_livetalking.sh
 Qwen2-7B”后才占用约 15GB 显存，空闲 120 秒会自动卸载；默认 GLM API 路径不加载
 本地权重。也可用 `bash deploy/stop_local_llm.sh` 立即停止并释放显存。
 
-LiveTalking 同样按需使用显存：打开游客网页且网络可用时自动启动，网页可见期间每
-30 秒续期；网页关闭或隐藏后 120 秒自动停止。活动时本机实测约占 760 MiB 显存。
+LiveTalking 权重和头像常驻 CPU/RAM，不访问时不把模型放在 GPU。建立 WebRTC
+会话时会在物理 GPU 0–3 中选择利用率低且至少剩余 2GB 的卡，关闭最后一个会话
+2 秒后把模型移回 CPU；活动时本机实测约占 756MiB 显存。
 
 RAG 的接口、流式事件和会话边界见 [llm/README.md](llm/README.md)。详细说明见
 [部署与使用手册](docs/部署与使用手册.md) 和
@@ -59,3 +60,8 @@ python scripts/eval_accuracy.py
 
 当前标准事实题评测结果为 `15/15 = 100%`；已完成一次“语音输入结束至首个非静音
 数字人音频帧”实测，延迟为 `3373ms`。
+
+2026-07-19 热链路三次复测中，“发送文字 → 首个非静音音频”中位数为
+`2987ms`，“发送文字 → 最后非静音音频”为 `9387ms`；优化前分别为
+`3459ms` 和 `12189ms`。测试方法、分阶段数据和复测命令见
+[文字到语音端到端延迟测试与优化](docs/文字到语音端到端延迟测试与优化.md)。

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import re
 import subprocess
 import threading
@@ -15,6 +16,8 @@ import httpx
 from rag.config import (
     EMBED_MODEL,
     LLM_BASE_URL,
+    LLM_FALLBACK_MODELS,
+    LLM_FIRST_TOKEN_TIMEOUT_SECONDS,
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_TEMPERATURE,
@@ -36,6 +39,7 @@ from rag.session_store import ConversationStore, ConversationTurn
 _FOLLOW_UP_RE = re.compile(
     r"(它|这个|那个|这里|那里|刚才|上面|前面|该景点|该建筑|还有|那么|然后|呢|多高|多久|怎么走)"
 )
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -265,19 +269,75 @@ class RAGPipeline:
         )
         answer_parts: list[str] = []
         await self._prepare_model_route_async(model_route)
-        completion = await self._get_async_client(model_route).chat.completions.create(
-            model=self._model_for_route(model_route),
-            messages=prepared.messages,
-            temperature=LLM_TEMPERATURE,
-            max_tokens=LLM_MAX_TOKENS,
-            stream=True,
-            **self._completion_extras(model_route),
-        )
-        async for chunk in completion:
-            content = self._delta_content(chunk)
-            if content:
-                answer_parts.append(content)
-                yield RAGStreamEvent(type="delta", content=content)
+        primary_model = self._model_for_route(model_route)
+        models = [primary_model]
+        if model_route == "cloud":
+            models.extend(
+                model
+                for model in LLM_FALLBACK_MODELS
+                if model not in models
+            )
+        for model_index, selected_model in enumerate(models):
+            completion = None
+            attempt_parts: list[str] = []
+            first_token_deadline = (
+                asyncio.get_running_loop().time()
+                + LLM_FIRST_TOKEN_TIMEOUT_SECONDS
+            )
+            try:
+                create_call = self._get_async_client(
+                    model_route
+                ).chat.completions.create(
+                    model=selected_model,
+                    messages=prepared.messages,
+                    temperature=LLM_TEMPERATURE,
+                    max_tokens=LLM_MAX_TOKENS,
+                    stream=True,
+                    **self._completion_extras(model_route, selected_model),
+                )
+                if model_route == "cloud":
+                    completion = await asyncio.wait_for(
+                        create_call,
+                        timeout=LLM_FIRST_TOKEN_TIMEOUT_SECONDS,
+                    )
+                else:
+                    completion = await create_call
+                iterator = completion.__aiter__()
+                while True:
+                    try:
+                        if model_route == "cloud" and not attempt_parts:
+                            remaining = max(
+                                0.01,
+                                first_token_deadline
+                                - asyncio.get_running_loop().time(),
+                            )
+                            chunk = await asyncio.wait_for(
+                                anext(iterator),
+                                timeout=remaining,
+                            )
+                        else:
+                            chunk = await anext(iterator)
+                    except StopAsyncIteration:
+                        break
+                    content = self._delta_content(chunk)
+                    if content:
+                        attempt_parts.append(content)
+                        yield RAGStreamEvent(type="delta", content=content)
+                if not attempt_parts:
+                    raise RuntimeError("LLM returned an empty answer")
+                answer_parts = attempt_parts
+                break
+            except Exception as exc:
+                if attempt_parts or model_index == len(models) - 1:
+                    raise
+                if completion is not None and hasattr(completion, "close"):
+                    await completion.close()
+                logger.warning(
+                    "Cloud model %s failed before first token; trying %s: %s",
+                    selected_model,
+                    models[model_index + 1],
+                    exc,
+                )
         self._mark_local_used(model_route)
         answer = "".join(answer_parts).strip()
         if not answer:
@@ -300,6 +360,10 @@ class RAGPipeline:
             await self._local_async_client.close()
         if self._local_client is not None:
             self._local_client.close()
+        with self._retriever_lock:
+            embedder = getattr(self._retriever, "embedder", None)
+        if embedder is not None and hasattr(embedder, "close"):
+            embedder.close()
 
     def replace_retriever(self, retriever) -> None:
         with self._retriever_lock:
@@ -315,8 +379,7 @@ class RAGPipeline:
         return result
 
     def stats(self) -> dict[str, Any]:
-        with self._retriever_lock:
-            retriever_stats = self._retriever.stats()
+        retriever_stats = self._retriever.stats()
         return {
             **retriever_stats,
             "model": LLM_MODEL,
@@ -326,6 +389,17 @@ class RAGPipeline:
             },
             "embedding_model": EMBED_MODEL,
             **self.sessions.stats(),
+        }
+
+    def warmup(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        with self._retriever_lock:
+            self._retriever.retrieve("灵山胜境")
+            embedding = self._retriever.stats().get("embedding", {})
+        return {
+            "ready": True,
+            "retrieval_ms": int((time.perf_counter() - started) * 1000),
+            "embedding": embedding,
         }
 
     def _prepare(
@@ -489,8 +563,12 @@ class RAGPipeline:
         raise ValueError(f"unsupported model route: {model_route}")
 
     @staticmethod
-    def _completion_extras(model_route: str) -> dict[str, Any]:
-        if model_route == "cloud" and LLM_MODEL.startswith(
+    def _completion_extras(
+        model_route: str,
+        model: Optional[str] = None,
+    ) -> dict[str, Any]:
+        selected_model = model or LLM_MODEL
+        if model_route == "cloud" and selected_model.startswith(
             ("glm-4.5", "glm-4.6", "glm-4.7", "glm-5")
         ):
             return {"extra_body": {"thinking": {"type": "disabled"}}}

@@ -38,6 +38,13 @@ class RAGClient:
     async def stats(self) -> dict[str, Any]:
         return await self._request("GET", "/v1/stats")
 
+    async def warmup(self) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            "/v1/warmup",
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
+        )
+
     async def model_routes(self) -> dict[str, Any]:
         return await self._request("GET", "/v1/model-routes", timeout=5.0)
 

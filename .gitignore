@@ -7,21 +7,27 @@ deepseekkey
 .env
 .env.*
 deploy/public.env
+deploy/direct.env
 *.pem
 deploy/certs/
 
 # runtime / logs
 deploy/*.log
 deploy/*.pid
+deploy/*.sock
+deploy/*-status.json
 deploy/**/*.log
 deploy/**/*.pid
 deploy/**/*.lock
 deploy/**/start.lock
+deploy/livetalking/
+livetalking.log
+*.back
 LiveTalking/downloads/
 LiveTalking/models/wav2lip.pth
 LiveTalking/data/avatars/wav2lip256_avatar1/
 LiveTalking/avatars/wav2lip/face_detection/detection/sfd/s3fd.pth
-deploy/livetalking/
+LiveTalking/data/avatars/lingshan_guide_v1/
 __pycache__/
 *.py[cod]
 .Python
@@ -43,6 +49,10 @@ venv/
 题目/*_files/**
 data/**/*.db
 data/**/.admin_session_secret
+data/**/*_cache.json
+
+# local model weights (too large for GitHub)
+model/
 
 # Android build outputs and machine-local SDK path
 android/.gradle/

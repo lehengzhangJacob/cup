@@ -13,6 +13,56 @@ DOCS_DIR = ROOT / "资料" / "示范景区公开资料包"
 UPLOADS_DIR = DATA_DIR / "knowledge_uploads"
 KB_PATH = DATA_DIR / "kb_chunks.json"
 LOG_DB = DATA_DIR / "server.db"
+TOURISM_DATASET_PATH = Path(
+    os.getenv(
+        "TOURISM_DATASET_PATH",
+        str(DOCS_DIR / "景点景区旅游数据行为分析数据.xlsx"),
+    )
+).expanduser()
+
+# Multimodal emotion inference is deliberately isolated from the interactive
+# ASR/RAG/TTS path. A deployment may either expose the model as an HTTP
+# service or let the API invoke the HumanOmni inference script directly.
+EMOTION_MODEL_PATH = Path(
+    os.getenv(
+        "EMOTION_MODEL_PATH",
+        str(ROOT / "model" / "emotion_v5_stage2"),
+    )
+).expanduser()
+EMOTION_BASE_MODEL_PATH = Path(
+    os.getenv(
+        "EMOTION_BASE_MODEL_PATH",
+        str(ROOT / "model" / "emotion_stage1"),
+    )
+).expanduser()
+EMOTION_BERT_PATH = Path(
+    os.getenv("EMOTION_BERT_PATH", "/home/huggingface/bert-base-uncased")
+).expanduser()
+EMOTION_INFERENCE_URL = os.getenv("EMOTION_INFERENCE_URL", "").strip().rstrip("/")
+EMOTION_INFERENCE_SCRIPT = Path(
+    os.getenv(
+        "EMOTION_INFERENCE_SCRIPT",
+        str(ROOT / "services" / "emotion" / "inference_adapter.py"),
+    )
+).expanduser()
+EMOTION_PYTHON = os.getenv(
+    "EMOTION_PYTHON",
+    "/home/gmn/.conda/envs/softcup/bin/python",
+).strip()
+EMOTION_GPU = os.getenv("EMOTION_GPU", "2").strip()
+EMOTION_TIMEOUT_SECONDS = max(
+    15,
+    int(os.getenv("EMOTION_TIMEOUT_SECONDS", "180")),
+)
+EMOTION_MEDIA_MAX_BYTES = max(
+    1,
+    int(os.getenv("EMOTION_MEDIA_MAX_MB", "32")),
+) * 1024 * 1024
+EMOTION_KEEP_MEDIA = os.getenv("EMOTION_KEEP_MEDIA", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 ZHIPU_BASE = os.getenv("ZHIPU_BASE", "https://open.bigmodel.cn/api/paas/v4")
 ZHIPU_CHAT_MODEL = os.getenv("ZHIPU_CHAT_MODEL", "glm-4.7-flash")
@@ -20,10 +70,9 @@ VISION_MODEL = os.getenv("ZHIPU_VISION_MODEL", "glm-4v-flash")
 EMBED_MODEL = os.getenv("ZHIPU_EMBED_MODEL", "embedding-3")
 TTS_MODEL = os.getenv("ZHIPU_TTS_MODEL", "glm-tts")
 TTS_VOICE = os.getenv("ZHIPU_TTS_VOICE", "female")
-LIVETALKING_TTS_SPEED = max(
-    0.5,
-    min(2.0, float(os.getenv("LIVETALKING_TTS_SPEED", "1.12"))),
-)
+# Keep spoken output at the provider's natural rate. Accelerating generated
+# speech harms phrasing and makes short syllables easier to lose downstream.
+LIVETALKING_TTS_SPEED = 1.0
 ASR_MODEL = os.getenv("ZHIPU_ASR_MODEL", "glm-asr")
 
 DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE", "https://api.deepseek.com").rstrip("/")
@@ -61,6 +110,12 @@ LIVETALKING_ENABLED = os.getenv("LIVETALKING_ENABLED", "true").lower() in {"1", 
 LIVETALKING_URL = os.getenv("LIVETALKING_URL", "http://127.0.0.1:8010").rstrip("/")
 LIVETALKING_AVATAR_ID = os.getenv("LIVETALKING_AVATAR_ID", "wav2lip256_avatar1").strip()
 TURN_ENABLED = os.getenv("TURN_ENABLED", "true").lower() in {"1", "true", "yes"}
+TURN_PUBLIC_HOST = os.getenv("TURN_PUBLIC_HOST", "").strip()
+TURN_UDP_ENABLED = os.getenv("TURN_UDP_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 TURN_PORT = int(os.getenv("TURN_PORT", "8443"))
 TURN_USERNAME = os.getenv("TURN_USERNAME", "lingshan").strip()
 TURN_CREDENTIAL = os.getenv("TURN_CREDENTIAL", "lingshan-a5-2026-7e91c").strip()

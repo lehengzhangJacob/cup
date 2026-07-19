@@ -42,6 +42,7 @@ import registry
 from server.routes import setup_routes
 from server.rtc_manager import RTCManager
 from server.session_manager import session_manager
+from server.gpu_lifecycle import GPULifecycle
 
 import argparse
 import random
@@ -105,6 +106,9 @@ async def offer(request):
 async def on_shutdown(app):
     await rtc_manager.shutdown()
 
+async def gpu_status(request):
+    return web.json_response(rtc_manager.gpu_status())
+
 async def download_record(request):
     sessionid = request.match_info.get('sessionid')
     if not sessionid:
@@ -137,6 +141,13 @@ def main():
     warm_up = avatar_mod.warm_up
     logger.info(opt)
 
+    cpu_standby = (
+        os.getenv("LIVETALKING_CPU_STANDBY", "false").lower()
+        in {"1", "true", "yes"}
+        and opt.model == "wav2lip"
+        and opt.transport == "webrtc"
+    )
+
     if opt.model == 'musetalk':
         model = load_model()
         global_avatars[opt.avatar_id] = load_avatar(opt.avatar_id) 
@@ -144,7 +155,8 @@ def main():
     elif opt.model == 'wav2lip':
         model = load_model("./models/wav2lip.pth")
         global_avatars[opt.avatar_id] = load_avatar(opt.avatar_id)
-        warm_up(opt.batch_size,model,256)
+        if not cpu_standby:
+            warm_up(opt.batch_size,model,256)
     elif opt.model == 'ultralight':
         model = load_model(opt)
         global_avatars[opt.avatar_id] = load_avatar(opt.avatar_id)
@@ -153,7 +165,15 @@ def main():
     # init rtc manager
     session_manager.set_max_session(opt.max_session)
     session_manager.init_builder(build_avatar_session)
-    rtc_manager = RTCManager(opt)
+    gpu_lifecycle = None
+    if cpu_standby:
+        gpu_lifecycle = GPULifecycle(
+            model,
+            lambda: warm_up(opt.batch_size, model, 256),
+            session_manager.active_count,
+        )
+        logger.info("Wav2Lip is ready in CPU standby mode")
+    rtc_manager = RTCManager(opt, gpu_lifecycle)
     # share avatar_sessions (RTCManager handles it but routes.py expects it)
 
     # 虚拟摄像头或 RTMP 模式：启动后台渲染线程
@@ -176,6 +196,8 @@ def main():
     appasync.on_shutdown.append(on_shutdown)
     appasync.router.add_post("/offer", offer)
     appasync.router.add_post("/close_session", rtc_manager.handle_close_session)
+    appasync.router.add_post("/heartbeat", rtc_manager.handle_heartbeat)
+    appasync.router.add_get("/api/gpu/status", gpu_status)
     appasync.router.add_get("/record/{sessionid}", download_record)
     
     # 注册 server/routes.py 中的通用 API 路由

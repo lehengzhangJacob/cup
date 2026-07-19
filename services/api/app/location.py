@@ -4,6 +4,8 @@ from math import asin, cos, radians, sin, sqrt
 import time
 from typing import Any, Optional
 
+from .attractions import attraction_catalog
+
 
 # Demo anchors in WGS-84. Before production deployment these points should be
 # replaced by coordinates surveyed and approved by the scenic-area operator.
@@ -21,6 +23,61 @@ WIFI_ANCHORS: dict[str, dict[str, str]] = {
     "LS-WIFI-BUDDHA": {"spot_id": "LS-FO", "name": "灵山大佛区域"},
     "LS-WIFI-BRAHMA": {"spot_id": "LS-FG", "name": "灵山梵宫区域"},
 }
+
+
+def _qr_points() -> dict[str, dict[str, str]]:
+    """All published scenic QR points, independent from GPS coverage.
+
+    A QR code identifies the point where it is installed, so it remains useful
+    in indoor/blocked-GPS areas even before that point has a surveyed GPS
+    coordinate.  Only five GPS anchors are currently configured below.
+    """
+    points: dict[str, dict[str, str]] = {}
+    for area in attraction_catalog():
+        for item in area["children"]:
+            if item["is_overall"]:
+                continue
+            points[str(item["id"])] = {
+                "spot_id": str(item["id"]),
+                "attraction_id": str(item["id"]),
+                "spot_name": str(item["name"]),
+                "scenic_area": str(area["name"]),
+            }
+    # Backward-compatible labels printed by an early demo QR set.
+    points["LS-FO"] = {
+        "spot_id": "LS-FO",
+        "attraction_id": "LS-011",
+        "spot_name": "灵山大佛",
+        "scenic_area": "灵山胜境",
+    }
+    points["LS-FG"] = {
+        "spot_id": "LS-FG",
+        "attraction_id": "LS-013",
+        "spot_name": "灵山梵宫",
+        "scenic_area": "灵山胜境",
+    }
+    points["LS-WY"] = {
+        "spot_id": "LS-WY",
+        "attraction_id": "LS-014",
+        "spot_name": "五印坛城",
+        "scenic_area": "灵山胜境",
+    }
+    return points
+
+
+def location_options() -> dict[str, Any]:
+    points = _qr_points()
+    published = [value for key, value in points.items() if key == value["attraction_id"]]
+    return {
+        "points": sorted(published, key=lambda item: item["spot_id"]),
+        "wifi_nodes": [
+            {"code": code, "name": node["name"], "spot_id": node["spot_id"]}
+            for code, node in WIFI_ANCHORS.items()
+        ],
+        "gps_anchor_count": len(SPOT_ANCHORS),
+        "gps_coverage_note": "GPS 仅对已标定锚点自动匹配；其他景点请使用景点二维码或手动确认。",
+        "strategy": "GPS → 摄像头扫描景点二维码 → 景区 Wi-Fi 区域 → 手动选择",
+    }
 
 FALLBACKS = [
     {"mode": "qr", "label": "扫描景点二维码", "note": "室内和建筑遮挡区优先使用"},
@@ -62,7 +119,7 @@ def _base(mode: str) -> dict[str, Any]:
         "mode": mode,
         "resolved": False,
         "confidence": "none",
-        "strategy": "GPS → 景点二维码 → 景区 Wi-Fi → 手动选择",
+        "strategy": "GPS → 摄像头扫描景点二维码 → 景区 Wi-Fi 区域 → 手动选择",
         "fallbacks": _fallbacks(),
     }
 
@@ -105,6 +162,7 @@ def resolve_location(
         spot_id, spot, distance_m = _nearest_spot(float(lat), float(lng))
         candidate = {
             "spot_id": spot_id,
+            "attraction_id": _qr_points().get(spot_id, {}).get("attraction_id"),
             "spot_name": spot["name"],
             "distance_m": round(distance_m),
         }
@@ -152,7 +210,18 @@ def resolve_location(
 
     if normalized_mode == "qr":
         normalized_code = (code or "").strip().upper()
+        point = _qr_points().get(normalized_code)
         spot = SPOT_ANCHORS.get(normalized_code)
+        if point:
+            return {
+                **result,
+                "resolved": True,
+                "confidence": "high",
+                "source_label": "景点二维码",
+                **point,
+                "code": normalized_code,
+                "note": "二维码绑定固定点位，适合 GPS 弱信号和室内区域。",
+            }
         if not spot:
             return {
                 **result,
@@ -166,6 +235,7 @@ def resolve_location(
             "confidence": "high",
             "source_label": "景点二维码",
             "spot_id": normalized_code,
+            "attraction_id": _qr_points().get(normalized_code, {}).get("attraction_id"),
             "spot_name": spot["name"],
             "code": normalized_code,
             "note": "二维码绑定固定点位，适合 GPS 弱信号和室内区域。",
@@ -187,6 +257,7 @@ def resolve_location(
             "confidence": "medium",
             "source_label": "景区 Wi-Fi 区域定位",
             "spot_id": node["spot_id"],
+            "attraction_id": _qr_points().get(node["spot_id"], {}).get("attraction_id"),
             "spot_name": node["name"],
             "code": normalized_code,
             "requires_confirmation": True,
@@ -201,6 +272,10 @@ def resolve_location(
                 "reason": "missing_spot",
                 "note": "请选择当前所在景点。",
             }
+        known_point = next(
+            (point for point in _qr_points().values() if point["spot_name"] == normalized_name),
+            None,
+        )
         known_spot = next(
             ((spot_id, spot) for spot_id, spot in SPOT_ANCHORS.items() if spot["name"] == normalized_name),
             None,
@@ -210,7 +285,8 @@ def resolve_location(
             "resolved": True,
             "confidence": "user_confirmed",
             "source_label": "游客手动确认",
-            "spot_id": known_spot[0] if known_spot else None,
+            "spot_id": (known_point or {}).get("spot_id") or (known_spot[0] if known_spot else None),
+            "attraction_id": (known_point or {}).get("attraction_id"),
             "spot_name": normalized_name,
             "requires_confirmation": False,
             "note": "位置由游客确认，不依赖 GPS 信号。",

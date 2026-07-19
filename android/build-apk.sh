@@ -63,6 +63,6 @@ fi
 "$GRADLE_HOME/bin/gradle" --no-daemon clean assembleRelease
 
 APK_SOURCE="$ROOT/android/app/build/outputs/apk/release/app-release.apk"
-APK_TARGET="$ROOT/services/api/static/downloads/lingshan-guide-v1.0.1.apk"
+APK_TARGET="$ROOT/services/api/static/downloads/lingshan-guide-v1.0.2.apk"
 cp "$APK_SOURCE" "$APK_TARGET"
 sha256sum "$APK_TARGET"

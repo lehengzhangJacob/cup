@@ -40,11 +40,6 @@ async def copy_stream(
             await writer.drain()
     except (ConnectionError, asyncio.CancelledError):
         pass
-    finally:
-        try:
-            writer.write_eof()
-        except (AttributeError, ConnectionError, OSError):
-            pass
 
 
 async def proxy_connection(
@@ -71,19 +66,27 @@ async def proxy_connection(
         return
 
     logging.info("%s -> %s:%s connected", peer, upstream.host, upstream.port)
+    tasks = {
+        asyncio.create_task(copy_stream(client_reader, upstream_writer)),
+        asyncio.create_task(copy_stream(upstream_reader, client_writer)),
+    }
     try:
-        await asyncio.gather(
-            copy_stream(client_reader, upstream_writer),
-            copy_stream(upstream_reader, client_writer),
+        _, pending = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
         )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
     finally:
+        for task in tasks:
+            task.cancel()
+        upstream_transport = upstream_writer.transport
+        client_transport = client_writer.transport
         upstream_writer.close()
         client_writer.close()
-        await asyncio.gather(
-            upstream_writer.wait_closed(),
-            client_writer.wait_closed(),
-            return_exceptions=True,
-        )
+        upstream_transport.abort()
+        client_transport.abort()
 
 
 async def run(

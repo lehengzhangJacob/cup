@@ -11,7 +11,7 @@ from typing import AsyncIterator, Callable, Literal, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from rag.pipeline import RAGPipeline
@@ -80,11 +80,25 @@ def create_app(
 
     @app.get("/health")
     async def health(request: Request):
-        return {"ok": True, **pipeline(request).stats()}
+        service_stats = pipeline(request).stats()
+        healthy = service_stats.get("embedding", {}).get("ready", True)
+        return JSONResponse(
+            {"ok": healthy, **service_stats},
+            status_code=200 if healthy else 503,
+        )
 
     @app.get("/v1/stats")
     async def stats(request: Request):
         return pipeline(request).stats()
+
+    @app.post("/v1/warmup")
+    async def warmup(request: Request):
+        try:
+            result = await asyncio.to_thread(pipeline(request).warmup)
+        except Exception as exc:
+            logger.exception("RAG embedding warmup failed")
+            raise HTTPException(503, f"RAG warmup failed: {exc}") from exc
+        return {"ok": True, **result}
 
     @app.get("/v1/model-routes")
     async def model_routes():

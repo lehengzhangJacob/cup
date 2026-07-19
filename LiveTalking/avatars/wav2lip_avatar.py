@@ -50,7 +50,7 @@ device = initialize_device()
 logger.info('Using {} for inference.'.format(device))
 
 def _load(checkpoint_path):
-    if device == 'cuda':
+    if device.type == 'cuda':
         checkpoint = torch.load(checkpoint_path)
     else:
         checkpoint = torch.load(checkpoint_path,
@@ -67,7 +67,12 @@ def load_model(path):
         new_s[k.replace('module.', '')] = v
     model.load_state_dict(new_s)
 
-    if device.type == 'cuda':
+    cpu_standby = os.getenv("LIVETALKING_CPU_STANDBY", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if device.type == 'cuda' or cpu_standby:
         model = model.half()
     model = model.to(device)
     return model.eval()
@@ -95,8 +100,13 @@ def warm_up(batch_size,model,modelres):
     # 预热函数
     logger.info('warmup model...')
     dtype = next(model.parameters()).dtype
-    img_batch = torch.ones(batch_size, 6, modelres, modelres, dtype=dtype).to(device)
-    mel_batch = torch.ones(batch_size, 1, 80, 16, dtype=dtype).to(device)
+    model_device = next(model.parameters()).device
+    img_batch = torch.ones(
+        batch_size, 6, modelres, modelres, dtype=dtype, device=model_device
+    )
+    mel_batch = torch.ones(
+        batch_size, 1, 80, 16, dtype=dtype, device=model_device
+    )
     model(mel_batch, img_batch)
 
 @register("avatar", "wav2lip")
@@ -135,11 +145,16 @@ class LipReal(BaseAvatar):
         audiofeat_batch = np.reshape(audiofeat_batch, [len(audiofeat_batch), audiofeat_batch.shape[1], audiofeat_batch.shape[2], 1])
         
         dtype = next(self.model.parameters()).dtype
+        model_device = next(self.model.parameters()).device
         img_batch = torch.as_tensor(
-            np.transpose(img_batch, (0, 3, 1, 2)), dtype=dtype, device=device
+            np.transpose(img_batch, (0, 3, 1, 2)),
+            dtype=dtype,
+            device=model_device,
         )
         audiofeat_batch = torch.as_tensor(
-            np.transpose(audiofeat_batch, (0, 3, 1, 2)), dtype=dtype, device=device
+            np.transpose(audiofeat_batch, (0, 3, 1, 2)),
+            dtype=dtype,
+            device=model_device,
         )
 
         with torch.no_grad():

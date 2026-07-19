@@ -9,6 +9,21 @@ from app.rag_client import RAGClient, RAGClientError
 
 
 class RAGClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_warmup_calls_rag_service(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.method, "POST")
+            self.assertEqual(request.url.path, "/v1/warmup")
+            return httpx.Response(200, json={"ok": True, "retrieval_ms": 12})
+
+        client = RAGClient(
+            base_url="http://rag.test",
+            transport=httpx.MockTransport(handler),
+        )
+
+        result = await client.warmup()
+
+        self.assertTrue(result["ok"])
+
     async def test_non_streaming_chat_forwards_session_and_context(self):
         async def handler(request: httpx.Request) -> httpx.Response:
             payload = json.loads(request.content)

@@ -157,6 +157,7 @@ class Retriever:
         return {
             "chunk_count": len(self._records),
             "embedding_dimension": int(self._index.d),
+            "embedding": self._embedder.status(),
             "sources": sorted(
                 {
                     str(record.get("metadata", {}).get("source", "unknown"))

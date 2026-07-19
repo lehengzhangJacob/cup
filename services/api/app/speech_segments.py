@@ -4,10 +4,10 @@ import re
 
 
 class SpeechSegmenter:
-    def __init__(self, soft_limit: int = 40, clause_limit: int = 8) -> None:
+    def __init__(self, clause_limit: int = 24, hard_limit: int = 120) -> None:
         self.pending = ""
-        self.soft_limit = soft_limit
         self.clause_limit = clause_limit
+        self.hard_limit = hard_limit
         self.metadata_started = False
 
     def feed(self, text: str, *, flush: bool = False) -> list[str]:
@@ -41,11 +41,10 @@ class SpeechSegmenter:
             if len(self.pending[: match.start()].strip()) >= self.clause_limit:
                 return match.end()
 
-        if len(self.pending) >= self.soft_limit:
-            limit = min(self.soft_limit, len(self.pending))
-            soft_end = -1
-            for index in range(18, limit):
-                if self.pending[index] in "，,：:":
-                    soft_end = index + 1
-            return soft_end if soft_end > 0 else limit
+        # Do not split ordinary text at a fixed character count. A TTS request
+        # needs the complete sentence to infer prosody and pronounce word
+        # boundaries reliably. The hard limit is only a safety valve for very
+        # long model output that contains no punctuation at all.
+        if len(self.pending) >= self.hard_limit:
+            return self.hard_limit
         return len(self.pending) if flush else 0

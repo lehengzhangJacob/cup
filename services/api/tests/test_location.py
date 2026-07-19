@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from app.location import SPOT_ANCHORS, resolve_location
+from app.location import SPOT_ANCHORS, location_options, resolve_location
 
 
 def test_strong_fresh_gps_resolves_nearest_spot():
@@ -53,3 +53,12 @@ def test_qr_wifi_and_manual_fallbacks_resolve():
     manual = resolve_location("manual", spot_name="五印坛城")
     assert manual["resolved"] is True
     assert manual["confidence"] == "user_confirmed"
+
+
+def test_complete_qr_registry_covers_lingshan_and_nianhuawan_children():
+    options = location_options()
+    codes = {item["spot_id"] for item in options["points"]}
+
+    assert "LS-011" in codes
+    assert "NH-006" in codes
+    assert resolve_location("qr", code="NH-006")["spot_name"] == "鹿鸣谷"

@@ -15,9 +15,11 @@ HOST="${RAG_HOST:-127.0.0.1}"
 PORT="${RAG_PORT:-8020}"
 GPU="${RAG_GPU:-3}"
 HF_OFFLINE="${RAG_HF_OFFLINE:-true}"
+EMBED_DEVICE="${RAG_EMBED_DEVICE:-on-demand}"
 PID_FILE="$ROOT/deploy/rag.pid"
 LOG_FILE="$ROOT/deploy/rag.log"
 RESTART="${RAG_RESTART:-false}"
+EMBED_RESTART="${RAG_EMBED_RESTART:-$RESTART}"
 WATCHDOG_CHILD="${RAG_WATCHDOG_CHILD:-false}"
 WATCHDOG_PID_FILE="$ROOT/deploy/rag-watchdog.pid"
 WATCHDOG_LOG_FILE="$ROOT/deploy/rag-watchdog.log"
@@ -56,6 +58,13 @@ if [[ ! -x "$PYTHON" ]]; then
   exit 1
 fi
 
+export RAG_EMBED_DEVICE="$EMBED_DEVICE"
+if [[ "$EMBED_DEVICE" == "on-demand" ]]; then
+  export RAG_EMBED_SOCKET="${RAG_EMBED_SOCKET:-$ROOT/deploy/rag-embedder.sock}"
+  export RAG_EMBED_STATUS_FILE="${RAG_EMBED_STATUS_FILE:-$ROOT/deploy/rag-embedder-status.json}"
+  RAG_EMBED_RESTART="$EMBED_RESTART" bash "$ROOT/deploy/start_rag_embedder.sh"
+fi
+
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(tr -dc '0-9' < "$PID_FILE")"
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
@@ -77,8 +86,17 @@ if [[ -f "$PID_FILE" ]]; then
 fi
 
 cd "$ROOT/llm"
-export CUDA_VISIBLE_DEVICES="$GPU"
-export RAG_EMBED_DEVICE="${RAG_EMBED_DEVICE:-cuda:0}"
+if [[ "$EMBED_DEVICE" == cuda* ]]; then
+  export CUDA_VISIBLE_DEVICES="$GPU"
+  DEVICE_LABEL="physical GPU $GPU ($EMBED_DEVICE)"
+else
+  unset CUDA_VISIBLE_DEVICES
+  if [[ "$EMBED_DEVICE" == "on-demand" ]]; then
+    DEVICE_LABEL="CPU standby + on-demand GPU"
+  else
+    DEVICE_LABEL="$EMBED_DEVICE"
+  fi
+fi
 if [[ "$HF_OFFLINE" =~ ^(1|true|yes)$ ]]; then
   # Production startup must use the already-downloaded BGE-M3 snapshot instead
   # of making Hugging Face metadata requests on every restart.
@@ -97,7 +115,7 @@ echo $! > "$PID_FILE"
 for _ in {1..180}; do
   if curl -fsS "http://${HOST}:${PORT}/health" >/dev/null 2>&1; then
     start_watchdog
-    echo "RAG ready on physical GPU $GPU: http://${HOST}:${PORT}"
+    echo "RAG ready on $DEVICE_LABEL: http://${HOST}:${PORT}"
     exit 0
   fi
   if ! kill -0 "$(tr -dc '0-9' < "$PID_FILE")" 2>/dev/null; then

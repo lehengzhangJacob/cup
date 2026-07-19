@@ -26,13 +26,86 @@
     button:disabled { opacity:.6; cursor:wait; }
     .message { min-height:20px; margin-top:12px; color:#b34e47; text-align:center; font-size:13px; }
     .security { margin:18px 0 0; padding-top:15px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; text-align:center; }
+    /* Shared operations-workspace identity */
+    :root { --ink:#20342f; --muted:#68766f; --line:#d9d7ca; --paper:#f2eee5; --jade:#245f52; --jade2:#397e6d; --gold:#b68335; --red:#a54537; }
+    * { letter-spacing:0; }
+    body {
+      position:relative;
+      overflow:hidden;
+      color:var(--ink);
+      background-color:var(--paper);
+      background-image:
+        repeating-linear-gradient(0deg,rgba(88,70,42,.02) 0 1px,transparent 1px 6px),
+        linear-gradient(120deg,rgba(182,131,53,.08),transparent 42%);
+      font-family:"FZLanTingHeiS-R-GB","Microsoft YaHei UI","PingFang SC",sans-serif;
+    }
+    body::before {
+      content:"";
+      position:absolute;
+      width:560px;
+      height:560px;
+      top:-300px;
+      right:-160px;
+      border:1px solid rgba(165,69,55,.18);
+      border-radius:50%;
+      box-shadow:0 0 0 30px rgba(165,69,55,.035),0 0 0 60px rgba(165,69,55,.022);
+      pointer-events:none;
+    }
+    .login-card {
+      position:relative;
+      width:min(450px,100%);
+      padding:40px;
+      border:1px solid var(--line);
+      border-radius:4px;
+      background:rgba(255,253,248,.94);
+      box-shadow:0 18px 46px rgba(53,58,45,.14);
+    }
+    .login-card::before {
+      content:"管理入口";
+      position:absolute;
+      top:20px;
+      right:22px;
+      color:var(--red);
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.12em;
+    }
+    .brand { gap:15px; margin-bottom:30px; }
+    .seal {
+      width:52px;
+      height:52px;
+      color:#f6e7ca;
+      border:1px solid var(--jade);
+      border-radius:2px;
+      background:var(--jade);
+      box-shadow:none;
+      font:700 23px/1 "STKaiti","Kaiti SC",serif;
+    }
+    h1 { color:var(--ink); font:700 28px/1.2 "STKaiti","Kaiti SC",serif; }
+    .subtitle { margin-top:7px; color:var(--muted); font-size:13px; }
+    label { gap:8px; margin-top:17px; color:#596b62; font-size:13px; font-weight:700; }
+    input { min-height:44px; padding:11px 12px; border-color:#c9cec5; border-radius:2px; background:#fffefb; font-size:15px; }
+    input:focus { border-color:var(--jade2); box-shadow:0 0 0 2px rgba(57,126,109,.13); }
+    button {
+      min-height:44px;
+      margin-top:24px;
+      border:1px solid var(--jade);
+      border-radius:2px;
+      color:#fffaf0;
+      background:var(--jade);
+      font-size:14px;
+      transition:background .16s ease,transform .16s ease;
+    }
+    button:hover:not(:disabled) { background:#183f37; transform:translateY(-1px); }
+    .message { color:var(--red); font-size:13px; }
+    .security { border-top-color:var(--line); color:var(--muted); }
   </style>
 </head>
 <body>
   <main class="login-card">
     <div class="brand">
       <div class="seal">灵</div>
-      <div><h1>灵山运营中心</h1><div class="subtitle">景区 AI 数字人管理后台</div></div>
+      <div><h1>灵山运营中心</h1><div class="subtitle">游客服务运营入口</div></div>
     </div>
     <form id="loginForm">
       <label>管理员账号<input id="username" name="username" autocomplete="username" required autofocus /></label>
@@ -40,7 +113,7 @@
       <button id="submit" type="submit">安全登录</button>
       <div class="message" id="message" role="alert" aria-live="polite"></div>
     </form>
-    <p class="security">独立 HTTPS 管理端口 · 登录状态仅保存在 HttpOnly 安全 Cookie</p>
+    <p class="security">仅限授权管理员访问 · 会话安全维护</p>
   </main>
   <script>
     const form = document.getElementById("loginForm");
