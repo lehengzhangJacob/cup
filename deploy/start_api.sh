@@ -16,6 +16,10 @@ if [[ -f "$DIRECT_ENV" ]]; then
   source "$DIRECT_ENV"
   set +a
 fi
+
+if [[ "${TITAN_HUAWEI_TUNNEL_AUTOSTART:-false}" =~ ^(1|true|yes)$ ]]; then
+  bash "$ROOT/deploy/start_titan_huawei_tunnel.sh"
+fi
 LOCAL_TURN_ENABLED="${LOCAL_TURN_ENABLED:-true}"
 unset CLOUDFLARE_TUNNEL_TOKEN TUNNEL_TOKEN
 PYTHON="${CCC_PYTHON:-/home/gmn/.conda/envs/ccc/bin/python}"
@@ -25,6 +29,7 @@ API_SSL_PORT="${API_SSL_PORT:-8443}"
 API_SSL_BACKEND_PORT="${API_SSL_BACKEND_PORT:-9443}"
 ADMIN_SSL_PORT="${ADMIN_SSL_PORT:-8444}"
 ADMIN_HTTP_PORT="${ADMIN_HTTP_PORT:-8011}"
+ADMIN_REQUEST_PORT="${ADMIN_REQUEST_PORT:-$ADMIN_HTTP_PORT}"
 ADMIN_HOST="${ADMIN_HOST:-$API_HOST}"
 UVICORN_KEEP_ALIVE="${UVICORN_KEEP_ALIVE:-3600}"
 
@@ -135,7 +140,7 @@ nohup "$PYTHON" -m uvicorn app.main:app --host "$ADMIN_HOST" --port "$ADMIN_SSL_
 echo $! > "$ROOT/deploy/admin-ssl.pid"
 
 # Loopback-only HTTP origin for Cloudflare Tunnel; public traffic remains HTTPS.
-nohup env ADMIN_PORT="$ADMIN_HTTP_PORT" "$PYTHON" -m uvicorn app.main:app \
+nohup env ADMIN_PORT="$ADMIN_REQUEST_PORT" "$PYTHON" -m uvicorn app.main:app \
   --host 127.0.0.1 --port "$ADMIN_HTTP_PORT" \
   --timeout-keep-alive "$UVICORN_KEEP_ALIVE" \
   > "$ROOT/deploy/admin-http.log" 2>&1 &

@@ -1,0 +1,16 @@
+[Unit]
+Description=Titan public TLS forwarding proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/softcup/miniconda3/bin/python3 /home/softcup/titan/app/huawei_tcp_proxy.py --certfile /home/softcup/titan/tls/cert.pem --keyfile /home/softcup/titan/tls/key.pem --map 0.0.0.0:20081=127.0.0.1:20101 --map 0.0.0.0:20082=127.0.0.1:20111
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

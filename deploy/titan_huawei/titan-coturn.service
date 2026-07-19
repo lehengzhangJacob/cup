@@ -1,0 +1,17 @@
+[Unit]
+Description=Titan isolated TURN relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=LD_LIBRARY_PATH=/home/softcup/titan/coturn/root/usr/lib/x86_64-linux-gnu
+ExecStart=/home/softcup/titan/coturn/root/usr/bin/turnserver -c /home/softcup/titan/coturn/turnserver.conf
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target
