@@ -37,6 +37,7 @@ from .config import (
     PUBLIC_APP_URL,
     LIVETALKING_AVATAR_ID,
     LIVETALKING_ENABLED,
+    LIVETALKING_TTS_SPEED,
     LIVETALKING_URL,
     TTS_VOICE,
     TURN_CREDENTIAL,
@@ -631,14 +632,16 @@ async def _stream_tts_to_livetalking(
     if not speech_text:
         return
 
-    pcm_audio = bytearray()
+    total_pcm_bytes = 0
     sample_rate: Optional[int] = None
     chunk_count = 0
+    tts_started_at = asyncio.get_running_loop().time()
+    first_upload_ms: Optional[int] = None
     async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
         async for event in zhipu.tts_stream(
             speech_text,
             voice=_avatar_settings()["voice"],
-            speed=1.0,
+            speed=LIVETALKING_TTS_SPEED,
         ):
             choices = event.get("choices") or []
             delta = choices[0].get("delta", {}) if choices else {}
@@ -655,36 +658,54 @@ async def _stream_tts_to_livetalking(
                 )
 
             try:
-                pcm_audio.extend(base64.b64decode(encoded, validate=True))
+                pcm_chunk = base64.b64decode(encoded, validate=True)
             except (binascii.Error, ValueError) as exc:
                 raise RuntimeError("GLM-TTS returned invalid base64 PCM audio") from exc
+            if not pcm_chunk:
+                continue
             chunk_count += 1
-            if len(pcm_audio) > 32 * 1024 * 1024:
+            total_pcm_bytes += len(pcm_chunk)
+            if total_pcm_bytes > 32 * 1024 * 1024:
                 raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
 
-        if not pcm_audio or sample_rate is None:
+            # Forward each decoded TTS chunk immediately. The previous code waited
+            # for the whole sentence, adding the complete first-sentence duration
+            # to time-to-first-audio even though both upstream and downstream are
+            # capable of streaming/queueing.
+            wav_audio = _pcm16_mono_wav(pcm_chunk, sample_rate)
+            response = await client.post(
+                f"{LIVETALKING_URL}/humanaudio",
+                data={"sessionid": session_id},
+                files={"file": ("speech.wav", wav_audio, "audio/wav")},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and data.get("code") not in (None, 0):
+                raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
+            _mark_livetalking_used()
+            if first_upload_ms is None:
+                first_upload_ms = round(
+                    (asyncio.get_running_loop().time() - tts_started_at) * 1000
+                )
+
+        if not total_pcm_bytes or sample_rate is None:
             raise RuntimeError("GLM-TTS returned no PCM audio")
 
-        wav_audio = _pcm16_mono_wav(bytes(pcm_audio), sample_rate)
-        response = await client.post(
-            f"{LIVETALKING_URL}/humanaudio",
-            data={"sessionid": session_id},
-            files={"file": ("speech.wav", wav_audio, "audio/wav")},
-        )
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, dict) and data.get("code") not in (None, 0):
-            raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
-        _mark_livetalking_used()
-
         print(
-            "[livetalking] queued continuous TTS audio: "
+            "[livetalking] streamed TTS audio: "
             f"session={session_id} chunks={chunk_count} "
-            f"samples={len(pcm_audio) // 2} sample_rate={sample_rate}"
+            f"samples={total_pcm_bytes // 2} sample_rate={sample_rate} "
+            f"first_upload_ms={first_upload_ms} "
+            f"total_ms={round((asyncio.get_running_loop().time() - tts_started_at) * 1000)}"
         )
 
 
 _livetalking_speech_workers: dict[str, asyncio.Task[None]] = {}
+
+
+def _livetalking_speech_pending(session_id: str) -> bool:
+    worker = _livetalking_speech_workers.get(session_id)
+    return bool(worker and not worker.done())
 
 
 def _cancel_livetalking_speech_worker(session_id: str) -> None:
@@ -752,10 +773,13 @@ async def livetalking_interrupt(req: LiveTalkingSessionRequest):
 
 @app.post("/v1/livetalking/is-speaking")
 async def livetalking_is_speaking(req: LiveTalkingSessionRequest):
-    return await _livetalking_post(
+    result = await _livetalking_post(
         "/is_speaking",
         {"sessionid": req.session_id},
     )
+    if isinstance(result, dict):
+        result["pending"] = _livetalking_speech_pending(req.session_id)
+    return result
 
 
 @app.post("/v1/livetalking/close")

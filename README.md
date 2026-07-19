@@ -8,7 +8,7 @@ LiveTalking Wav2Lip 本地数字人、本地景区 RAG 知识库、云端/本地
 - 游客端：文字/语音问答、按句流式播报、口型同步、情绪驱动、拍照识景、弱定位导览、个性化路线和满意度反馈。
 - 管理端：运营数据大屏、热门问题、情感趋势、满意度报告、服务建议、知识文档上传/更新/删除和数字人形象配置。
 - AI 能力：BGE-M3 在本地生成向量、FAISS 检索景区资料，问答可在 GLM-4.7-Flash API 与本地 Qwen2-7B-Instruct 间切换；GLM-4V、GLM-ASR、GLM-TTS 继续负责视觉和语音。
-- 数字人：空闲时使用不占 GPU 的 Haru Live2D；首次互动按需启动 LiveTalking + Wav2Lip FP16。
+- 数字人：打开游客网页后按需启动 LiveTalking + Wav2Lip FP16；网页关闭或隐藏后空闲自动释放 GPU。
 
 ## 快速访问
 
@@ -16,6 +16,7 @@ LiveTalking Wav2Lip 本地数字人、本地景区 RAG 知识库、云端/本地
 - 游客麦克风端：`https://<服务器IP>:8443/`
 - 景区管理后台：`https://<服务器IP>:8444/admin`
 - OpenAPI 文档：`http://<服务器IP>:8001/docs`
+- 安卓 APK：`https://lingshanguide.de5.net/static/downloads/lingshan-guide-v1.0.1.apk`
 
 当前服务器局域网 IP 为 `192.168.200.27`。浏览器不在服务器本机时，不要使用
 `localhost`。
@@ -41,8 +42,8 @@ bash deploy/stop_livetalking.sh
 Qwen2-7B”后才占用约 15GB 显存，空闲 120 秒会自动卸载；默认 GLM API 路径不加载
 本地权重。也可用 `bash deploy/stop_local_llm.sh` 立即停止并释放显存。
 
-LiveTalking 同样按需使用显存：页面打开时只运行 Live2D，首次互动自动启动
-LiveTalking，最后一次使用 120 秒后自动停止。活动时本机实测约占 760 MiB 显存。
+LiveTalking 同样按需使用显存：打开游客网页且网络可用时自动启动，网页可见期间每
+30 秒续期；网页关闭或隐藏后 120 秒自动停止。活动时本机实测约占 760 MiB 显存。
 
 RAG 的接口、流式事件和会话边界见 [llm/README.md](llm/README.md)。详细说明见
 [部署与使用手册](docs/部署与使用手册.md) 和

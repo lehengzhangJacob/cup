@@ -289,20 +289,440 @@
       .location-method { grid-template-columns:1fr; }
       .location-method button { width:100%; }
     }
+
+    /* Visitor-facing redesign: an Eastern travel journal built around the guide. */
+    :root {
+      --paper: #f5f0e6;
+      --paper-deep: #e7ddca;
+      --ink: #20352f;
+      --ink-soft: #5d6b62;
+      --pine: #1f5a4f;
+      --pine-deep: #143e36;
+      --jade: #79a998;
+      --cinnabar: #a33d2d;
+      --amber: #bd873a;
+      --line-soft: rgba(40, 67, 56, .18);
+      --surface: rgba(255, 252, 245, .84);
+      --surface-solid: #fffaf1;
+      --shadow: 0 20px 50px rgba(56, 50, 35, .12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-width: 320px;
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      background-color: var(--paper);
+      background-image:
+        repeating-linear-gradient(0deg, rgba(93, 70, 39, .025) 0 1px, transparent 1px 6px),
+        linear-gradient(115deg, rgba(188, 135, 58, .08), transparent 31%),
+        linear-gradient(290deg, rgba(31, 90, 79, .08), transparent 38%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      width: min(54vw, 760px);
+      height: min(54vw, 760px);
+      top: -30vw;
+      right: -13vw;
+      border: 1px solid rgba(163, 61, 45, .13);
+      border-radius: 50%;
+      box-shadow: 0 0 0 72px rgba(163, 61, 45, .035), 0 0 0 144px rgba(163, 61, 45, .02);
+      pointer-events: none;
+    }
+    header {
+      width: min(1480px, calc(100% - 48px));
+      margin: 0 auto;
+      min-height: 100px;
+      padding: 24px 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    header > div { position: relative; padding-left: 18px; }
+    header > div::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 2px;
+      bottom: 2px;
+      width: 3px;
+      background: var(--cinnabar);
+    }
+    header h1 {
+      color: var(--ink);
+      font-family: "STKaiti", "Kaiti SC", serif;
+      font-size: 29px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      line-height: 1;
+    }
+    header p {
+      margin-top: 9px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      letter-spacing: .05em;
+    }
+    .admin-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 8px 14px;
+      color: var(--pine-deep);
+      border: 1px solid rgba(31, 90, 79, .36);
+      border-radius: 0;
+      background: transparent;
+      font-size: 12px;
+      transition: background .18s ease, color .18s ease, transform .18s ease;
+    }
+    .admin-link:hover { color: #fffaf1; background: var(--pine); transform: translateY(-1px); }
+    main {
+      width: min(1480px, calc(100% - 48px));
+      max-width: none;
+      margin: 0 auto;
+      padding: 22px 0 32px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(390px, .84fr);
+      align-items: stretch;
+      gap: 18px;
+    }
+    .stage {
+      position: relative;
+      isolation: isolate;
+      min-height: 720px;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(31, 90, 79, .29);
+      border-radius: 5px;
+      background:
+        linear-gradient(180deg, rgba(255, 252, 244, .84) 0%, rgba(236, 227, 210, .76) 52%, rgba(209, 220, 204, .9) 100%);
+      box-shadow: var(--shadow);
+    }
+    .stage::before,
+    .stage::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .stage::before {
+      width: 106%;
+      height: 47%;
+      left: -3%;
+      bottom: -12%;
+      opacity: .63;
+      background:
+        radial-gradient(ellipse at 18% 100%, #76988a 0 21%, transparent 21.3%),
+        radial-gradient(ellipse at 48% 98%, #54786a 0 28%, transparent 28.3%),
+        radial-gradient(ellipse at 82% 99%, #6b917d 0 26%, transparent 26.3%),
+        linear-gradient(0deg, #2f6959 0 38%, transparent 38%);
+      clip-path: polygon(0 100%, 0 42%, 11% 27%, 23% 45%, 39% 16%, 53% 48%, 72% 20%, 85% 47%, 100% 24%, 100% 100%);
+    }
+    .stage::after {
+      width: 170px;
+      height: 170px;
+      top: -86px;
+      left: 42%;
+      border: 1px solid rgba(189, 135, 58, .27);
+      border-radius: 50%;
+      box-shadow: 0 0 0 22px rgba(189, 135, 58, .055), 0 0 0 44px rgba(189, 135, 58, .035);
+    }
+    .stage-top {
+      position: absolute;
+      z-index: 6;
+      top: 18px;
+      right: 20px;
+      left: 20px;
+      padding: 0;
+      align-items: flex-start;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 9px;
+      color: var(--pine-deep);
+      border: 1px solid rgba(31, 90, 79, .32);
+      border-radius: 0;
+      background: rgba(255, 252, 245, .77);
+      font-size: 12px;
+      letter-spacing: .06em;
+      backdrop-filter: blur(8px);
+    }
+    .style-trigger {
+      min-height: 29px;
+      width: auto !important;
+      padding: 5px 10px !important;
+      color: #fffaf1 !important;
+      border: 1px solid var(--pine-deep) !important;
+      border-radius: 0 !important;
+      background: var(--pine-deep) !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      letter-spacing: .08em;
+    }
+    .style-panel {
+      width: 252px;
+      top: calc(100% + 9px);
+      padding: 14px;
+      color: var(--ink);
+      border: 1px solid rgba(31, 90, 79, .3);
+      border-radius: 3px;
+      background: rgba(255, 252, 245, .97);
+      box-shadow: 0 16px 32px rgba(39, 53, 42, .16);
+    }
+    .style-label { color: var(--ink-soft); }
+    .style-options button {
+      color: var(--pine-deep) !important;
+      border-color: rgba(31, 90, 79, .25) !important;
+      border-radius: 2px !important;
+      background: transparent !important;
+    }
+    .style-options button[aria-pressed="true"] {
+      color: #fffaf1 !important;
+      border-color: var(--pine-deep) !important;
+      background: var(--pine-deep) !important;
+    }
+    .model-wrap {
+      position: absolute;
+      z-index: 2;
+      inset: 0;
+      min-height: auto;
+      width: 100%;
+    }
+    #live2dCanvas, #liveTalkingVideo, #xmovMount { filter: drop-shadow(0 24px 20px rgba(31, 54, 41, .16)); }
+    #liveTalkingVideo { background: transparent; }
+    .model-loading { color: var(--pine-deep); background: rgba(245, 240, 230, .5); }
+    .loader-ring { border-color: rgba(31, 90, 79, .2); border-top-color: var(--cinnabar); }
+    .stage-footer {
+      position: absolute;
+      z-index: 5;
+      right: 20px;
+      bottom: 18px;
+      left: 20px;
+      display: grid;
+      grid-template-columns: minmax(170px, .9fr) minmax(0, 1.7fr);
+      align-items: end;
+      gap: 14px;
+    }
+    #avatarHint {
+      margin: 0;
+      padding: 9px 11px;
+      color: var(--pine-deep);
+      border-left: 3px solid var(--cinnabar);
+      background: rgba(255, 252, 245, .72);
+      font-size: 13px;
+      line-height: 1.5;
+      backdrop-filter: blur(6px);
+    }
+    .quick-prompts {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .quick-prompt {
+      width: auto;
+      min-height: 30px;
+      padding: 6px 9px;
+      color: var(--pine-deep);
+      border: 1px solid rgba(31, 90, 79, .35);
+      border-radius: 0;
+      background: rgba(255, 252, 245, .78);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      transition: background .18s ease, color .18s ease;
+      backdrop-filter: blur(6px);
+    }
+    .quick-prompt:hover { color: #fffaf1; background: var(--pine); }
+    .control-panel {
+      min-width: 0;
+      padding: 24px;
+      border: 1px solid var(--line-soft);
+      border-radius: 5px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .panel-heading { margin-bottom: 18px; }
+    .panel-heading h2 { margin: 0; color: var(--ink); font-family: "STKaiti", "Kaiti SC", serif; font-size: 27px; letter-spacing: .08em; }
+    .tool-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .tool-tab {
+      min-height: 38px;
+      padding: 7px 4px;
+      color: var(--ink-soft);
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+    .tool-tab:hover { color: var(--pine-deep) !important; background: rgba(121, 169, 152, .1) !important; }
+    .tool-tab[aria-pressed="true"] { color: var(--pine-deep); border-bottom-color: var(--cinnabar); background: transparent; }
+    .tool-panel { min-height: 360px; }
+    .tool-panel[hidden] { display: none; }
+    .tool-description { margin: 0 0 14px; color: var(--ink-soft); font-family: "STKaiti", "Kaiti SC", serif; font-size: 16px; line-height: 1.65; }
+    .tool-panel .question-box { margin-top: 0; }
+    .btns.chat-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .btns.chat-actions > button { width: 100%; }
+    .route-action { width: 100%; margin-top: 12px; }
+    .photo-action { display: flex; min-height: 112px; align-items: center; justify-content: center; border-style: dashed; }
+    .row { grid-template-columns: 1fr; gap: 12px; }
+    label { color: var(--ink-soft); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+    select, textarea, input {
+      color: var(--ink);
+      border: 1px solid rgba(31, 90, 79, .24);
+      border-radius: 2px;
+      background: rgba(255, 252, 245, .78);
+      box-shadow: none;
+      font-size: 15px;
+    }
+    select:focus, textarea:focus, input:focus { outline: 2px solid rgba(121, 169, 152, .48); outline-offset: 1px; }
+    textarea { min-height: 104px; padding: 13px 14px; line-height: 1.65; resize: vertical; }
+    .question-box { margin-top: 18px; }
+    .btns { grid-template-columns: 1.25fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+    button {
+      min-height: 42px;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      background: var(--pine);
+      color: #fffaf1;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    button:not(:disabled):hover { background: var(--pine-deep); box-shadow: 0 5px 12px rgba(31, 90, 79, .18); transform: translateY(-1px); }
+    button.secondary { color: var(--pine-deep); border-color: rgba(31, 90, 79, .3); background: transparent; }
+    button.secondary:not(:disabled):hover { color: #fffaf1; border-color: var(--pine); background: var(--pine); }
+    button.danger { background: var(--cinnabar); }
+    .feature-actions { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .feature-actions #locate { grid-column: 1 / -1; }
+    .file-action {
+      min-height: 42px;
+      padding: 11px 10px;
+      color: var(--pine-deep);
+      border: 1px solid rgba(31, 90, 79, .3);
+      border-radius: 2px;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .03em;
+      transition: background .16s ease, color .16s ease;
+    }
+    .file-action:hover { color: #fffaf1; background: var(--pine); }
+    .audio-action { display: block; margin-top: 8px; text-align: center; }
+    .advanced-settings { margin-top: 14px; border-top: 1px dashed var(--line-soft); }
+    .advanced-settings summary { padding: 10px 0 2px; color: var(--ink-soft); cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    .settings-grid > div { min-width: 0; }
+    .location-panel {
+      margin-top: 0;
+      padding: 12px;
+      border-color: rgba(31, 90, 79, .28);
+      border-radius: 2px;
+      background: rgba(225, 235, 223, .48);
+    }
+    .location-head strong { color: var(--pine-deep); }
+    .location-head span, .location-state { color: var(--ink-soft); }
+    .location-state { border-radius: 1px; background: rgba(121, 169, 152, .18); }
+    .location-state.is-warning { color: #79550e; background: rgba(189, 135, 58, .15); }
+    .location-state.is-ok { color: #15563b; background: rgba(91, 150, 113, .17); }
+    .location-method { grid-template-columns: 84px 1fr auto; }
+    .location-method button { min-height: 36px; padding: 7px 9px; }
+    .meta {
+      margin-top: 12px;
+      padding: 9px 0 9px 10px;
+      color: var(--ink-soft);
+      border-left: 2px solid var(--amber);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    #secureHint { margin-top: 3px; color: #936318 !important; border-left-color: var(--cinnabar); }
+    .reply-section { margin-top: 18px; padding-top: 17px; border-top: 1px solid var(--line-soft); }
+    .reply-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .reply-label span { color: var(--ink-soft); font-size: 12px; letter-spacing: .08em; }
+    #log {
+      min-height: 180px;
+      max-height: 33vh;
+      padding: 14px 16px;
+      color: var(--ink);
+      border: 1px solid rgba(31, 90, 79, .18);
+      border-radius: 2px;
+      background: rgba(255, 252, 245, .57);
+      font-family: "STKaiti", "Kaiti SC", serif;
+      font-size: 16px;
+      line-height: 1.8;
+    }
+    #log:empty::before { content: "灵曦已在此等候。可以问景点故事、路线与游览建议。"; color: rgba(93, 107, 98, .67); }
+    .feedback {
+      margin-top: 16px;
+      padding: 15px 0 0;
+      border: 0;
+      border-top: 1px dashed var(--line-soft);
+      border-radius: 0;
+      background: transparent;
+    }
+    .feedback summary { color: var(--ink-soft); cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+    .feedback-row { margin-top: 11px; }
+    .feedback-row { grid-template-columns: 112px 1fr auto; }
+    .feedback-row button { min-height: 40px; border-radius: 2px; }
+    .hint { color: var(--ink-soft); font-size: 12px; line-height: 1.65; }
+    .rec-dot { background: var(--cinnabar); }
+    @media (max-width: 1100px) {
+      main { grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr); }
+    }
+    @media (max-width: 900px) {
+      header, main { width: min(100% - 28px, 680px); }
+      header { min-height: 84px; padding: 18px 0 15px; }
+      main { grid-template-columns: 1fr; padding-top: 14px; }
+      .stage { min-height: 670px; }
+      .control-panel { padding: 20px; }
+    }
+    @media (max-width: 600px) {
+      body::before { width: 310px; height: 310px; top: -150px; right: -160px; }
+      header { align-items: flex-start; gap: 12px; }
+      header h1 { font-size: 23px; line-height: 1.15; }
+      header p { max-width: 205px; line-height: 1.5; }
+      .admin-link { padding: 8px 9px; font-size: 11px; text-align: center; }
+      .stage { min-height: 600px; }
+      .stage-footer { grid-template-columns: 1fr; gap: 8px; }
+      .quick-prompts { justify-content: flex-start; }
+      .quick-prompt { padding: 5px 7px; }
+      .panel-heading h2 { font-size: 24px; }
+      .btns { grid-template-columns: 1fr 1fr; }
+      .feature-actions { grid-template-columns: 1fr; }
+      .feature-actions #locate { grid-column: auto; }
+      .btns #ask { grid-column: 1 / -1; }
+      .location-method { grid-template-columns: 1fr; }
+      .location-method button { width: 100%; }
+      .feedback-row { grid-template-columns: 1fr; }
+      .settings-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>灵山小向导 · 灵曦</h1>
-      <p>LiveTalking 本地真人（Live2D 回退）· GLM API / 本地模型双路径 · 景区知识库问答</p>
     </div>
     <a class="admin-link" href="/admin">景区管理后台 →</a>
   </header>
   <main>
     <section class="card stage">
       <div class="stage-top">
-        <div class="badge" id="avatarBadge">Haru Live2D · 正在连接本地数字人</div>
+        <div class="badge" id="avatarBadge">灵曦 · 正在准备</div>
         <div class="style-control" id="styleControl">
           <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
           <div class="style-panel" id="stylePanel" hidden>
@@ -335,115 +755,146 @@
         </div>
       </div>
       <div class="model-wrap" id="modelWrap">
-        <video id="liveTalkingVideo" autoplay playsinline muted aria-label="LiveTalking 本地数字人"></video>
+        <video id="liveTalkingVideo" autoplay playsinline muted aria-label="灵曦数字人"></video>
         <audio id="liveTalkingAudio" autoplay></audio>
-        <div id="xmovMount" aria-label="XMOV 3D 数字人"></div>
-        <canvas id="live2dCanvas" aria-label="Live2D 数字人"></canvas>
+        <div id="xmovMount" aria-label="灵曦数字人"></div>
+        <canvas id="live2dCanvas" aria-label="灵曦数字人"></canvas>
         <div class="model-loading" id="modelLoading">
           <span class="loader-ring"></span>
-          <span>正在载入灵曦 Haru…</span>
+          <span>灵曦正在准备…</span>
         </div>
       </div>
-      <div class="hint" id="avatarHint">数字人初始化中</div>
+      <div class="stage-footer">
+        <div class="hint" id="avatarHint">数字人初始化中</div>
+        <div class="quick-prompts" aria-label="快捷提问">
+          <button class="quick-prompt" type="button" data-prompt="灵山大佛有什么特别之处？">大佛故事</button>
+          <button class="quick-prompt" type="button" data-prompt="我只有两小时，推荐一条灵山游览路线。">两小时路线</button>
+          <button class="quick-prompt" type="button" data-prompt="带孩子游灵山，有哪些轻松有趣的安排？">亲子游建议</button>
+        </div>
+      </div>
     </section>
 
-    <section class="card">
-      <div class="row">
-        <div>
-          <label>兴趣偏好</label>
-          <select id="interest">
-            <option value="历史">历史文化</option>
-            <option value="自然">自然风光</option>
-            <option value="亲子">亲子家庭</option>
-          </select>
+    <section class="card control-panel">
+      <div class="panel-heading">
+        <h2>和灵曦聊聊</h2>
+      </div>
+      <div class="tool-tabs" role="toolbar" aria-label="导览功能">
+        <button class="tool-tab" type="button" data-tool-tab="chat" aria-pressed="true">问答</button>
+        <button class="tool-tab" type="button" data-tool-tab="route" aria-pressed="false">路线</button>
+        <button class="tool-tab" type="button" data-tool-tab="photo" aria-pressed="false">识景</button>
+        <button class="tool-tab" type="button" data-tool-tab="location" aria-pressed="false">定位</button>
+      </div>
+
+      <div class="tool-panel" data-tool-panel="chat">
+        <div class="question-box">
+          <label>想问灵曦什么</label>
+          <textarea id="q" rows="3">灵山大佛有多高？用了多少铜？</textarea>
         </div>
-        <div>
-          <label>问答模型</label>
-          <select id="modelRoute">
-            <option value="cloud">GLM API（默认快速）</option>
-            <option value="local">本地 Qwen2-7B（冷启动较慢）</option>
-          </select>
+        <div class="btns chat-actions">
+          <button id="ask">开始问答</button>
+          <button id="voice" class="secondary">点击说话</button>
         </div>
-      </div>
-
-      <div style="margin-top:10px;">
-        <label>API 根地址</label>
-        <input id="base" value="" placeholder="默认当前站点" />
-      </div>
-
-      <div style="margin-top:10px;">
-        <label>提问（可打字，也可点「点击说话」）</label>
-        <textarea id="q" rows="3">灵山大佛有多高？用了多少铜？</textarea>
-      </div>
-
-      <div class="btns">
-        <button id="ask">文字问答</button>
-        <button id="voice" class="secondary">点击说话</button>
-        <button id="rec" class="secondary">推荐路线</button>
-      </div>
-      <div class="btns" style="grid-template-columns:1fr; margin-top:8px;">
-        <label class="secondary" style="display:block; text-align:center; padding:10px 12px; border-radius:10px; background:#2f5646; color:var(--text); cursor:pointer; font-weight:600;">
-          上传语音文件（HTTP 可用）
+        <label class="file-action audio-action">
+          上传语音
           <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.webm,.m4a" style="display:none" />
         </label>
       </div>
-      <div class="feature-actions">
-        <label class="file-action">拍照识景导览<input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" /></label>
-        <button id="locate" class="secondary" type="button">智能定位 / 弱信号</button>
-      </div>
-      <div class="location-panel" id="locationPanel" hidden>
-        <div class="location-head">
-          <strong>多源定位助手</strong>
-          <span>GPS → 二维码 → Wi-Fi → 手动</span>
-        </div>
-        <div class="location-state" id="locationState" role="status" aria-live="polite">等待定位</div>
-        <div class="location-methods">
-          <div class="location-method">
-            <label for="locationCode">景点点位码</label>
-            <input id="locationCode" placeholder="例如 LS-006" autocomplete="off" />
-            <button id="locateQr" class="secondary" type="button">二维码确认</button>
-          </div>
-          <div class="location-method">
-            <label for="wifiNode">景区 Wi-Fi</label>
-            <select id="wifiNode">
-              <option value="LS-WIFI-SOUTH">南门入口节点</option>
-              <option value="LS-WIFI-NINE">九龙灌浴节点</option>
-              <option value="LS-WIFI-BUDDHA">大佛区域节点</option>
-              <option value="LS-WIFI-BRAHMA">梵宫区域节点</option>
+
+      <div class="tool-panel" data-tool-panel="route" hidden>
+        <p class="tool-description">选一个游览偏好，灵曦会为你安排顺路、松弛的游览建议。</p>
+        <div class="row">
+          <div>
+            <label>想看什么</label>
+            <select id="interest">
+              <option value="历史">历史文化</option>
+              <option value="自然">自然风光</option>
+              <option value="亲子">亲子家庭</option>
             </select>
-            <button id="locateWifi" class="secondary" type="button">区域定位</button>
-          </div>
-          <div class="location-method">
-            <label for="manualSpot">手动选择</label>
-            <select id="manualSpot">
-              <option>灵山大照壁</option>
-              <option>九龙灌浴</option>
-              <option>灵山大佛</option>
-              <option>灵山梵宫</option>
-              <option>五印坛城</option>
-            </select>
-            <button id="locateManual" class="secondary" type="button">确认位置</button>
           </div>
         </div>
-        <button id="useLocationCandidate" type="button" hidden>确认候选点并开始讲解</button>
-        <p class="hint">浏览器无法读取 Wi-Fi 名称；正式部署由景区网关按接入点编号传入。GPS 低精度或位置过期时不会强行匹配。</p>
+        <button id="rec" class="route-action" type="button">为我推荐路线</button>
       </div>
-      <div class="meta" id="status">就绪 · 正在检测 LiveTalking 本地服务</div>
+
+      <div class="tool-panel" data-tool-panel="photo" hidden>
+        <p class="tool-description">拍下眼前的建筑、雕塑或景色，灵曦会接着为你讲解。</p>
+        <label class="file-action photo-action">拍照识景
+          <input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" />
+        </label>
+      </div>
+
+      <div class="tool-panel" data-tool-panel="location" hidden>
+        <p class="tool-description">可使用当前位置、景点码或手动选择，开始附近景点讲解。</p>
+        <button id="locate" class="route-action secondary" type="button">使用当前位置</button>
+        <div class="location-panel" id="locationPanel">
+          <div class="location-head">
+            <strong>位置选择</strong>
+            <span>当前位置 / 景点码 / 手动</span>
+          </div>
+          <div class="location-state" id="locationState" role="status" aria-live="polite">等待定位</div>
+          <div class="location-methods">
+            <div class="location-method">
+              <label for="locationCode">景点点位码</label>
+              <input id="locationCode" placeholder="例如 LS-006" autocomplete="off" />
+              <button id="locateQr" class="secondary" type="button">确认</button>
+            </div>
+            <div class="location-method">
+              <label for="wifiNode">景区 Wi-Fi</label>
+              <select id="wifiNode">
+                <option value="LS-WIFI-SOUTH">南门入口节点</option>
+                <option value="LS-WIFI-NINE">九龙灌浴节点</option>
+                <option value="LS-WIFI-BUDDHA">大佛区域节点</option>
+                <option value="LS-WIFI-BRAHMA">梵宫区域节点</option>
+              </select>
+              <button id="locateWifi" class="secondary" type="button">确认</button>
+            </div>
+            <div class="location-method">
+              <label for="manualSpot">手动选择</label>
+              <select id="manualSpot">
+                <option>灵山大照壁</option>
+                <option>九龙灌浴</option>
+                <option>灵山大佛</option>
+                <option>灵山梵宫</option>
+                <option>五印坛城</option>
+              </select>
+              <button id="locateManual" class="secondary" type="button">确认</button>
+            </div>
+          </div>
+          <button id="useLocationCandidate" type="button" hidden>确认候选点并开始讲解</button>
+        </div>
+      </div>
+      <div class="meta" id="status">正在准备</div>
       <div class="meta" id="secureHint" style="color:#e0c07a;"></div>
-      <div style="margin-top:12px;">
-        <label>导览回复</label>
+      <div class="reply-section">
+        <div class="reply-label">
+          <label>导览回复</label>
+          <span>基于景区知识库</span>
+        </div>
         <div id="log"></div>
       </div>
-      <div class="feedback">
-        <label>本次导览体验反馈</label>
+      <details class="advanced-settings">
+        <summary>更多设置</summary>
+        <div class="settings-grid">
+          <div>
+            <label>问答模型</label>
+            <select id="modelRoute">
+              <option value="cloud">默认模式</option>
+              <option value="local">本地模式</option>
+            </select>
+          </div>
+          <div>
+            <label>服务地址</label>
+            <input id="base" value="" placeholder="默认当前站点" />
+          </div>
+        </div>
+      </details>
+      <details class="feedback">
+        <summary>本次体验反馈</summary>
         <div class="feedback-row">
           <select id="rating" aria-label="满意度"><option value="5">5分 · 非常满意</option><option value="4">4分 · 满意</option><option value="3">3分 · 一般</option><option value="2">2分 · 不满意</option><option value="1">1分 · 很不满意</option></select>
           <input id="feedbackComment" maxlength="1000" placeholder="可填写建议或感受" />
           <button id="sendFeedback" class="secondary" type="button">提交反馈</button>
         </div>
-      </div>
-      <p class="hint">流程：麦克风/上传 → ASR → 知识库问答 → LiveTalking 本地口型播报（服务未就绪时回退 GLM-TTS + Live2D）。<br/>
-        语音：点一次开始，说完再点结束。公网麦克风请用 <b>HTTPS:8443</b>。</p>
+      </details>
     </section>
   </main>
 
@@ -555,8 +1006,8 @@
         await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
         $("modelLoading").classList.add("is-hidden");
         $("styleButton").disabled = false;
-        $("avatarHint").textContent = "灵曦已就绪（Haru · 口型跟随语音）";
-        $("status").textContent = "数字人就绪";
+        $("avatarHint").textContent = "灵曦已就绪";
+        $("status").textContent = "已准备好";
       } catch (err) {
         console.error(err);
         $("modelLoading").innerHTML = "<strong>Live2D 载入失败</strong><span>" + String(err.message || err) + "</span>";
@@ -570,8 +1021,8 @@
       document.getElementById("liveTalkingVideo").classList.add("is-active");
       document.getElementById("xmovMount").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.add("is-hidden");
-      document.getElementById("avatarBadge").textContent = "LiveTalking · Wav2Lip 本地口型";
-      document.getElementById("avatarHint").textContent = "LiveTalking 本地数字人已连接（GPU 加速）";
+      document.getElementById("avatarBadge").textContent = "灵曦 · 正在讲解";
+      document.getElementById("avatarHint").textContent = "灵曦已连接";
       document.getElementById("styleButton").disabled = true;
       document.getElementById("stylePanel").hidden = true;
     }
@@ -579,8 +1030,8 @@
     function fallbackToLive2D(message) {
       document.getElementById("liveTalkingVideo").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.remove("is-hidden");
-      document.getElementById("avatarBadge").textContent = "Haru Live2D · LiveTalking 回退";
-      document.getElementById("avatarHint").textContent = message || "LiveTalking 尚未就绪，当前使用 Haru";
+      document.getElementById("avatarBadge").textContent = "灵曦 · 已准备";
+      document.getElementById("avatarHint").textContent = message || "灵曦已准备好";
       document.getElementById("styleButton").disabled = false;
     }
 
@@ -617,11 +1068,11 @@
         const status = await statusResponse.json();
         liveTalkingState.avatarId = status.avatar_id || null;
         if (!status.enabled || !status.ready) {
-          fallbackToLive2D("LiveTalking 未启动，提问时将按需启用 GPU");
+          fallbackToLive2D("灵曦正在准备，您可以先开始提问");
           return false;
         }
 
-        document.getElementById("avatarHint").textContent = "正在建立 LiveTalking WebRTC 本地视频…";
+        document.getElementById("avatarHint").textContent = "正在连接灵曦…";
         const iceServers = Array.isArray(status.ice_servers)
           ? status.ice_servers
           : (status.turn ? [status.turn] : []);
@@ -659,13 +1110,13 @@
           if (state === "connected") {
             liveTalkingState.ready = true;
             activateLiveTalkingView();
-            document.getElementById("status").textContent = "LiveTalking 本地数字人就绪";
+            document.getElementById("status").textContent = "灵曦已准备好";
             resolveConnected(true);
           } else if (state === "failed") {
             rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
           } else if (state === "disconnected" || state === "closed") {
             liveTalkingState.ready = false;
-            fallbackToLive2D("LiveTalking 连接已断开，当前使用 Haru");
+            fallbackToLive2D("连接暂时中断，已切换到轻量模式");
           }
         });
 
@@ -720,7 +1171,7 @@
             body: JSON.stringify({ session_id: failedSessionId }),
           }).catch(() => {});
         }
-        fallbackToLive2D("LiveTalking 暂不可用，已回退 Haru：" + String(error.message || error));
+        fallbackToLive2D("灵曦暂时无法连接，已切换到轻量模式");
         return false;
       } finally {
         liveTalkingState.connecting = false;
@@ -730,7 +1181,7 @@
     async function ensureLiveTalkingOnDemand() {
       if (!liveTalkingStartPromise) {
         liveTalkingStartPromise = (async () => {
-          $("avatarHint").textContent = "正在按需启动 LiveTalking GPU 数字人…";
+          $("avatarHint").textContent = "灵曦正在准备…";
           const response = await fetch(base() + "/v1/livetalking/start", { method: "POST" });
           if (!response.ok) throw new Error(await response.text());
           const result = await response.json();
@@ -1210,6 +1661,7 @@
           try {
             const result = await postJson("/v1/livetalking/is-speaking", { session_id: sessionId });
             const speaking = !!result.data;
+            const pending = !!result.pending;
             monitorFailures = 0;
             if (speaking) {
               silentPolls = 0;
@@ -1220,12 +1672,14 @@
                 const openMs = Math.round(performance.now() - interactionStartedAt);
                 document.getElementById("status").textContent = "LiveTalking 播报中 · 总开口 " + openMs + "ms";
               }
-            } else if (sawSpeaking && finished) {
+            } else if (sawSpeaking && finished && !pending) {
               silentPolls += 1;
               if (silentPolls >= 4) {
                 settle("播报完成");
                 return;
               }
+            } else if (pending) {
+              silentPolls = 0;
             }
             if (finished && !sawSpeaking && performance.now() - interactionStartedAt > 20000) {
               settle("LiveTalking 20 秒内未检测到开口");
@@ -1537,6 +1991,32 @@
       ensureLiveTalkingPlayback();
       askText($("q").value.trim());
     };
+
+    const toolTabButtons = [...document.querySelectorAll("[data-tool-tab]")];
+    const toolPanels = [...document.querySelectorAll("[data-tool-panel]")];
+
+    function selectToolPanel(name) {
+      toolTabButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.toolTab === name));
+      });
+      toolPanels.forEach((panel) => {
+        panel.hidden = panel.dataset.toolPanel !== name;
+      });
+    }
+
+    toolTabButtons.forEach((button) => {
+      button.addEventListener("click", () => selectToolPanel(button.dataset.toolTab));
+    });
+
+    document.querySelectorAll("[data-prompt]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const prompt = button.dataset.prompt || "";
+        $("q").value = prompt;
+        selectToolPanel("chat");
+        ensureLiveTalkingPlayback();
+        askText(prompt);
+      });
+    });
 
     $("rec").onclick = async () => {
       stopSpeech("请求推荐…");
@@ -1908,7 +2388,7 @@
 
     // Keep the page GPU-free until the visitor starts an interaction.
     void refreshModelRoutes();
-    $("modelLoading").querySelector("span:last-child").textContent = "正在载入轻量 Live2D 数字人…";
+    $("modelLoading").querySelector("span:last-child").textContent = "灵曦正在准备…";
     void bootLive2D();
   </script>
 </body>

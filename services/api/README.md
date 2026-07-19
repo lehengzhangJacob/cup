@@ -26,7 +26,7 @@ bash deploy/start_api.sh          # RAG 8020（内部）+ HTTP 8001 + HTTPS 8443
 - 麦克风页面：`https://<服务器IP>:8443/`（首次访问接受自签名证书；8443 同时承载 TURN/TCP，可穿过 SSH/IDE TCP 端口转发）
 - 景区管理后台：`https://<服务器IP>:8444/admin`（独立端口；默认账号 `admin`，默认密码 `123456abc`）
 
-LiveTalking 无需常驻启动：网页初始只加载不占 GPU 的 Live2D，首次互动时自动在物理 GPU 2 启动，空闲 120 秒后自动停止。可用 `LIVETALKING_GPU=2` 和 `LIVETALKING_IDLE_SECONDS=120` 调整；后台日志位于
+LiveTalking 无需常驻启动：打开游客网页且网络可用时自动在物理 GPU 2 启动，网页可见期间保持热状态；关闭或隐藏网页 120 秒后自动停止。可用 `LIVETALKING_GPU=2` 和 `LIVETALKING_IDLE_SECONDS=120` 调整；后台日志位于
 `deploy/livetalking/service.log`、`deploy/rag.log`、`deploy/local-llm.log` 和
 `deploy/api.log`；RAG 自动恢复记录位于 `deploy/rag-watchdog.log`。
 
@@ -102,7 +102,7 @@ batch 8，以降低 GPU 2 显存峰值。浏览器通过本站同源 API 完成 
 LiveTalking Wav2Lip。PCM 分块到达即上传，不等待整段语音合成结束；服务不可用时
 自动回退到 GLM-TTS + Haru Live2D。
 
-页面加载不会启动 LiveTalking，因此不会占用其约 760 MiB 显存。首次互动按需冷启动，后续互动保持热状态；最后一次使用 120 秒后由 `deploy/watch_livetalking.sh` 自动停止。可用 `bash deploy/start_livetalking.sh` 预热，或用 `bash deploy/stop_livetalking.sh` 立即释放显存。
+打开游客网页且网络可用时会启动 LiveTalking，并在网页可见期间每 30 秒刷新空闲计时；关闭或隐藏网页 120 秒后由 `deploy/watch_livetalking.sh` 自动停止并释放约 760 MiB 显存。可用 `bash deploy/start_livetalking.sh` 预热，或用 `bash deploy/stop_livetalking.sh` 立即释放显存。
 
 2026-07-19 本机实测“语音输入结束 → 第一个非静音 WebRTC 音频帧”为 3373ms：
 ASR 451ms、LLM 首句 1151ms、TTS/口型 1772ms。实际延迟会随外部模型接口和

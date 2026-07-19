@@ -20,6 +20,10 @@ VISION_MODEL = os.getenv("ZHIPU_VISION_MODEL", "glm-4v-flash")
 EMBED_MODEL = os.getenv("ZHIPU_EMBED_MODEL", "embedding-3")
 TTS_MODEL = os.getenv("ZHIPU_TTS_MODEL", "glm-tts")
 TTS_VOICE = os.getenv("ZHIPU_TTS_VOICE", "female")
+LIVETALKING_TTS_SPEED = max(
+    0.5,
+    min(2.0, float(os.getenv("LIVETALKING_TTS_SPEED", "1.12"))),
+)
 ASR_MODEL = os.getenv("ZHIPU_ASR_MODEL", "glm-asr")
 
 DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE", "https://api.deepseek.com").rstrip("/")

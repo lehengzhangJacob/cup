@@ -1,0 +1,15 @@
+[Unit]
+Description=CUP direct public HTTPS proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/softcup/to_public/tcp_proxy.py --map 0.0.0.0:20443=127.0.0.1:18001 --certfile /home/softcup/to_public/tls/server.crt --keyfile /home/softcup/to_public/tls/server.key
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

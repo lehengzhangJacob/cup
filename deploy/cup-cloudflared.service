@@ -1,0 +1,16 @@
+[Unit]
+Description=CUP Cloudflare HTTPS tunnel connector
+After=network-online.target cup-public-proxy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/home/softcup/to_public/cloudflared.env
+ExecStart=/home/softcup/to_public/cloudflared tunnel --no-autoupdate run
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

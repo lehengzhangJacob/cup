@@ -39,3 +39,8 @@ venv/
 题目/*_files/**
 data/**/*.db
 data/**/.admin_session_secret
+
+# Android build outputs and machine-local SDK path
+android/.gradle/
+android/local.properties
+android/**/build/

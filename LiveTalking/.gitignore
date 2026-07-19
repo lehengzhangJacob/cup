@@ -7,7 +7,14 @@ build/
 tmp*
 trial*/
 
-data
+# Keep runtime avatar caches out of git, but ship the zen grey-robe avatar.
+data/*
+!data/avatars/
+data/avatars/*
+!data/avatars/.gitkeep
+!data/avatars/wav2lip256_zen_avatar1/
+!data/avatars/wav2lip256_zen_avatar1/**
+
 data_utils/face_tracking/3DMM/*
 data_utils/face_parsing/79999_iter.pth
 
