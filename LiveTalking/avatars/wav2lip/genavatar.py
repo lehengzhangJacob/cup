@@ -6,6 +6,11 @@ from tqdm import tqdm
 from glob import glob
 import torch
 import pickle
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 from avatars.wav2lip import face_detection
 
 

@@ -38,6 +38,56 @@ class RTCManager:
         """
         self.opt = opt
         self.pcs: set = set()
+        self.session_pcs: Dict[str, RTCPeerConnection] = {}
+
+    def _ice_servers(self, params) -> list[RTCIceServer]:
+        servers: list[RTCIceServer] = []
+        raw_servers = params.get("ice_servers") or []
+        if isinstance(raw_servers, list):
+            for raw_server in raw_servers[:8]:
+                if not isinstance(raw_server, dict):
+                    continue
+                raw_urls = raw_server.get("urls")
+                if isinstance(raw_urls, str):
+                    urls = raw_urls
+                elif isinstance(raw_urls, list):
+                    urls = [url for url in raw_urls if isinstance(url, str)][:16]
+                    if not urls:
+                        continue
+                else:
+                    continue
+                credential_type = raw_server.get("credentialType", "password")
+                if credential_type not in {"password", "oauth"}:
+                    credential_type = "password"
+                servers.append(
+                    RTCIceServer(
+                        urls=urls,
+                        username=raw_server.get("username"),
+                        credential=raw_server.get("credential"),
+                        credentialType=credential_type,
+                    )
+                )
+        if not servers and self.opt.stun:
+            servers.append(RTCIceServer(urls=self.opt.stun))
+        return servers
+
+    async def _close_session(self, sessionid: str):
+        """Close the peer connection and always release its session slot."""
+        pc = self.session_pcs.pop(sessionid, None)
+        if pc is not None:
+            self.pcs.discard(pc)
+            if pc.connectionState != "closed":
+                await pc.close()
+        session_manager.remove_session(sessionid)
+
+    async def handle_close_session(self, request):
+        """Explicit cleanup used when a browser offer fails or the page exits."""
+        params = await request.json()
+        sessionid = str(params.get("sessionid") or "").strip()
+        if not sessionid:
+            return web.json_response({"code": -1, "msg": "sessionid is required"})
+        await self._close_session(sessionid)
+        return web.json_response({"code": 0, "msg": "ok"})
 
     async def handle_offer(self, request):
         """处理 WebRTC offer 信令"""
@@ -56,20 +106,40 @@ class RTCManager:
         logger.info('offer sessionid=%s', sessionid)
         avatar_session = session_manager.get_session(sessionid)
 
-        # 创建 PeerConnection
-        ice_servers = [RTCIceServer(urls=self.opt.stun)] if self.opt.stun else []
+        # 浏览器和服务端必须使用同一组公网 TURN 凭据，才能在双 NAT 下建立媒体链路。
+        ice_servers = self._ice_servers(params)
+        logger.info("Using %d ICE server entries", len(ice_servers))
         pc = RTCPeerConnection(
             configuration=RTCConfiguration(iceServers=ice_servers)
         )
         self.pcs.add(pc)
+        self.session_pcs[sessionid] = pc
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
             logger.info("Connection state is %s", pc.connectionState)
             if pc.connectionState in ("failed", "closed"):
-                await pc.close()
-                self.pcs.discard(pc)
-                session_manager.remove_session(sessionid)
+                await self._close_session(sessionid)
+            elif pc.connectionState == "disconnected":
+                async def close_if_still_disconnected():
+                    await asyncio.sleep(8)
+                    if pc.connectionState == "disconnected":
+                        logger.info("Closing disconnected session %s", sessionid)
+                        await self._close_session(sessionid)
+
+                asyncio.create_task(close_if_still_disconnected())
+
+        async def connection_watchdog():
+            await asyncio.sleep(15)
+            if pc.connectionState not in ("connected", "closed"):
+                logger.warning(
+                    "Closing stale WebRTC session %s in state %s",
+                    sessionid,
+                    pc.connectionState,
+                )
+                await self._close_session(sessionid)
+
+        asyncio.create_task(connection_watchdog())
 
         # 添加发送轨道
         from server.webrtc import HumanPlayer
@@ -135,3 +205,4 @@ class RTCManager:
         coros = [pc.close() for pc in self.pcs]
         await asyncio.gather(*coros)
         self.pcs.clear()
+        self.session_pcs.clear()

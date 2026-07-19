@@ -131,23 +131,37 @@ class BaseAvatar:
         if hasattr(self, 'asr'):
             self.asr.put_audio_frame(audio_chunk, datainfo)
 
-    def put_audio_file(self, filebyte, datainfo:dict={}): 
+    def put_audio_file(self, filebyte, datainfo:dict={}):
         input_stream = BytesIO(filebyte)
         stream = self.__create_bytes_stream(input_stream)
-        streamlen = stream.shape[0]
-        idx = 0
-        first = True
-        while streamlen >= self.chunk:
+        if stream.shape[0] == 0:
+            return
+
+        # Uploaded speech is queued sentence-by-sentence. A short edge fade avoids
+        # clicks when separately generated sentences meet, while zero-padding the
+        # final partial frame preserves samples that were previously discarded.
+        stream = stream.copy()
+        fade_samples = min(self.sample_rate // 200, stream.shape[0] // 2)  # 5 ms
+        if fade_samples > 1:
+            stream[:fade_samples] *= np.linspace(0.0, 1.0, fade_samples, dtype=np.float32)
+            stream[-fade_samples:] *= np.linspace(1.0, 0.0, fade_samples, dtype=np.float32)
+
+        total_chunks = math.ceil(stream.shape[0] / self.chunk)
+        for chunk_index in range(total_chunks):
+            idx = chunk_index * self.chunk
+            audio_chunk = stream[idx:idx+self.chunk]
+            if audio_chunk.shape[0] < self.chunk:
+                padded = np.zeros(self.chunk, dtype=np.float32)
+                padded[:audio_chunk.shape[0]] = audio_chunk
+                audio_chunk = padded
+
             eventpoint = {}
-            if first:
+            if chunk_index == 0:
                 eventpoint = {'status': 'start'}
-                first = False
-            if streamlen - self.chunk < self.chunk:
+            if chunk_index == total_chunks - 1:
                 eventpoint = {'status': 'end'}
-            eventpoint.update(**datainfo) 
-            self.put_audio_frame(stream[idx:idx+self.chunk], eventpoint)
-            streamlen -= self.chunk
-            idx += self.chunk
+            eventpoint.update(**datainfo)
+            self.put_audio_frame(audio_chunk, eventpoint)
 
     def put_audio_filepath(self, filepath, datainfo:dict={}): 
         stream = self.__create_bytes_stream(filepath)

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-WHITELIST = Path("data/whitelist.json")
+WHITELIST = Path(__file__).resolve().parents[1] / "data" / "whitelist.json"
 
 def test_whitelist_exists():
     assert WHITELIST.exists()
@@ -48,6 +48,8 @@ def test_chunk_xlsx_filtered():
         meta = c["metadata"]
         assert meta.get("attraction_name") is not None
         assert meta["attraction_name"] in _load_whitelist()
+        assert "梅花洲" not in c["text"]
+        assert "嘉兴市" not in c["text"]
 
 def _load_whitelist():
     import json

@@ -236,6 +236,34 @@
     .meta { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
     .feature-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
     .file-action { display:block; text-align:center; padding:10px 12px; border-radius:10px; background:#2f5646; color:var(--text); cursor:pointer; font-weight:600; font-size:13px; }
+    .location-panel {
+      margin-top: 9px;
+      padding: 11px;
+      border: 1px solid rgba(212,178,106,.35);
+      border-radius: 12px;
+      background: rgba(7,18,14,.44);
+    }
+    .location-panel[hidden] { display: none; }
+    .location-head { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; }
+    .location-head strong { color:var(--gold); font-size:13px; }
+    .location-head span { color:var(--muted); font-size:11px; text-align:right; }
+    .location-state {
+      padding: 8px 10px;
+      border-radius: 9px;
+      background: rgba(47,86,70,.35);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 9px;
+    }
+    .location-state.is-warning { background:rgba(154,122,53,.24); color:#f1d994; }
+    .location-state.is-ok { background:rgba(45,113,78,.3); color:#bde6cc; }
+    .location-methods { display:grid; gap:8px; }
+    .location-method { display:grid; grid-template-columns:92px 1fr auto; gap:7px; align-items:center; }
+    .location-method label { margin:0; }
+    .location-method input, .location-method select { min-width:0; padding:8px 10px; font-size:12px; }
+    .location-method button { width:auto; white-space:nowrap; padding:8px 11px; font-size:12px; }
+    #useLocationCandidate { margin-top:8px; }
     .feedback { margin-top:12px; padding:11px; border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.12); }
     .feedback-row { display:grid; grid-template-columns:110px 1fr auto; gap:8px; align-items:end; }
     .feedback-row button { width:auto; white-space:nowrap; padding:10px 15px; }
@@ -255,14 +283,19 @@
       70% { box-shadow: 0 0 0 10px rgba(231,76,60,0); }
       100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
     }
-    @media (max-width:560px) { .feedback-row { grid-template-columns:1fr; } .feedback-row button { width:100%; } }
+    @media (max-width:560px) {
+      .feedback-row { grid-template-columns:1fr; }
+      .feedback-row button { width:100%; }
+      .location-method { grid-template-columns:1fr; }
+      .location-method button { width:100%; }
+    }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>灵山小向导 · 灵曦</h1>
-      <p>LiveTalking 本地真人（Live2D 回退）· 智谱 GLM / ASR · 景区知识库问答</p>
+      <p>LiveTalking 本地真人（Live2D 回退）· GLM API / 本地模型双路径 · 景区知识库问答</p>
     </div>
     <a class="admin-link" href="/admin">景区管理后台 →</a>
   </header>
@@ -325,9 +358,17 @@
           </select>
         </div>
         <div>
-          <label>API 根地址</label>
-          <input id="base" value="" placeholder="默认当前站点" />
+          <label>问答模型</label>
+          <select id="modelRoute">
+            <option value="cloud">GLM API（默认快速）</option>
+            <option value="local">本地 Qwen2-7B（冷启动较慢）</option>
+          </select>
         </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>API 根地址</label>
+        <input id="base" value="" placeholder="默认当前站点" />
       </div>
 
       <div style="margin-top:10px;">
@@ -348,7 +389,44 @@
       </div>
       <div class="feature-actions">
         <label class="file-action">拍照识景导览<input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" /></label>
-        <button id="locate" class="secondary" type="button">我在灵山大佛附近</button>
+        <button id="locate" class="secondary" type="button">智能定位 / 弱信号</button>
+      </div>
+      <div class="location-panel" id="locationPanel" hidden>
+        <div class="location-head">
+          <strong>多源定位助手</strong>
+          <span>GPS → 二维码 → Wi-Fi → 手动</span>
+        </div>
+        <div class="location-state" id="locationState" role="status" aria-live="polite">等待定位</div>
+        <div class="location-methods">
+          <div class="location-method">
+            <label for="locationCode">景点点位码</label>
+            <input id="locationCode" placeholder="例如 LS-006" autocomplete="off" />
+            <button id="locateQr" class="secondary" type="button">二维码确认</button>
+          </div>
+          <div class="location-method">
+            <label for="wifiNode">景区 Wi-Fi</label>
+            <select id="wifiNode">
+              <option value="LS-WIFI-SOUTH">南门入口节点</option>
+              <option value="LS-WIFI-NINE">九龙灌浴节点</option>
+              <option value="LS-WIFI-BUDDHA">大佛区域节点</option>
+              <option value="LS-WIFI-BRAHMA">梵宫区域节点</option>
+            </select>
+            <button id="locateWifi" class="secondary" type="button">区域定位</button>
+          </div>
+          <div class="location-method">
+            <label for="manualSpot">手动选择</label>
+            <select id="manualSpot">
+              <option>灵山大照壁</option>
+              <option>九龙灌浴</option>
+              <option>灵山大佛</option>
+              <option>灵山梵宫</option>
+              <option>五印坛城</option>
+            </select>
+            <button id="locateManual" class="secondary" type="button">确认位置</button>
+          </div>
+        </div>
+        <button id="useLocationCandidate" type="button" hidden>确认候选点并开始讲解</button>
+        <p class="hint">浏览器无法读取 Wi-Fi 名称；正式部署由景区网关按接入点编号传入。GPS 低精度或位置过期时不会强行匹配。</p>
       </div>
       <div class="meta" id="status">就绪 · 正在检测 LiveTalking 本地服务</div>
       <div class="meta" id="secureHint" style="color:#e0c07a;"></div>
@@ -398,6 +476,34 @@
       connecting: false,
       avatarId: null,
     };
+    let liveTalkingStartPromise = null;
+
+    const savedModelRoute = localStorage.getItem("lingshan-model-route");
+    if (savedModelRoute === "cloud" || savedModelRoute === "local") {
+      $("modelRoute").value = savedModelRoute;
+    }
+    $("modelRoute").addEventListener("change", () => {
+      localStorage.setItem("lingshan-model-route", $("modelRoute").value);
+      sessionId = null;
+      $("status").textContent = $("modelRoute").value === "local"
+        ? "已切换本地模型；首次加载权重会较慢，空闲后自动释放显存"
+        : "已切换 GLM API；不会占用本机大模型显存";
+    });
+
+    async function refreshModelRoutes() {
+      try {
+        const response = await fetch(base() + "/v1/model-routes", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        const localRoute = data.routes && data.routes.local;
+        const localOption = $("modelRoute").querySelector('option[value="local"]');
+        if (localRoute && localOption) {
+          localOption.textContent = localRoute.ready
+            ? "本地 Qwen2-7B（服务就绪）"
+            : "本地 Qwen2-7B（按需启动）";
+        }
+      } catch (_) {}
+    }
 
     function setPressed(buttons, activeValue, dataName) {
       buttons.forEach((btn) => {
@@ -460,6 +566,7 @@
 
 
     function activateLiveTalkingView() {
+      document.getElementById("modelLoading").classList.add("is-hidden");
       document.getElementById("liveTalkingVideo").classList.add("is-active");
       document.getElementById("xmovMount").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.add("is-hidden");
@@ -510,12 +617,23 @@
         const status = await statusResponse.json();
         liveTalkingState.avatarId = status.avatar_id || null;
         if (!status.enabled || !status.ready) {
-          fallbackToLive2D("LiveTalking 正在后台安装或启动，当前使用 Haru");
+          fallbackToLive2D("LiveTalking 未启动，提问时将按需启用 GPU");
           return false;
         }
 
         document.getElementById("avatarHint").textContent = "正在建立 LiveTalking WebRTC 本地视频…";
-        const pc = new RTCPeerConnection({ sdpSemantics: "unified-plan" });
+        const iceServers = Array.isArray(status.ice_servers)
+          ? status.ice_servers
+          : (status.turn ? [status.turn] : []);
+        const hasTurnRelay = iceServers.some(server => {
+          const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+          return urls.some(url => typeof url === "string" && /^(turn|turns):/i.test(url));
+        });
+        const pc = new RTCPeerConnection({
+          sdpSemantics: "unified-plan",
+          iceServers,
+          iceTransportPolicy: hasTurnRelay ? "relay" : "all",
+        });
         liveTalkingState.pc = pc;
         let resolveConnected;
         let rejectConnected;
@@ -574,22 +692,61 @@
           new Promise((_, reject) => setTimeout(() => reject(new Error("LiveTalking 连接超时")), 12000)),
         ]);
         window.addEventListener("beforeunload", () => {
+          const closingSessionId = liveTalkingState.sessionId;
+          if (closingSessionId) {
+            fetch(base() + "/v1/livetalking/close", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ session_id: closingSessionId }),
+              keepalive: true,
+            }).catch(() => {});
+          }
           try { pc.close(); } catch (_) {}
         }, { once: true });
         return true;
       } catch (error) {
         console.error(error);
         liveTalkingState.ready = false;
+        const failedSessionId = liveTalkingState.sessionId;
         liveTalkingState.sessionId = null;
         if (liveTalkingState.pc) {
           try { liveTalkingState.pc.close(); } catch (_) {}
         }
         liveTalkingState.pc = null;
+        if (failedSessionId) {
+          fetch(base() + "/v1/livetalking/close", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: failedSessionId }),
+          }).catch(() => {});
+        }
         fallbackToLive2D("LiveTalking 暂不可用，已回退 Haru：" + String(error.message || error));
         return false;
       } finally {
         liveTalkingState.connecting = false;
       }
+    }
+
+    async function ensureLiveTalkingOnDemand() {
+      if (!liveTalkingStartPromise) {
+        liveTalkingStartPromise = (async () => {
+          $("avatarHint").textContent = "正在按需启动 LiveTalking GPU 数字人…";
+          const response = await fetch(base() + "/v1/livetalking/start", { method: "POST" });
+          if (!response.ok) throw new Error(await response.text());
+          const result = await response.json();
+          if (result.started && liveTalkingState.pc) {
+            try { liveTalkingState.pc.close(); } catch (_) {}
+            liveTalkingState.pc = null;
+            liveTalkingState.sessionId = null;
+            liveTalkingState.ready = false;
+          }
+          if (liveTalkingState.ready && liveTalkingState.sessionId) return true;
+          return bootLiveTalking();
+        })().finally(() => {
+          liveTalkingStartPromise = null;
+        });
+      }
+      return liveTalkingStartPromise;
     }
 
     function loadExternalScript(src) {
@@ -779,21 +936,25 @@
     }
 
     function stripMeta(text) {
-      const lines = text.split(/\n/);
       let emotionVal = null;
-      const kept = [];
-      for (const ln of lines) {
-        const t = ln.trim();
-        if (t.startsWith("{") && t.endsWith("}") && t.includes("emotion")) {
+      // Metadata arrives token-by-token. Stop exposing text as soon as a JSON
+      // object begins on a new line; waiting for the closing brace would let
+      // the sentence TTS pipeline speak partial keys such as "emotion".
+      const metaMatch = text.match(/(?:^|\n)\s*\{/);
+      let visible = text;
+      if (metaMatch && metaMatch.index !== undefined) {
+        const braceOffset = metaMatch[0].lastIndexOf("{");
+        const metaStart = metaMatch.index + braceOffset;
+        const rawMeta = text.slice(metaStart).trim();
+        visible = text.slice(0, metaMatch.index).trimEnd();
+        if (rawMeta.endsWith("}")) {
           try {
-            const j = JSON.parse(t);
-            if (j.emotion) emotionVal = j.emotion;
+            const parsed = JSON.parse(rawMeta);
+            if (parsed.emotion) emotionVal = parsed.emotion;
           } catch (_) {}
-          continue;
         }
-        kept.push(ln);
       }
-      return { text: kept.join("\n").trim(), emotion: emotionVal };
+      return { text: visible.trim(), emotion: emotionVal };
     }
 
     function decodePcm16Base64(encoded) {
@@ -1002,7 +1163,7 @@
     }
 
 
-    function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now()) {
+    function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now(), serverDriven = false) {
       const myToken = speechToken;
       const sessionId = liveTalkingState.sessionId;
       let sent = 0;
@@ -1090,6 +1251,10 @@
         sent += 1;
         if (interrupt) {
           document.getElementById("status").textContent = "首句已送入 LiveTalking，准备本地口型…";
+        }
+        if (serverDriven) {
+          if (!monitorPromise) monitorPromise = monitorSpeaking();
+          return;
         }
         queueTail = queueTail.then(() => postJson("/v1/livetalking/speak", {
           session_id: sessionId,
@@ -1223,10 +1388,10 @@
       return pipeline;
     }
 
-    function createSpeechPipeline(interactionStartedAt = performance.now()) {
+    function createSpeechPipeline(interactionStartedAt = performance.now(), options = {}) {
       if (liveTalkingState.ready && liveTalkingState.sessionId) {
         activateLiveTalkingView();
-        return createLiveTalkingSpeechPipeline(interactionStartedAt);
+        return createLiveTalkingSpeechPipeline(interactionStartedAt, !!options.serverDriven);
       }
       if (xmovState.ready && xmovState.avatar) {
         activateXmovView();
@@ -1235,9 +1400,15 @@
       return createPcmSpeechPipeline(interactionStartedAt);
     }
 
-    function speak(text, interactionStartedAt = performance.now()) {
+    async function speak(text, interactionStartedAt = performance.now()) {
       if (!text) return Promise.resolve();
       stopSpeech();
+      try {
+        await ensureLiveTalkingOnDemand();
+      } catch (error) {
+        console.error(error);
+        fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
+      }
       const pipeline = createSpeechPipeline(interactionStartedAt);
       pipeline.enqueue(text);
       pipeline.finish();
@@ -1246,14 +1417,22 @@
 
     async function askText(message, interactionStartedAt = performance.now()) {
       if (!message) return;
-      stopSpeech("思考中…");
+      stopSpeech("正在按需启动数字人…");
       const btn = $("ask");
       btn.disabled = true;
       $("log").textContent = "";
-      $("status").textContent = "思考中…";
       setEmotion("calm");
 
-      const pipeline = createSpeechPipeline(interactionStartedAt);
+      try {
+        await ensureLiveTalkingOnDemand();
+      } catch (error) {
+        console.error(error);
+        fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
+      }
+      $("status").textContent = "思考中…";
+
+      const serverDrivenSpeech = !!(liveTalkingState.ready && liveTalkingState.sessionId);
+      const pipeline = createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech });
       let speechCursor = 0;
 
       function nextSegmentEnd(visibleText, flush) {
@@ -1268,8 +1447,15 @@
           }
         }
 
-        if (rest.length >= 48) {
-          const limit = Math.min(48, rest.length);
+        const clauseBoundary = /[，,：:]/g;
+        while ((match = clauseBoundary.exec(rest)) !== null) {
+          if (rest.slice(0, match.index).trim().length >= 8) {
+            return match.index + 1;
+          }
+        }
+
+        if (rest.length >= 40) {
+          const limit = Math.min(40, rest.length);
           let softEnd = -1;
           for (let i = 18; i < limit; i++) {
             if ("，,：:".includes(rest[i])) softEnd = i + 1;
@@ -1297,6 +1483,8 @@
             message,
             interest: $("interest").value,
             session_id: sessionId,
+            livetalking_session_id: serverDrivenSpeech ? liveTalkingState.sessionId : null,
+            model_route: $("modelRoute").value,
             stream: true
           })
         });
@@ -1325,6 +1513,8 @@
               if (parsed.emotion) setEmotion(parsed.emotion);
             } else if (ev.type === "done") {
               $("status").textContent += " · 模型 " + ev.latency_ms + "ms";
+            } else if (ev.type === "error") {
+              throw new Error(ev.message || "RAG 问答失败");
             }
           }
         }
@@ -1568,22 +1758,127 @@
       }
     });
 
-    $("locate").addEventListener("click", async () => {
-      try {
-        const response = await fetch(base() + "/v1/locate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "manual", spot_name: "灵山大佛" }),
-        });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
-        const question = `我现在位于${data.spot_name}附近，请介绍这个景点并告诉我接下来适合去哪里。`;
-        $("q").value = question;
-        await askText(question);
-      } catch (error) {
-        $("status").textContent = "定位失败：" + String(error.message || error);
+    // ---------- Multi-source positioning ----------
+    let locationCandidate = null;
+
+    function showLocationState(message, tone = "warning") {
+      $("locationPanel").hidden = false;
+      $("locationState").textContent = message;
+      $("locationState").className = "location-state " + (tone === "ok" ? "is-ok" : "is-warning");
+    }
+
+    async function requestLocation(payload) {
+      const response = await fetch(base() + "/v1/locate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    }
+
+    async function startLocatedGuide(data) {
+      const source = data.source_label ? `（${data.source_label}）` : "";
+      const question = `我现在位于${data.spot_name}附近${source}，请介绍这个景点并告诉我接下来适合去哪里。`;
+      $("q").value = question;
+      $("status").textContent = `位置已确认：${data.spot_name}${source}`;
+      await askText(question);
+    }
+
+    async function handleLocationResult(data) {
+      locationCandidate = data.spot_name ? data : null;
+      $("useLocationCandidate").hidden = true;
+      if (data.resolved && !data.requires_confirmation) {
+        const detail = data.accuracy_m ? `，精度约 ${data.accuracy_m} 米` : "";
+        showLocationState(`已定位：${data.spot_name}${detail}。${data.note || ""}`, "ok");
+        await startLocatedGuide(data);
+        return;
       }
+      if (data.spot_name) {
+        const distance = Number.isFinite(data.distance_m) ? `，距候选点约 ${data.distance_m} 米` : "";
+        showLocationState(`候选位置：${data.spot_name}${distance}。${data.note || "请确认位置。"}`);
+        $("useLocationCandidate").textContent = `确认我在${data.spot_name}附近并开始讲解`;
+        $("useLocationCandidate").hidden = false;
+        const option = Array.from($("manualSpot").options).find(item => item.value === data.spot_name);
+        if (option) $("manualSpot").value = option.value;
+        return;
+      }
+      showLocationState(data.note || "自动定位失败，请使用二维码、Wi-Fi 或手动选择。", "warning");
+    }
+
+    function gpsErrorMessage(error) {
+      if (error && error.code === 1) return "未获得定位权限。请扫描景点二维码，或手动选择位置。";
+      if (error && error.code === 2) return "GPS 信号不可用，可能位于室内或建筑遮挡区。请改用二维码或景区 Wi-Fi。";
+      if (error && error.code === 3) return "GPS 定位超过 5 秒仍未完成，已停止等待。请使用下方降级方式。";
+      return "无法取得 GPS 位置，请使用二维码、景区 Wi-Fi 或手动选择。";
+    }
+
+    $("locate").addEventListener("click", () => {
+      stopSpeech("正在获取 GPS…");
+      $("locationPanel").hidden = false;
+      showLocationState("正在获取高精度 GPS，最多等待 5 秒…", "warning");
+      $("locate").disabled = true;
+      if (!navigator.geolocation) {
+        showLocationState("当前浏览器不支持 GPS。请使用二维码、景区 Wi-Fi 或手动选择。", "warning");
+        $("locate").disabled = false;
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const data = await requestLocation({
+              mode: "gps",
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy_m: position.coords.accuracy,
+              timestamp_ms: position.timestamp,
+            });
+            await handleLocationResult(data);
+          } catch (error) {
+            showLocationState("定位服务异常：" + String(error.message || error), "warning");
+          } finally {
+            $("locate").disabled = false;
+          }
+        },
+        (error) => {
+          showLocationState(gpsErrorMessage(error), "warning");
+          $("status").textContent = "GPS 不可用，已切换到弱定位方案";
+          $("locate").disabled = false;
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 15000 },
+      );
     });
+
+    $("locateQr").addEventListener("click", async () => {
+      const code = $("locationCode").value.trim();
+      if (!code) return showLocationState("请输入二维码中的景点点位码，例如 LS-006。", "warning");
+      try { await handleLocationResult(await requestLocation({ mode: "qr", code })); }
+      catch (error) { showLocationState("二维码定位失败：" + String(error.message || error)); }
+    });
+
+    $("locateWifi").addEventListener("click", async () => {
+      try { await handleLocationResult(await requestLocation({ mode: "wifi", code: $("wifiNode").value })); }
+      catch (error) { showLocationState("Wi-Fi 定位失败：" + String(error.message || error)); }
+    });
+
+    $("locateManual").addEventListener("click", async () => {
+      try { await handleLocationResult(await requestLocation({ mode: "manual", spot_name: $("manualSpot").value })); }
+      catch (error) { showLocationState("手动定位失败：" + String(error.message || error)); }
+    });
+
+    $("useLocationCandidate").addEventListener("click", async () => {
+      if (!locationCandidate || !locationCandidate.spot_name) return;
+      const confirmed = await requestLocation({ mode: "manual", spot_name: locationCandidate.spot_name });
+      await handleLocationResult(confirmed);
+    });
+
+    const qrSpotFromUrl = new URLSearchParams(location.search).get("spot");
+    if (qrSpotFromUrl) {
+      $("locationCode").value = qrSpotFromUrl;
+      requestLocation({ mode: "qr", code: qrSpotFromUrl })
+        .then(handleLocationResult)
+        .catch(error => showLocationState("二维码定位失败：" + String(error.message || error)));
+    }
 
     $("sendFeedback").addEventListener("click", async () => {
       const button = $("sendFeedback");
@@ -1611,12 +1906,10 @@
       }
     });
 
-    void bootLive2D().then(async () => {
-      if (await bootLiveTalking()) return;
-      const retryTimer = setInterval(async () => {
-        if (await bootLiveTalking()) clearInterval(retryTimer);
-      }, 10000);
-    });
+    // Keep the page GPU-free until the visitor starts an interaction.
+    void refreshModelRoutes();
+    $("modelLoading").querySelector("span:last-child").textContent = "正在载入轻量 Live2D 数字人…";
+    void bootLive2D();
   </script>
 </body>
 </html>

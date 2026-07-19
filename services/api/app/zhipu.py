@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 from typing import Any, AsyncIterator, Optional
 
@@ -7,14 +9,15 @@ import httpx
 
 from .config import (
     ASR_MODEL,
-    CHAT_MODEL,
     EMBED_MODEL,
     TTS_MODEL,
     TTS_VOICE,
     VISION_MODEL,
+    ZHIPU_CHAT_MODEL,
     ZHIPU_BASE,
     load_api_key,
 )
+from .tts_audio import GlmTtsWatermarkFilter, strip_glm_tts_watermark_wav
 
 
 class ZhipuClient:
@@ -33,63 +36,80 @@ class ZhipuClient:
         messages: list[dict[str, Any]],
         *,
         model: Optional[str] = None,
-        temperature: float = 0.3,
+        temperature: float = 0.1,
         max_tokens: int = 1024,
     ) -> str:
+        selected_model = model or ZHIPU_CHAT_MODEL
         payload = {
-            "model": model or CHAT_MODEL,
+            "model": selected_model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if _supports_thinking(selected_model):
+            payload["thinking"] = {"type": "disabled"}
         async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(
-                f"{self.base}/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            )
-            r.raise_for_status()
-            data = r.json()
-            return data["choices"][0]["message"]["content"]
+            for attempt in range(3):
+                response = await client.post(
+                    f"{self.base}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                )
+                if response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+                    await asyncio.sleep(_retry_delay(response, attempt))
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+        raise RuntimeError("GLM chat request exhausted retries")
 
     async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         *,
         model: Optional[str] = None,
-        temperature: float = 0.3,
+        temperature: float = 0.1,
         max_tokens: int = 1024,
     ) -> AsyncIterator[str]:
+        selected_model = model or ZHIPU_CHAT_MODEL
         payload = {
-            "model": model or CHAT_MODEL,
+            "model": selected_model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": True,
         }
+        if _supports_thinking(selected_model):
+            payload["thinking"] = {"type": "disabled"}
         async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base}/chat/completions",
-                headers=self._headers(),
-                json=payload,
-            ) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    if not line:
+            for attempt in range(3):
+                async with client.stream(
+                    "POST",
+                    f"{self.base}/chat/completions",
+                    headers=self._headers(),
+                    json=payload,
+                ) as response:
+                    if response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+                        await response.aread()
+                        await asyncio.sleep(_retry_delay(response, attempt))
                         continue
-                    if line.startswith("data:"):
-                        line = line[5:].strip()
-                    if line == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    delta = data.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content")
-                    if content:
-                        yield content
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data:"):
+                            line = line[5:].strip()
+                        if line == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+                    return
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         # embedding-3 accepts input as string or list
@@ -135,6 +155,7 @@ class ZhipuClient:
             "speed": speed,
             "volume": 1.0,
             "response_format": response_format,
+            "watermark_enabled": False,
         }
         async with httpx.AsyncClient(timeout=90.0) as client:
             r = await client.post(
@@ -143,6 +164,11 @@ class ZhipuClient:
                 json=payload,
             )
             r.raise_for_status()
+            if response_format == "wav":
+                return strip_glm_tts_watermark_wav(r.content)
+            if response_format == "pcm":
+                watermark_filter = GlmTtsWatermarkFilter(24_000)
+                return watermark_filter.feed(r.content) + watermark_filter.finish()
             return r.content
 
     async def tts_stream(
@@ -162,8 +188,11 @@ class ZhipuClient:
             "response_format": "pcm",
             "encode_format": "base64",
             "stream": True,
+            "watermark_enabled": False,
         }
         timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+        watermark_filter: Optional[GlmTtsWatermarkFilter] = None
+        buffered_event: Optional[dict[str, Any]] = None
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream(
                 "POST",
@@ -179,11 +208,34 @@ class ZhipuClient:
                     if line.startswith("data:"):
                         line = line[5:].strip()
                     if line == "[DONE]":
+                        if watermark_filter and not watermark_filter.decided and buffered_event:
+                            cleaned = watermark_filter.finish()
+                            if cleaned:
+                                yield _replace_audio_content(buffered_event, cleaned)
                         break
                     event = json.loads(line)
                     if event.get("error"):
                         raise RuntimeError(event["error"].get("message", "GLM-TTS stream failed"))
-                    yield event
+                    choices = event.get("choices") or []
+                    delta = choices[0].get("delta", {}) if choices else {}
+                    content = delta.get("content")
+                    if not content:
+                        if watermark_filter and not watermark_filter.decided and buffered_event:
+                            cleaned = watermark_filter.finish()
+                            if cleaned:
+                                yield _replace_audio_content(buffered_event, cleaned)
+                        yield event
+                        continue
+
+                    sample_rate = int(delta.get("return_sample_rate") or 24000)
+                    if watermark_filter is None:
+                        watermark_filter = GlmTtsWatermarkFilter(sample_rate)
+                    elif watermark_filter.sample_rate != sample_rate:
+                        raise RuntimeError("GLM-TTS sample rate changed during streaming")
+                    buffered_event = event
+                    cleaned = watermark_filter.feed(base64.b64decode(content))
+                    if cleaned:
+                        yield _replace_audio_content(event, cleaned)
 
     async def asr(self, audio: bytes, filename: str = "audio.wav") -> str:
         # glm-asr 对格式敏感，优先 wav/mp3；按扩展名设置 MIME
@@ -214,4 +266,28 @@ class ZhipuClient:
             return (data.get("text") or "").strip()
 
 
+def _supports_thinking(model: str) -> bool:
+    return model.startswith(("glm-4.5", "glm-4.6", "glm-4.7", "glm-5"))
+
+
+def _retry_delay(response: httpx.Response, attempt: int) -> float:
+    retry_after = response.headers.get("Retry-After", "")
+    try:
+        return min(max(float(retry_after), 0.0), 4.0)
+    except ValueError:
+        return float(attempt + 1)
+
+
 zhipu = ZhipuClient()
+
+
+def _replace_audio_content(event: dict[str, Any], pcm: bytes) -> dict[str, Any]:
+    cleaned_event = dict(event)
+    choices = [dict(choice) for choice in event.get("choices") or []]
+    if not choices:
+        return cleaned_event
+    delta = dict(choices[0].get("delta") or {})
+    delta["content"] = base64.b64encode(pcm).decode("ascii")
+    choices[0]["delta"] = delta
+    cleaned_event["choices"] = choices
+    return cleaned_event

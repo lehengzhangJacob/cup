@@ -4,7 +4,7 @@ import re
 import pandas as pd
 from docx import Document
 from rag.config import (
-    GUIDELINE_DOCX, DATASET_DOCX, XLSX_FILE, WHITELIST_JSON,
+    GUIDELINE_DOCX, DATASET_DOCX, EXTRA_DOCS_DIR, XLSX_FILE, WHITELIST_JSON,
     MAX_CHUNK_CHARS, CHUNK_OVERLAP
 )
 
@@ -219,6 +219,13 @@ def chunk_xlsx():
         content = row.get("attraction_content", "").strip()
         if not content:
             continue
+        # The source spreadsheet contains a mislabeled batch whose
+        # attraction_name is 灵山大佛 but whose body describes 嘉兴梅花洲.
+        # Requiring the canonical attraction or its parent area in the body
+        # prevents a valid-looking label from poisoning the vector index.
+        scenic_area = _area_of(attraction)
+        if attraction not in content and scenic_area not in content:
+            continue
         key = (attraction, content)
         if key in seen:
             continue
@@ -234,7 +241,7 @@ def chunk_xlsx():
                     "text": piece,
                     "metadata": {
                         "source": "xlsx",
-                        "scenic_area": _area_of(attraction),
+                        "scenic_area": scenic_area,
                         "attraction_name": attraction,
                         "section": section_title,
                     }
@@ -242,5 +249,62 @@ def chunk_xlsx():
     return chunks
 
 
+def chunk_extra_documents():
+    """Chunk administrator-uploaded DOCX/TXT/Markdown documents.
+
+    Uploaded files are intentionally kept outside the llm repository. Their
+    source filename and best-effort attraction metadata remain visible in
+    citations, while retrieval still falls back to full-corpus search when no
+    attraction can be inferred.
+    """
+    if not EXTRA_DOCS_DIR.exists():
+        return []
+    wl = _load_whitelist_full()
+    names = wl["names"]
+    aliases = wl["aliases"]
+    scenic_areas = set(wl.get("scenic_areas", []))
+    sub_to_area = wl.get("sub_to_area", {})
+    chunks = []
+    for path in sorted(EXTRA_DOCS_DIR.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in {".docx", ".txt", ".md"}:
+            continue
+        if path.suffix.lower() == ".docx":
+            paragraphs = [p.text.strip() for p in Document(path).paragraphs if p.text.strip()]
+        else:
+            paragraphs = [
+                line.strip()
+                for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                if line.strip()
+            ]
+        text = "\n".join(paragraphs)
+        if not text:
+            continue
+        matches = []
+        for name in sorted(names, key=len, reverse=True):
+            if name in text and not any(name in matched for matched in matches):
+                matches.append(name)
+        for alias, canonical in aliases.items():
+            if alias in text and canonical not in matches:
+                matches.append(canonical)
+        attraction = matches[0] if len(matches) == 1 else ""
+        if attraction in scenic_areas:
+            scenic_area = attraction
+        else:
+            scenic_area = sub_to_area.get(attraction, "")
+        for piece in _split_long_text(text):
+            chunks.append(
+                {
+                    "text": piece,
+                    "metadata": {
+                        "source": f"upload/{path.name}",
+                        "scenic_area": scenic_area,
+                        "attraction_name": attraction,
+                        "section": path.stem,
+                    },
+                }
+            )
+    return chunks
+
+
 def load_all_chunks():
-    return chunk_guideline() + chunk_dataset() + chunk_xlsx()
+    return chunk_guideline() + chunk_dataset() + chunk_xlsx() + chunk_extra_documents()

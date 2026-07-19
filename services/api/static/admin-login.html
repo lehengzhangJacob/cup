@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>管理员登录 · 灵山运营中心</title>
+  <style>
+    :root { --ink:#17342d; --muted:#688078; --line:#d6e5de; --jade:#16836f; --gold:#d1a44c; }
+    * { box-sizing:border-box; }
+    body {
+      min-height:100vh; margin:0; display:grid; place-items:center; padding:22px;
+      color:var(--ink); font:14px/1.55 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+      background:
+        radial-gradient(700px 420px at 15% 8%,rgba(209,164,76,.19),transparent 55%),
+        linear-gradient(145deg,#0f3d33,#176b5a 58%,#0d3028);
+    }
+    .login-card { width:min(420px,100%); padding:34px; border-radius:20px; background:#f9fcfa; box-shadow:0 24px 70px rgba(0,0,0,.28); }
+    .brand { display:flex; align-items:center; gap:13px; margin-bottom:26px; }
+    .seal { width:50px; height:50px; display:grid; place-items:center; border-radius:50%; color:white; font:600 21px serif; background:linear-gradient(145deg,var(--jade),#0f6655); box-shadow:0 7px 18px rgba(22,131,111,.28); }
+    h1 { margin:0; font:600 23px/1.2 serif; letter-spacing:.04em; }
+    .subtitle { margin-top:5px; color:var(--muted); font-size:13px; }
+    label { display:grid; gap:7px; margin-top:15px; color:var(--muted); }
+    input { width:100%; padding:12px 13px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:white; font:inherit; outline:none; }
+    input:focus { border-color:var(--jade); box-shadow:0 0 0 3px rgba(22,131,111,.12); }
+    button { width:100%; margin-top:22px; padding:12px; border:0; border-radius:10px; color:white; background:var(--jade); font:inherit; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.6; cursor:wait; }
+    .message { min-height:20px; margin-top:12px; color:#b34e47; text-align:center; font-size:13px; }
+    .security { margin:18px 0 0; padding-top:15px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; text-align:center; }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <div class="brand">
+      <div class="seal">灵</div>
+      <div><h1>灵山运营中心</h1><div class="subtitle">景区 AI 数字人管理后台</div></div>
+    </div>
+    <form id="loginForm">
+      <label>管理员账号<input id="username" name="username" autocomplete="username" required autofocus /></label>
+      <label>登录密码<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+      <button id="submit" type="submit">安全登录</button>
+      <div class="message" id="message" role="alert" aria-live="polite"></div>
+    </form>
+    <p class="security">独立 HTTPS 管理端口 · 登录状态仅保存在 HttpOnly 安全 Cookie</p>
+  </main>
+  <script>
+    const form = document.getElementById("loginForm");
+    const button = document.getElementById("submit");
+    const message = document.getElementById("message");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      button.textContent = "验证中…";
+      message.textContent = "";
+      try {
+        const response = await fetch("/v1/admin/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "登录失败");
+        location.replace("/admin");
+      } catch (error) {
+        message.textContent = String(error.message || error);
+        document.getElementById("password").select();
+      } finally {
+        button.disabled = false;
+        button.textContent = "安全登录";
+      }
+    });
+  </script>
+</body>
+</html>
