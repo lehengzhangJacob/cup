@@ -17,7 +17,7 @@ from .config import DATA_DIR, LOG_DB, TOURISM_DATASET_PATH
 
 _XML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _CELL_RE = re.compile(r"([A-Z]+)")
-_CACHE_VERSION = 1
+_CACHE_VERSION = 2
 TOURISM_COLUMNS = (
     "tourist_id",
     "user_nickname",
@@ -339,7 +339,7 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     age_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     spend_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     attraction_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
-    lingshan_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    scenic_samples: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     correlations = {
         "总消费": _Correlation(),
         "停留时长": _Correlation(),
@@ -380,9 +380,11 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         type_stats[attraction_type][1] += score
         attraction_stats[attraction][0] += 1
         attraction_stats[attraction][1] += score
-        if "灵山" in attraction:
-            lingshan_stats[attraction][0] += 1
-            lingshan_stats[attraction][1] += score
+        # The public dataset includes records for both competition destinations.
+        # Keep this scoped card separate from the overall 100+ scenic attractions.
+        if any(keyword in attraction for keyword in ("灵山", "拈花湾")):
+            scenic_samples[attraction][0] += 1
+            scenic_samples[attraction][1] += score
 
         correlations["总消费"].add(total_cost, score)
         correlations["停留时长"].add(float(row.get("stay_duration") or 0), score)
@@ -447,7 +449,7 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
             spend_stats,
             ["300元以下", "300–799元", "800–1499元", "1500元以上"],
         ),
-        "lingshan_samples": series(lingshan_stats),
+        "scenic_samples": series(scenic_samples),
         "top_attractions": top_attractions,
         "correlations": [
             {"name": name, "value": tracker.value()}

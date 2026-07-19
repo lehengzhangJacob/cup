@@ -118,6 +118,16 @@ def test_query_is_backward_compatible_and_returns_citations():
     assert pipeline.query("灵山大佛多高？") == "灵山大佛通高88米。"
 
 
+def test_warmup_only_runs_retrieval():
+    pipeline, retriever, client, _ = make_pipeline()
+
+    result = pipeline.warmup()
+
+    assert result["ready"] is True
+    assert retriever.queries == ["灵山胜境"]
+    assert client.completions.calls == []
+
+
 def test_follow_up_uses_history_for_retrieval_and_prompt():
     pipeline, retriever, client, _ = make_pipeline()
     pipeline.query("介绍一下灵山大佛", session_id="s1")
@@ -172,11 +182,16 @@ def test_local_route_uses_local_client_and_model():
     assert local_client.completions.calls[0]["model"].endswith("Qwen2-7B-Instruct")
 
 
-def test_cloud_glm_disables_thinking():
+def test_cloud_flash_uses_low_latency_default():
     pipeline, _, client, _ = make_pipeline()
 
     pipeline.query_result("灵山大佛多高？", model_route="cloud")
 
-    assert client.completions.calls[0]["extra_body"] == {
-        "thinking": {"type": "disabled"}
+    assert client.completions.calls[0]["model"] == "glm-4-flash-250414"
+    assert "extra_body" not in client.completions.calls[0]
+
+
+def test_cloud_thinking_model_is_explicitly_disabled():
+    assert RAGPipeline._completion_extras("cloud", "glm-4.5-flash") == {
+        "extra_body": {"thinking": {"type": "disabled"}}
     }

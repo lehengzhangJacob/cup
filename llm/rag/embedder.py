@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+import time
 from multiprocessing.connection import Client
 
 import numpy as np
@@ -12,6 +13,10 @@ from rag.config import (
     EMBED_SOCKET,
     EMBED_STATUS_FILE,
 )
+
+
+_CONNECT_RETRY_ATTEMPTS = 21
+_CONNECT_RETRY_INTERVAL_SECONDS = 0.1
 
 
 class Embedder:
@@ -76,10 +81,7 @@ class Embedder:
         return None
 
     def _remote_encode(self, texts: list) -> np.ndarray:
-        try:
-            connection = Client(str(EMBED_SOCKET), family="AF_UNIX")
-        except OSError as exc:
-            raise RuntimeError("RAG embedding coordinator is unavailable") from exc
+        connection = self._connect_remote()
         try:
             connection.send({"command": "encode", "texts": list(texts)})
             if not connection.poll(EMBED_REQUEST_TIMEOUT_SECONDS):
@@ -95,6 +97,18 @@ class Embedder:
         if not response.get("ok"):
             raise RuntimeError(response.get("error") or "RAG embedding failed")
         return np.asarray(response["vectors"], dtype=np.float32)
+
+    @staticmethod
+    def _connect_remote():
+        last_error: OSError | None = None
+        for attempt in range(_CONNECT_RETRY_ATTEMPTS):
+            try:
+                return Client(str(EMBED_SOCKET), family="AF_UNIX")
+            except OSError as exc:
+                last_error = exc
+                if attempt + 1 < _CONNECT_RETRY_ATTEMPTS:
+                    time.sleep(_CONNECT_RETRY_INTERVAL_SECONDS)
+        raise RuntimeError("RAG embedding coordinator is unavailable") from last_error
 
     def _refresh_remote_status(self, fallback: dict) -> dict:
         try:

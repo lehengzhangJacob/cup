@@ -48,8 +48,9 @@ if [[ "$turn_key_ready" != "$turn_token_ready" ]]; then
 fi
 
 # One loopback RAG process owns BGE-M3/FAISS and all conversation sessions.
-# The four public/admin API listeners share it over HTTP.
-RAG_RESTART="${RAG_RESTART:-true}" bash "$ROOT/deploy/start_rag.sh"
+# The four public/admin API listeners share it over HTTP. API listener recovery
+# must not bounce the independent RAG coordinator unless explicitly requested.
+RAG_RESTART="${RAG_RESTART:-false}" bash "$ROOT/deploy/start_rag.sh"
 
 # The local OpenAI-compatible server starts without loading model weights.
 # Qwen2-7B is loaded only after the local route is selected, then unloaded idle.

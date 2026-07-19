@@ -91,6 +91,15 @@ def create_app(
     async def stats(request: Request):
         return pipeline(request).stats()
 
+    @app.post("/v1/warmup")
+    async def warmup(request: Request):
+        try:
+            result = await asyncio.to_thread(pipeline(request).warmup)
+        except Exception as exc:
+            logger.exception("RAG embedding warmup failed")
+            raise HTTPException(503, f"RAG warmup failed: {exc}") from exc
+        return {"ok": True, **result}
+
     @app.get("/v1/model-routes")
     async def model_routes():
         health_url = f"{LOCAL_LLM_BASE_URL.removesuffix('/v1')}/health"

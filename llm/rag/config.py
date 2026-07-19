@@ -46,7 +46,7 @@ EMBED_GPU_CANDIDATES = tuple(
 )
 EMBED_GPU_MIN_FREE_MB = int(os.getenv("RAG_EMBED_GPU_MIN_FREE_MB", "2048"))
 EMBED_GPU_IDLE_SECONDS = float(
-    os.getenv("RAG_EMBED_GPU_IDLE_SECONDS", "10")
+    os.getenv("RAG_EMBED_GPU_IDLE_SECONDS", "180")
 )
 EMBED_REQUEST_TIMEOUT_SECONDS = float(
     os.getenv("RAG_EMBED_REQUEST_TIMEOUT_SECONDS", "30")
@@ -55,12 +55,12 @@ LLM_BASE_URL = os.getenv(
     "RAG_LLM_BASE_URL",
     "https://open.bigmodel.cn/api/paas/v4/",
 ).rstrip("/")
-LLM_MODEL = os.getenv("RAG_LLM_MODEL", "glm-4.5-flash").strip()
+LLM_MODEL = os.getenv("RAG_LLM_MODEL", "glm-4-flash-250414").strip()
 LLM_FALLBACK_MODELS = tuple(
     model.strip()
     for model in os.getenv(
         "RAG_LLM_FALLBACK_MODELS",
-        "glm-4-flash-250414,glm-4-flash",
+        "glm-4-flash",
     ).split(",")
     if model.strip()
 )

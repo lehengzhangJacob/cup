@@ -476,6 +476,25 @@
     }
     #live2dCanvas, #liveTalkingVideo, #xmovMount { filter: drop-shadow(0 24px 20px rgba(31, 54, 41, .16)); }
     #liveTalkingVideo { background: transparent; }
+    .avatar-reaction {
+      position: absolute;
+      z-index: 6;
+      left: 16px;
+      bottom: 16px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(21, 52, 44, .78);
+      color: #fffdf7;
+      font-size: 12px;
+      letter-spacing: .04em;
+      box-shadow: 0 6px 16px rgba(14, 37, 31, .18);
+    }
+    .model-wrap[data-reaction="care"] .avatar-reaction,
+    .model-wrap[data-reaction="comfort"] .avatar-reaction { background: rgba(105, 73, 67, .86); }
+    .model-wrap[data-reaction="celebrate"] .avatar-reaction,
+    .model-wrap[data-reaction="engage"] .avatar-reaction { background: rgba(159, 101, 34, .86); }
+    .model-wrap[data-reaction="care"], .model-wrap[data-reaction="comfort"] { box-shadow: inset 0 0 0 2px rgba(173, 125, 106, .3); }
+    .model-wrap[data-reaction="celebrate"], .model-wrap[data-reaction="engage"] { box-shadow: inset 0 0 0 2px rgba(190, 139, 56, .32); }
     .model-loading { color: var(--pine-deep); background: rgba(245, 240, 230, .5); }
     .loader-ring { border-color: rgba(31, 90, 79, .2); border-top-color: var(--cinnabar); }
     .stage-footer {
@@ -604,7 +623,6 @@
       transition: background .16s ease, color .16s ease;
     }
     .file-action:hover { color: #fffaf1; background: var(--pine); }
-    .audio-action { display: block; margin-top: 8px; text-align: center; }
     .advanced-settings { margin-top: 14px; border-top: 1px dashed var(--line-soft); }
     .advanced-settings summary { padding: 10px 0 2px; color: var(--ink-soft); cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
     .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
@@ -666,6 +684,34 @@
     .emotion-consent input { width:auto; flex:0 0 auto; }
     .hint { color: var(--ink-soft); font-size: 12px; line-height: 1.65; }
     .rec-dot { background: var(--cinnabar); }
+    .vision-result {
+      margin-top: 12px;
+      padding: 11px;
+      border: 1px solid var(--line-soft);
+      background: rgba(250, 247, 239, .68);
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+    .vision-result strong { color: var(--pine-deep); }
+    .vision-candidates { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .vision-candidate {
+      padding: 7px 9px;
+      border: 1px solid rgba(38, 88, 75, .3);
+      background: #fffdf7;
+      color: var(--pine-deep);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .vision-candidate:hover { border-color: var(--pine); background: #f1f5ee; }
+    .qr-scanner {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+      padding: 9px;
+      border: 1px dashed rgba(38, 88, 75, .45);
+      background: rgba(255,255,255,.48);
+    }
+    .qr-scanner video { display: block; width: min(100%, 300px); max-height: 190px; margin: 8px auto; background: #111; object-fit: cover; }
+    .qr-scanner-head { display:flex; justify-content:space-between; gap:8px; align-items:center; font-size:12px; color:var(--ink-soft); }
     @media (max-width: 1100px) {
       main { grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr); }
     }
@@ -736,6 +782,7 @@
         <audio id="liveTalkingAudio" autoplay></audio>
         <div id="xmovMount" aria-label="灵曦数字人"></div>
         <canvas id="live2dCanvas" aria-label="灵曦数字人"></canvas>
+        <div id="avatarReaction" class="avatar-reaction" aria-live="polite">灵曦 · 自然讲解</div>
         <div class="model-loading" id="modelLoading">
           <span class="loader-ring"></span>
           <span>灵曦正在准备…</span>
@@ -771,10 +818,6 @@
           <button id="ask">开始问答</button>
           <button id="voice" class="secondary">点击说话</button>
         </div>
-        <label class="file-action audio-action">
-          上传语音
-          <input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.webm,.m4a" style="display:none" />
-        </label>
       </div>
 
       <div class="tool-panel" data-tool-panel="route" hidden>
@@ -797,10 +840,11 @@
         <label class="file-action photo-action">拍照识景
           <input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" />
         </label>
+        <div id="visionResult" class="vision-result" hidden></div>
       </div>
 
       <div class="tool-panel" data-tool-panel="location" hidden>
-        <p class="tool-description">可使用当前位置、景点码或手动选择，开始附近景点讲解。</p>
+        <p class="tool-description">可使用当前位置、摄像头扫码、景点码或手动选择，开始附近景点讲解。</p>
         <button id="locate" class="route-action secondary" type="button">使用当前位置</button>
         <div class="location-panel" id="locationPanel">
           <div class="location-head">
@@ -812,6 +856,7 @@
             <div class="location-method">
               <label for="locationCode">景点点位码</label>
               <input id="locationCode" placeholder="例如 LS-006" autocomplete="off" />
+              <button id="scanQr" class="secondary" type="button">摄像头扫码</button>
               <button id="locateQr" class="secondary" type="button">确认</button>
             </div>
             <div class="location-method">
@@ -834,6 +879,10 @@
                 <option>五印坛城</option>
               </select>
               <button id="locateManual" class="secondary" type="button">确认</button>
+            </div>
+            <div id="qrScanner" class="qr-scanner" hidden>
+              <div class="qr-scanner-head"><span>将景点二维码置于取景框内</span><button id="stopQrScan" class="secondary" type="button">取消扫码</button></div>
+              <video id="qrVideo" autoplay playsinline muted></video>
             </div>
           </div>
           <button id="useLocationCandidate" type="button" hidden>确认候选点并开始讲解</button>
@@ -861,6 +910,13 @@
           <div>
             <label>服务地址</label>
             <input id="base" value="" placeholder="默认当前站点" />
+          </div>
+          <div>
+            <label>数字人呈现</label>
+            <select id="avatarMode">
+              <option value="realtime">拟真口型模式</option>
+              <option value="expressive">情感表情模式（Live2D）</option>
+            </select>
           </div>
           <label class="emotion-consent"><input id="emotionConsent" type="checkbox" /> 允许本次语音使用原声与 ASR 文本分析情绪；原音频默认在分析后删除</label>
         </div>
@@ -903,6 +959,14 @@
       connecting: false,
       avatarId: null,
     };
+    const DEFAULT_AVATAR_REACTION = {
+      id: "calm", label: "自然讲解", expression: "natural", voice_speed: 1.0,
+      tone: "自然、清晰", prefix: "",
+    };
+    let currentAvatarReaction = { ...DEFAULT_AVATAR_REACTION };
+    let avatarMode = localStorage.getItem("lingshan-avatar-mode") || "realtime";
+    if (avatarMode !== "expressive") avatarMode = "realtime";
+    $("avatarMode").value = avatarMode;
     let liveTalkingStartPromise = null;
     let liveTalkingServiceStartPromise = null;
 
@@ -1034,6 +1098,10 @@
 
 
     function activateLiveTalkingView() {
+      if (avatarMode === "expressive") {
+        fallbackToLive2D("情感表情模式已启用");
+        return;
+      }
       document.getElementById("modelLoading").classList.add("is-hidden");
       document.getElementById("liveTalkingVideo").classList.add("is-active");
       document.getElementById("xmovMount").classList.remove("is-active");
@@ -1078,6 +1146,11 @@
     }
 
     async function bootLiveTalking() {
+      if (avatarMode === "expressive") {
+        fallbackToLive2D("情感表情模式已启用");
+        await bootLive2D();
+        return false;
+      }
       if (liveTalkingState.ready || liveTalkingState.connecting) return liveTalkingState.ready;
       liveTalkingState.connecting = true;
       try {
@@ -1218,6 +1291,11 @@
     }
 
     async function ensureLiveTalkingOnDemand() {
+      if (avatarMode === "expressive") {
+        fallbackToLive2D("情感表情模式已启用");
+        await bootLive2D();
+        return false;
+      }
       if (!liveTalkingStartPromise) {
         liveTalkingStartPromise = (async () => {
           $("avatarHint").textContent = "灵曦正在准备…";
@@ -1414,6 +1492,54 @@
       setPressed(expressionButtons, mapped, "expression");
     }
 
+    function applyAvatarReaction(reaction) {
+      currentAvatarReaction = { ...DEFAULT_AVATAR_REACTION, ...(reaction || {}) };
+      setEmotion(currentAvatarReaction.expression || "natural");
+      $("modelWrap").dataset.reaction = currentAvatarReaction.id || "calm";
+      $("avatarReaction").textContent = "灵曦 · " + (currentAvatarReaction.label || "自然讲解");
+      $("avatarReaction").title = "回应方式：" + (currentAvatarReaction.tone || "自然、清晰");
+    }
+
+    async function watchCompletedEmotion(eventId, ownerSessionId, interactionToken) {
+      if (!eventId || !ownerSessionId) return;
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        if (interactionToken !== speechToken) return;
+        await new Promise(resolve => setTimeout(resolve, attempt ? 1500 : 900));
+        if (interactionToken !== speechToken) return;
+        try {
+          const response = await fetch(
+            base() + "/v1/emotion/reaction/" + encodeURIComponent(eventId)
+            + "?session_id=" + encodeURIComponent(ownerSessionId),
+            { cache: "no-store" },
+          );
+          if (!response.ok) return;
+          const data = await response.json();
+          if (data.status === "completed" && data.avatar_reaction) {
+            applyAvatarReaction(data.avatar_reaction);
+            return;
+          }
+          if (data.status === "failed") return;
+        } catch (error) {
+          console.debug("emotion reaction polling skipped", error);
+          return;
+        }
+      }
+    }
+
+    $("avatarMode").addEventListener("change", async () => {
+      avatarMode = $("avatarMode").value === "expressive" ? "expressive" : "realtime";
+      localStorage.setItem("lingshan-avatar-mode", avatarMode);
+      stopSpeech();
+      if (avatarMode === "expressive") {
+        fallbackToLive2D("情感表情模式已启用");
+        await bootLive2D();
+        $("status").textContent = "已切换为情感表情模式：表情、口型与回应语速会联动";
+      } else {
+        $("status").textContent = "已切换为拟真口型模式，正在连接数字人…";
+        void ensureLiveTalkingOnDemand();
+      }
+    });
+
     function stripMeta(text) {
       let emotionVal = null;
       // Metadata arrives token-by-token. Stop exposing text as soon as a JSON
@@ -1448,8 +1574,16 @@
       return samples;
     }
 
-    function createPcmSpeechPipeline(interactionStartedAt = performance.now()) {
+    function normalizeSpeechText(text) {
+      return String(text || "")
+        .replace(/\s*(?:→|⇒|⟶|➜|➡|--?>)\s*/g, "，接着前往")
+        .replace(/^\s*[，、]\s*/, "")
+        .trim();
+    }
+
+    function createPcmSpeechPipeline(interactionStartedAt = performance.now(), options = {}) {
       const myToken = speechToken;
+      const voiceSpeed = Math.max(0.8, Math.min(1.2, Number(options.reaction?.voice_speed) || 1.0));
       const queue = [];
       let finished = false;
       let cancelled = false;
@@ -1468,7 +1602,7 @@
       }
 
       function enqueue(text) {
-        const segment = String(text || "").trim();
+        const segment = normalizeSpeechText(text);
         if (!segment || finished || cancelled) return;
         queue.push(segment);
         if (!started) $("status").textContent = "首句已生成，准备语音…";
@@ -1559,7 +1693,7 @@
           const response = await fetch(base() + "/v1/tts/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, voice: "female", speed: 1.0 }),
+            body: JSON.stringify({ text, voice: "female", speed: voiceSpeed }),
             signal: controller.signal
           });
           if (!response.ok) throw new Error(await response.text());
@@ -1642,9 +1776,10 @@
     }
 
 
-    function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now(), serverDriven = false) {
+    function createLiveTalkingSpeechPipeline(interactionStartedAt = performance.now(), serverDriven = false, reaction = null) {
       const myToken = speechToken;
       const sessionId = liveTalkingState.sessionId;
+      const voiceSpeed = Math.max(0.8, Math.min(1.2, Number(reaction?.voice_speed) || 1.0));
       let sent = 0;
       let finished = false;
       let cancelled = false;
@@ -1726,7 +1861,7 @@
       }
 
       function enqueue(text) {
-        const segment = String(text || "").replace(/\s+/g, " ").trim();
+        const segment = normalizeSpeechText(text).replace(/\s+/g, " ").trim();
         if (!segment || finished || cancelled || myToken !== speechToken) return;
         ensureLiveTalkingPlayback();
         const interrupt = sent === 0;
@@ -1742,6 +1877,7 @@
           session_id: sessionId,
           text: segment,
           interrupt,
+          speed: voiceSpeed,
         })).catch(error => {
           console.error(error);
           settle("LiveTalking 播报失败：" + String(error.message || error));
@@ -1800,7 +1936,7 @@
       }
 
       function enqueue(text) {
-        const segment = String(text || "").replace(/\s+/g, " ").trim();
+        const segment = normalizeSpeechText(text).replace(/\s+/g, " ").trim();
         if (!segment || finished || cancelled || myToken !== speechToken) return;
         try {
           xmovState.interactionStartedAt = interactionStartedAt;
@@ -1871,18 +2007,18 @@
     }
 
     function createSpeechPipeline(interactionStartedAt = performance.now(), options = {}) {
-      if (liveTalkingState.ready && liveTalkingState.sessionId) {
+      if (avatarMode !== "expressive" && liveTalkingState.ready && liveTalkingState.sessionId) {
         activateLiveTalkingView();
-        return createLiveTalkingSpeechPipeline(interactionStartedAt, !!options.serverDriven);
+        return createLiveTalkingSpeechPipeline(interactionStartedAt, !!options.serverDriven, options.reaction);
       }
       if (xmovState.ready && xmovState.avatar) {
         activateXmovView();
         return createXmovSpeechPipeline(interactionStartedAt);
       }
-      return createPcmSpeechPipeline(interactionStartedAt);
+      return createPcmSpeechPipeline(interactionStartedAt, options);
     }
 
-    function createDeferredSpeechPipeline(interactionStartedAt, readyPromise) {
+    function createDeferredSpeechPipeline(interactionStartedAt, readyPromise, options = {}) {
       const queuedSegments = [];
       let delegate = null;
       let finished = false;
@@ -1925,7 +2061,7 @@
         .catch(() => false)
         .then(() => {
           if (cancelled) return;
-          delegate = createSpeechPipeline(interactionStartedAt);
+          delegate = createSpeechPipeline(interactionStartedAt, options);
           currentSpeechPipeline = pipeline;
           queuedSegments.splice(0).forEach(segment => delegate.enqueue(segment));
           if (finished) delegate.finish();
@@ -1946,19 +2082,19 @@
         console.error(error);
         fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
       }
-      const pipeline = createSpeechPipeline(interactionStartedAt);
+      const pipeline = createSpeechPipeline(interactionStartedAt, { reaction: currentAvatarReaction });
       pipeline.enqueue(text);
       pipeline.finish();
       return pipeline.done;
     }
 
-    async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null) {
+    async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null, spotId = null) {
       if (!message) return;
       stopSpeech("正在连接数字人并思考…");
       const btn = $("ask");
       btn.disabled = true;
       $("log").textContent = "";
-      setEmotion("calm");
+      applyAvatarReaction(DEFAULT_AVATAR_REACTION);
 
       const liveTalkingReadyPromise = ensureLiveTalkingOnDemand().catch(error => {
         console.error(error);
@@ -1968,16 +2104,20 @@
       $("status").textContent = "思考中…";
 
       const interactionToken = speechToken;
+      if (emotionEventId && sessionId) {
+        void watchCompletedEmotion(emotionEventId, sessionId, interactionToken);
+      }
       const serverDrivenSpeech = !!(liveTalkingState.ready && liveTalkingState.sessionId);
       let pipeline = null;
       let speechCursor = 0;
+      let activeReaction = currentAvatarReaction;
 
       function speechPipeline() {
         if (interactionToken !== speechToken) return null;
         if (!pipeline) {
           pipeline = liveTalkingState.ready || xmovState.ready
-            ? createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech })
-            : createDeferredSpeechPipeline(interactionStartedAt, liveTalkingReadyPromise);
+            ? createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech, reaction: activeReaction })
+            : createDeferredSpeechPipeline(interactionStartedAt, liveTalkingReadyPromise, { reaction: activeReaction });
         }
         return pipeline;
       }
@@ -2024,6 +2164,7 @@
             message,
             interest: $("interest").value,
             session_id: sessionId,
+            spot_id: spotId,
             livetalking_session_id: serverDrivenSpeech ? liveTalkingState.sessionId : null,
             model_route: $("modelRoute").value,
             input_mode: inputMode,
@@ -2047,6 +2188,10 @@
             const ev = JSON.parse(line.slice(6));
             if (ev.type === "meta") {
               sessionId = ev.session_id;
+              if (ev.avatar_reaction) {
+                activeReaction = ev.avatar_reaction;
+                applyAvatarReaction(activeReaction);
+              }
               $("status").textContent = "引用: " + (ev.citations || []).map(c => c.title).slice(0,3).join(" / ");
             } else if (ev.type === "delta") {
               full += ev.content;
@@ -2135,78 +2280,22 @@
       $("voice").disabled = true;
     }
 
-    function downsampleTo16k(float32, inputRate) {
-      if (inputRate === 16000) return float32;
-      const ratio = inputRate / 16000;
-      const newLen = Math.max(1, Math.floor(float32.length / ratio));
-      const out = new Float32Array(newLen);
-      for (let i = 0; i < newLen; i++) out[i] = float32[Math.floor(i * ratio)] || 0;
-      return out;
-    }
-
-    function encodeWavMono16k(float32, sampleRate) {
-      const data = downsampleTo16k(float32, sampleRate);
-      const pcm = new Int16Array(data.length);
-      let peak = 0;
-      for (let i = 0; i < data.length; i++) {
-        const s = Math.max(-1, Math.min(1, data[i]));
-        peak = Math.max(peak, Math.abs(s));
-        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-      }
-      if (peak > 0.001 && peak < 0.25) {
-        const gain = Math.min(4, 0.6 / peak);
-        for (let i = 0; i < pcm.length; i++) {
-          pcm[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * gain)));
-        }
-      }
-      const buffer = new ArrayBuffer(44 + pcm.length * 2);
-      const view = new DataView(buffer);
-      const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
-      writeStr(0, "RIFF");
-      view.setUint32(4, 36 + pcm.length * 2, true);
-      writeStr(8, "WAVE");
-      writeStr(12, "fmt ");
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true);
-      view.setUint32(24, 16000, true);
-      view.setUint32(28, 32000, true);
-      view.setUint16(32, 2, true);
-      view.setUint16(34, 16, true);
-      writeStr(36, "data");
-      view.setUint32(40, pcm.length * 2, true);
-      let p = 44;
-      for (let i = 0; i < pcm.length; i++, p += 2) view.setInt16(p, pcm[i], true);
-      let acc = 0;
-      for (let i = 0; i < pcm.length; i++) acc += pcm[i] * pcm[i];
-      const rms = Math.sqrt(acc / Math.max(1, pcm.length));
-      return { blob: new Blob([buffer], { type: "audio/wav" }), rms, duration: pcm.length / 16000 };
-    }
-
-    async function blobToWav16k(blob) {
-      const ab = await blob.arrayBuffer();
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      await ctx.resume();
-      const audioBuf = await ctx.decodeAudioData(ab.slice(0));
-      let mono = audioBuf.getChannelData(0);
-      if (audioBuf.numberOfChannels > 1) {
-        const ch1 = audioBuf.getChannelData(1);
-        mono = new Float32Array(mono.length);
-        for (let i = 0; i < mono.length; i++) mono[i] = (audioBuf.getChannelData(0)[i] + ch1[i]) * 0.5;
-      }
-      const encoded = encodeWavMono16k(mono, audioBuf.sampleRate);
-      await ctx.close();
-      return encoded;
+    function recordingFilename(blob) {
+      const type = String(blob?.type || "").toLowerCase();
+      if (type.includes("mp4") || type.includes("m4a")) return "speech.m4a";
+      if (type.includes("ogg")) return "speech.ogg";
+      if (type.includes("mpeg")) return "speech.mp3";
+      return "speech.webm";
     }
 
     async function recognizeBlob(blob, filename, interactionStartedAt = performance.now()) {
       $("status").innerHTML = '<span class="rec-dot"></span>处理音频…';
-      const enc = await blobToWav16k(blob);
-      if (enc.duration < 0.6) throw new Error("录音太短，请至少说 1 秒");
-      if (enc.rms < 80) throw new Error("几乎没声音，请靠近麦克风再说一次");
+      if (!blob || blob.size < 512) throw new Error("未采集到有效录音，请重新说一次");
       $("status").innerHTML = '<span class="rec-dot"></span>识别中…';
       const fd = new FormData();
-      fd.append("file", enc.blob, "speech.wav");
+      // Let the server's ffmpeg normalizer handle the original MediaRecorder
+      // container. This avoids browser-specific decodeAudioData failures.
+      fd.append("file", blob, filename || recordingFilename(blob));
       if (sessionId) fd.append("session_id", sessionId);
       fd.append("emotion_consent", String($("emotionConsent").checked));
       const r = await fetch(base() + "/v1/asr", { method: "POST", body: fd });
@@ -2258,7 +2347,7 @@
             return;
           }
           const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-          await recognizeBlob(blob, "speech.webm", recStoppedAt || performance.now());
+          await recognizeBlob(blob, recordingFilename(blob), recStoppedAt || performance.now());
         } catch (err) {
           $("status").textContent = String(err.message || err);
         }
@@ -2289,18 +2378,39 @@
       });
     }
 
-    $("audioFile").addEventListener("change", async (e) => {
-      ensureLiveTalkingPlayback();
-      const f = e.target.files && e.target.files[0];
-      if (!f) return;
-      try {
-        await recognizeBlob(f, f.name || "audio.wav");
-      } catch (err) {
-        $("status").textContent = String(err.message || err);
-      } finally {
-        e.target.value = "";
+    function renderVisionCandidates(observation) {
+      const panel = $("visionResult");
+      const candidates = observation?.candidates || [];
+      panel.replaceChildren();
+      panel.hidden = false;
+      const title = document.createElement("strong");
+      const level = { high: "高", medium: "中", low: "低" }[observation?.confidence] || "低";
+      title.textContent = `视觉识别置信度：${level}`;
+      panel.appendChild(title);
+      const message = document.createElement("div");
+      message.textContent = candidates.length
+        ? (observation?.requires_confirmation ? "请选择眼前的景点，确认后将按资料库进行准确讲解。" : "已匹配资料库景点；也可点击候选进入深度讲解。")
+        : "未能可靠匹配资料库景点。建议换一个角度拍摄，或使用定位功能选择景点。";
+      panel.appendChild(message);
+      if (!candidates.length) return;
+      const buttons = document.createElement("div");
+      buttons.className = "vision-candidates";
+      for (const candidate of candidates) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "vision-candidate";
+        button.textContent = `确认是${candidate.name}（${Math.round(Number(candidate.confidence || 0) * 100)}%）`;
+        button.title = candidate.evidence || "";
+        button.addEventListener("click", async () => {
+          const prompt = `请为我准确讲解${candidate.name}，并推荐接下来适合去哪里。`;
+          $("q").value = prompt;
+          selectToolPanel("chat");
+          await askText(prompt, performance.now(), "text", null, candidate.id);
+        });
+        buttons.appendChild(button);
       }
-    });
+      panel.appendChild(buttons);
+    }
 
     $("photoFile").addEventListener("change", async (event) => {
       const file = event.target.files && event.target.files[0];
@@ -2319,6 +2429,7 @@
         const data = await response.json();
         const parsed = stripMeta(data.answer || "");
         $("log").textContent = parsed.text;
+        renderVisionCandidates(data.observation);
         $("status").textContent = "识景完成 · 引用：" + (data.citations || []).map(x => x.title).slice(0, 3).join(" / ");
         if (parsed.emotion) setEmotion(parsed.emotion);
         void speak(parsed.text);
@@ -2349,12 +2460,111 @@
       return response.json();
     }
 
+    async function loadLocationOptions() {
+      try {
+        const response = await fetch(base() + "/v1/location/options", { cache: "no-store" });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const points = data.points || [];
+        const wifiNodes = data.wifi_nodes || [];
+        if (points.length) {
+          $("manualSpot").replaceChildren();
+          for (const point of points) {
+            const option = document.createElement("option");
+            option.value = point.spot_name;
+            option.textContent = `${point.scenic_area} · ${point.spot_name}`;
+            $("manualSpot").appendChild(option);
+          }
+        }
+        if (wifiNodes.length) {
+          $("wifiNode").replaceChildren();
+          for (const node of wifiNodes) {
+            const option = document.createElement("option");
+            option.value = node.code;
+            option.textContent = node.name;
+            $("wifiNode").appendChild(option);
+          }
+        }
+      } catch (error) {
+        console.warn("location point registry unavailable", error);
+      }
+    }
+
+    let qrStream = null;
+    let qrFrame = 0;
+    let qrScanActive = false;
+
+    function stopQrScanner() {
+      qrScanActive = false;
+      if (qrFrame) cancelAnimationFrame(qrFrame);
+      qrFrame = 0;
+      if (qrStream) qrStream.getTracks().forEach(track => track.stop());
+      qrStream = null;
+      const video = $("qrVideo");
+      video.srcObject = null;
+      $("qrScanner").hidden = true;
+    }
+
+    function pointCodeFromQr(rawValue) {
+      const raw = String(rawValue || "").trim();
+      try {
+        const url = new URL(raw);
+        const fromUrl = url.searchParams.get("spot") || url.searchParams.get("code");
+        if (fromUrl) return fromUrl.trim().toUpperCase();
+      } catch (_) {}
+      const match = raw.match(/(?:LS|NH)-(?:\d{3}|FO|FG|WY)/i);
+      return (match ? match[0] : raw).trim().toUpperCase();
+    }
+
+    async function startQrScanner() {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        showLocationState("摄像头扫码需要 HTTPS 与摄像头权限；请改为输入景点码。", "warning");
+        return;
+      }
+      if (!("BarcodeDetector" in window)) {
+        showLocationState("当前浏览器不支持原生二维码识别；请使用最新版 Chrome，或输入景点码。", "warning");
+        return;
+      }
+      stopQrScanner();
+      try {
+        const detector = new BarcodeDetector({ formats: ["qr_code"] });
+        qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        const video = $("qrVideo");
+        video.srcObject = qrStream;
+        $("qrScanner").hidden = false;
+        await video.play();
+        qrScanActive = true;
+        showLocationState("正在扫描景点二维码…", "warning");
+        const scan = async () => {
+          if (!qrScanActive) return;
+          try {
+            const codes = await detector.detect(video);
+            const raw = codes[0]?.rawValue;
+            if (raw) {
+              const code = pointCodeFromQr(raw);
+              stopQrScanner();
+              $("locationCode").value = code;
+              await handleLocationResult(await requestLocation({ mode: "qr", code }));
+              return;
+            }
+          } catch (error) {
+            console.debug("QR frame skipped", error);
+          }
+          qrFrame = requestAnimationFrame(scan);
+        };
+        qrFrame = requestAnimationFrame(scan);
+      } catch (error) {
+        stopQrScanner();
+        showLocationState("无法打开摄像头：" + String(error.message || error), "warning");
+      }
+    }
+
     async function startLocatedGuide(data) {
       const source = data.source_label ? `（${data.source_label}）` : "";
       const question = `我现在位于${data.spot_name}附近${source}，请介绍这个景点并告诉我接下来适合去哪里。`;
       $("q").value = question;
       $("status").textContent = `位置已确认：${data.spot_name}${source}`;
-      await askText(question);
+      await askText(question, performance.now(), "text", null, data.attraction_id || data.spot_id || null);
     }
 
     async function handleLocationResult(data) {
@@ -2428,6 +2638,12 @@
       catch (error) { showLocationState("二维码定位失败：" + String(error.message || error)); }
     });
 
+    $("scanQr").addEventListener("click", () => { void startQrScanner(); });
+    $("stopQrScan").addEventListener("click", () => {
+      stopQrScanner();
+      showLocationState("已取消扫码。可输入景点码或手动选择位置。", "warning");
+    });
+
     $("locateWifi").addEventListener("click", async () => {
       try { await handleLocationResult(await requestLocation({ mode: "wifi", code: $("wifiNode").value })); }
       catch (error) { showLocationState("Wi-Fi 定位失败：" + String(error.message || error)); }
@@ -2444,6 +2660,7 @@
       await handleLocationResult(confirmed);
     });
 
+    void loadLocationOptions();
     const qrSpotFromUrl = new URLSearchParams(location.search).get("spot");
     if (qrSpotFromUrl) {
       $("locationCode").value = qrSpotFromUrl;
@@ -2478,6 +2695,7 @@
         }
         renderFeedbackAttractions();
       } catch (error) {
+        $("visionResult").hidden = true;
         $("feedbackArea").innerHTML = '<option value="">景区加载失败</option>';
         $("status").textContent = "满意度景点目录加载失败：" + String(error.message || error);
       }
@@ -2542,6 +2760,28 @@
     document.addEventListener("visibilitychange", refreshLiveTalkingLease);
     window.setInterval(refreshLiveTalkingLease, 15000);
     void refreshLiveTalkingLease();
+
+    let lastRagWarmupAt = 0;
+    async function warmRagOnActivity() {
+      const now = Date.now();
+      if (now - lastRagWarmupAt < 120000) return;
+      lastRagWarmupAt = now;
+      try {
+        const response = await fetch(base() + "/v1/rag/warmup", {
+          method: "POST",
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(await response.text());
+      } catch (error) {
+        console.warn("RAG 后台预热失败，将在首次提问时重试", error);
+      }
+    }
+    document.addEventListener("pointerdown", warmRagOnActivity, { passive: true });
+    document.addEventListener("keydown", warmRagOnActivity, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void warmRagOnActivity();
+    });
+    void warmRagOnActivity();
 
     void refreshModelRoutes();
     $("modelLoading").querySelector("span:last-child").textContent = "灵曦正在准备…";

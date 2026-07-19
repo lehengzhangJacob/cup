@@ -55,8 +55,8 @@ TTL/LRU 存储，只保存完整成功的回答；流被取消或生成失败时
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
 | `RAG_EMBED_MODEL` | `BAAI/bge-m3` | 本地向量模型 |
-| `RAG_LLM_MODEL` | `glm-4.5-flash` | 云端生成模型 |
-| `RAG_LLM_FALLBACK_MODELS` | `glm-4-flash-250414,glm-4-flash` | 首 token 超时后的备用模型 |
+| `RAG_LLM_MODEL` | `glm-4-flash-250414` | 云端生成模型 |
+| `RAG_LLM_FALLBACK_MODELS` | `glm-4-flash` | 首 token 超时后的备用模型 |
 | `RAG_LLM_FIRST_TOKEN_TIMEOUT_SECONDS` | `2` | 云端模型首 token 超时秒数 |
 | `RAG_LLM_BASE_URL` | 智谱 OpenAI 兼容地址 | 云端接口地址 |
 | `GLM_API_KEY` / `ZHIPU_API_KEY` | 根目录 `softcup_glmkey` | 服务端密钥 |

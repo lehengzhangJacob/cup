@@ -57,6 +57,28 @@ def test_on_demand_embedder_calls_coordinator(monkeypatch):
     assert connection.closed is True
 
 
+def test_on_demand_embedder_retries_coordinator_connection(monkeypatch):
+    connection = FakeConnection(
+        {"ok": True, "vectors": np.ones((1, 4), dtype=np.float32)}
+    )
+    attempts = []
+
+    def connect(*_args, **_kwargs):
+        attempts.append(True)
+        if len(attempts) < 3:
+            raise OSError("socket is restarting")
+        return connection
+
+    monkeypatch.setattr(embedder_module, "EMBED_DEVICE", "on-demand")
+    monkeypatch.setattr(embedder_module, "Client", connect)
+    monkeypatch.setattr(embedder_module, "_CONNECT_RETRY_INTERVAL_SECONDS", 0)
+
+    vector = Embedder().encode_query("question")
+
+    assert vector.shape == (4,)
+    assert len(attempts) == 3
+
+
 def test_on_demand_status_checks_coordinator_pid(monkeypatch, tmp_path):
     status_file = tmp_path / "status.json"
     status_file.write_text(

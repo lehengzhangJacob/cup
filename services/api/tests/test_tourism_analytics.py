@@ -29,22 +29,24 @@ def test_historical_summary_keeps_scope_and_ordinal_distribution():
         [
             _row("U1", "灵山胜境", "历史文化", 4),
             _row("U1", "灵山大佛", "历史文化", 5),
+            _row("U2", "禅意小镇·拈花湾", "禅意小镇", 4),
             _row("U2", "自然公园", "自然公园", 3, age=55, total_cost=1600),
         ]
     )
 
-    assert result["rows"] == 3
+    assert result["rows"] == 4
     assert result["tourists"] == 2
-    assert result["attractions"] == 3
+    assert result["attractions"] == 4
     assert result["avg_satisfaction"] == 4.0
     assert [item["count"] for item in result["satisfaction_distribution"]] == [
         0,
         0,
         1,
-        1,
+        2,
         1,
     ]
-    assert {item["name"] for item in result["lingshan_samples"]} == {
+    assert {item["name"] for item in result["scenic_samples"]} == {
         "灵山胜境",
         "灵山大佛",
+        "禅意小镇·拈花湾",
     }

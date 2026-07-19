@@ -361,7 +361,8 @@ class EmotionAnalyzer:
                     [
                         EMOTION_PYTHON,
                         "-c",
-                        "from humanomni import model_init, mm_infer; import peft, torch",
+                        "from humanomni import model_init, mm_infer, "
+                        "emotion_probs_from_logits; import peft, torch",
                     ],
                     cwd=str(EMOTION_INFERENCE_SCRIPT.parent),
                     capture_output=True,
@@ -371,7 +372,7 @@ class EmotionAnalyzer:
                 if check.returncode != 0:
                     detail = (check.stderr or check.stdout).strip().splitlines()
                     reasons.append(
-                        "推理环境缺少 humanomni/peft："
+                        "推理环境缺少训练版 humanomni 七分类扩展/peft："
                         + (detail[-1][:300] if detail else "import failed")
                     )
             except (OSError, subprocess.TimeoutExpired) as exc:
@@ -389,7 +390,9 @@ class EmotionAnalyzer:
             "base_model_exists": EMOTION_BASE_MODEL_PATH.exists(),
             "script_exists": EMOTION_INFERENCE_SCRIPT.exists(),
             "gpu": EMOTION_GPU,
-            "detail": "；".join(reasons) if reasons else "HumanOmni 音视频推理已配置",
+            "detail": "；".join(reasons)
+            if reasons
+            else "HumanOmni 训练版七分类音视频推理已配置",
         }
         self._status_cache = (time.monotonic(), dict(result))
         return result

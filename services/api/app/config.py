@@ -49,7 +49,7 @@ EMOTION_PYTHON = os.getenv(
     "EMOTION_PYTHON",
     "/home/gmn/.conda/envs/softcup/bin/python",
 ).strip()
-EMOTION_GPU = os.getenv("EMOTION_GPU", "3").strip()
+EMOTION_GPU = os.getenv("EMOTION_GPU", "2").strip()
 EMOTION_TIMEOUT_SECONDS = max(
     15,
     int(os.getenv("EMOTION_TIMEOUT_SECONDS", "180")),

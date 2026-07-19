@@ -19,6 +19,7 @@ EMBED_DEVICE="${RAG_EMBED_DEVICE:-on-demand}"
 PID_FILE="$ROOT/deploy/rag.pid"
 LOG_FILE="$ROOT/deploy/rag.log"
 RESTART="${RAG_RESTART:-false}"
+EMBED_RESTART="${RAG_EMBED_RESTART:-$RESTART}"
 WATCHDOG_CHILD="${RAG_WATCHDOG_CHILD:-false}"
 WATCHDOG_PID_FILE="$ROOT/deploy/rag-watchdog.pid"
 WATCHDOG_LOG_FILE="$ROOT/deploy/rag-watchdog.log"
@@ -61,7 +62,7 @@ export RAG_EMBED_DEVICE="$EMBED_DEVICE"
 if [[ "$EMBED_DEVICE" == "on-demand" ]]; then
   export RAG_EMBED_SOCKET="${RAG_EMBED_SOCKET:-$ROOT/deploy/rag-embedder.sock}"
   export RAG_EMBED_STATUS_FILE="${RAG_EMBED_STATUS_FILE:-$ROOT/deploy/rag-embedder-status.json}"
-  RAG_EMBED_RESTART="$RESTART" bash "$ROOT/deploy/start_rag_embedder.sh"
+  RAG_EMBED_RESTART="$EMBED_RESTART" bash "$ROOT/deploy/start_rag_embedder.sh"
 fi
 
 if [[ -f "$PID_FILE" ]]; then

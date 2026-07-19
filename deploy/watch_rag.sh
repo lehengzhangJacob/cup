@@ -31,7 +31,8 @@ while true; do
   fi
 
   echo "$(date -Is) RAG unhealthy; restarting"
-  if RAG_RESTART=true RAG_WATCHDOG_CHILD=true bash "$ROOT/deploy/start_rag.sh"; then
+  if RAG_RESTART=true RAG_EMBED_RESTART=false RAG_WATCHDOG_CHILD=true \
+    bash "$ROOT/deploy/start_rag.sh"; then
     echo "$(date -Is) RAG restart succeeded"
     failures=0
   else

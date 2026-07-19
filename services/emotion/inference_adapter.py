@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from typing import Any
+
+import torch
 
 
 LABELS = ("angry", "disgust", "fear", "happy", "neutral", "sad", "surprise")
@@ -45,6 +48,13 @@ def plain(value: Any) -> Any:
 
 
 def normalize_scores(value: Any) -> dict[str, float]:
+    # Generation scores are a tuple of full-vocabulary tensors, one per
+    # generated token. They are not seven-class probabilities and converting
+    # them to Python lists would allocate hundreds of thousands of floats.
+    if isinstance(value, (list, tuple)) and value and all(
+        hasattr(item, "shape") for item in value
+    ):
+        return {}
     value = plain(value)
     if isinstance(value, list) and len(value) == 1:
         value = value[0]
@@ -75,6 +85,80 @@ def output_label(text: Any) -> str | None:
     return None
 
 
+def seven_class_scores_from_generation(
+    output_text: Any,
+    generation_scores: Any,
+    tokenizer: Any,
+) -> dict[str, float]:
+    """Read a seven-class distribution from the generation step of its label.
+
+    The training fork exposes full-vocabulary logits for each generated token.
+    Its separate emotion_probs_from_logits helper remains a three-way
+    sentiment output, so it must not be written into the seven-class column.
+    """
+    if not isinstance(generation_scores, (list, tuple)) or not generation_scores:
+        return {}
+    try:
+        generated_ids = tokenizer.encode(
+            str(output_text or ""),
+            add_special_tokens=False,
+        )
+    except Exception:
+        return {}
+    if not generated_ids:
+        return {}
+
+    forms = {
+        "angry": (" angry", " anger", "angry", "anger"),
+        "disgust": (" disgust", "disgust"),
+        "fear": (" fear", "fear"),
+        "happy": (" happy", " joy", "happy", "joy"),
+        "neutral": (" neutral", "neutral"),
+        "sad": (" sad", " sadness", "sad", "sadness"),
+        "surprise": (" surprise", "surprise"),
+    }
+    token_to_label: dict[int, str] = {}
+    label_tokens: dict[str, list[int]] = {}
+    for label, candidates in forms.items():
+        ids: list[int] = []
+        for candidate in candidates:
+            ids_for_candidate = tokenizer.encode(candidate, add_special_tokens=False)
+            if len(ids_for_candidate) == 1:
+                token_id = int(ids_for_candidate[0])
+                if token_id not in ids:
+                    ids.append(token_id)
+                    token_to_label[token_id] = label
+        if ids:
+            label_tokens[label] = ids
+    if len(label_tokens) != len(LABELS):
+        return {}
+
+    # Select the last emitted seven-class label, e.g. the joy in
+    # positive, joy after the training prompt asks for both taxonomies.
+    selected_step = None
+    for index, token_id in enumerate(generated_ids):
+        if token_id in token_to_label and index < len(generation_scores):
+            selected_step = index
+    if selected_step is None:
+        return {}
+    step_logits = generation_scores[selected_step]
+    if not isinstance(step_logits, torch.Tensor) or step_logits.ndim != 2:
+        return {}
+
+    all_token_ids = [token_id for ids in label_tokens.values() for token_id in ids]
+    selected_logits = step_logits[0, all_token_ids]
+    selected_probs = torch.softmax(selected_logits.float(), dim=-1).detach().cpu().tolist()
+    by_token = dict(zip(all_token_ids, selected_probs))
+    result = {
+        label: sum(by_token[token_id] for token_id in ids)
+        for label, ids in label_tokens.items()
+    }
+    total = sum(result.values())
+    if total <= 0:
+        return {}
+    return {label: round(value / total, 6) for label, value in result.items()}
+
+
 def make_prompt(modal: str, text: str, context_turns: list[dict[str, str]]) -> str:
     lines = ["[Current Turn]"]
     if "video" in modal:
@@ -92,9 +176,14 @@ def make_prompt(modal: str, text: str, context_turns: list[dict[str, str]]) -> s
     lines.extend(
         [
             "",
-            "Instruction: Analyze only the Current Turn tourist's emotion using its text, "
-            "voice/facial cues when present, and the dialogue context. Return exactly one "
-            "seven-class label: angry, disgust, fear, happy, neutral, sad, or surprise.",
+            "Instruction:",
+            "As an emotion recognition expert, analyze the emotion of the Current Turn's "
+            "speaker. Your analysis MUST be based on:",
+            "1. The speaker's own textual, visual, and audio cues in the Current Turn.",
+            "2. The historical context of the conversation provided.",
+            "3. The speaker's identity and their interaction with others in the Context.",
+            "Please output the results of emotion three classification and emotion seven "
+            "classification.",
         ]
     )
     return "\n".join(lines)
@@ -114,6 +203,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    # HumanOmni's upstream architecture uses a model name while constructing
+    # the embedded BERT gate. Point it at the deployment's local checkpoint
+    # before importing the package so inference remains fully offline.
+    os.environ["HUMANOMNI_BERT_PATH"] = args.bert_path
     import humanomni
     from humanomni.utils import disable_torch_init
     from peft import PeftModel
@@ -126,6 +219,11 @@ def main() -> None:
         "emotion_probs_from_logits",
         None,
     )
+    if emotion_probs_from_logits is None:
+        raise RuntimeError(
+            "The training-time HumanOmni extension emotion_probs_from_logits "
+            "is required for seven-class inference."
+        )
 
     try:
         context = json.loads(args.context_json)
@@ -145,7 +243,10 @@ def main() -> None:
 
     bert_tokenizer = BertTokenizer.from_pretrained(args.bert_path, local_files_only=True)
     disable_torch_init()
-    model, processor, tokenizer = model_init(args.base_model_path)
+    model, processor, tokenizer = model_init(
+        args.base_model_path,
+        skip_vision=not bool(args.video_path),
+    )
     model = PeftModel.from_pretrained(
         model,
         args.emotion_lora,
@@ -176,12 +277,28 @@ def main() -> None:
     else:
         emotion_output, logits, model_scores = raw, None, None
 
-    scores = normalize_scores(model_scores)
-    if not scores and logits is not None and emotion_probs_from_logits:
+    scores = seven_class_scores_from_generation(
+        emotion_output,
+        model_scores,
+        tokenizer,
+    )
+    if not scores and isinstance(model_scores, dict):
+        scores = normalize_scores(model_scores)
+
+    sentiment_scores = {}
+    if logits is not None:
         try:
-            scores = normalize_scores(emotion_probs_from_logits(logits))
+            raw_sentiment_scores = emotion_probs_from_logits(logits)
+            if isinstance(raw_sentiment_scores, list) and raw_sentiment_scores:
+                raw_sentiment_scores = raw_sentiment_scores[0]
+            if isinstance(raw_sentiment_scores, dict):
+                sentiment_scores = {
+                    str(key): round(float(value), 6)
+                    for key, value in raw_sentiment_scores.items()
+                    if isinstance(value, (int, float))
+                }
         except Exception:
-            scores = {}
+            sentiment_scores = {}
     label = output_label(emotion_output)
     if not label and scores:
         label = max(scores, key=scores.get)
@@ -195,6 +312,7 @@ def main() -> None:
                 "confidence": scores.get(label, 0.0),
                 "model": "emotion_v5_stage2",
                 "raw_output": str(emotion_output)[:500],
+                "sentiment_scores": sentiment_scores,
             },
             ensure_ascii=False,
         )

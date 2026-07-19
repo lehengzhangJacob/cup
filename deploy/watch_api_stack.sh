@@ -5,6 +5,7 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RETRY_SECONDS="${API_STACK_RETRY_SECONDS:-3}"
 CHECK_SECONDS="${API_STACK_CHECK_SECONDS:-5}"
+FAILURE_THRESHOLD="${API_STACK_FAILURE_THRESHOLD:-3}"
 
 trap 'exit 0' INT TERM
 
@@ -23,7 +24,20 @@ while true; do
     continue
   fi
 
-  while stack_ready; do
+  failures=0
+  while true; do
+    if stack_ready; then
+      failures=0
+      sleep "$CHECK_SECONDS"
+      continue
+    fi
+
+    failures=$((failures + 1))
+    printf '%s API stack health check failed (%s/%s)\n' \
+      "$(date --iso-8601=seconds)" "$failures" "$FAILURE_THRESHOLD"
+    if (( failures >= FAILURE_THRESHOLD )); then
+      break
+    fi
     sleep "$CHECK_SECONDS"
   done
 

@@ -35,6 +35,17 @@ class _Client:
 
 
 class LiveTalkingAudioTests(unittest.IsolatedAsyncioTestCase):
+    def test_route_arrows_are_spoken_as_navigation_transitions(self):
+        spoken = main._speech_text(
+            "南门入园→佛手广场（天下第一掌） → 灵山大佛。\n"
+            '{"emotion":"smile"}'
+        )
+
+        self.assertEqual(
+            spoken,
+            "南门入园，接着前往佛手广场（天下第一掌），接着前往灵山大佛。",
+        )
+
     async def test_heartbeat_is_forwarded_to_livetalking(self):
         forwarded = AsyncMock(return_value={"code": 0, "msg": "ok"})
         with patch.object(main, "_livetalking_post", new=forwarded):

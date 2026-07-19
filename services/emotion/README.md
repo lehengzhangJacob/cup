@@ -12,9 +12,12 @@ SQLite。
 - 文本编码器：`/home/huggingface/bert-base-uncased`
 - HumanOmni 源码：`services/emotion/humanomni`
 
-内置源码来自官方 HumanOmni 仓库，基线提交为
-`26fa491492d39a66eef0d9e805c7bf33bf2cb0ee`。比赛训练代码若扩展了
-`mm_infer` 并返回概率，适配器会一并保存；官方实现只有生成标签时，置信度保持为 0。
+当前内置源码来自官方 HumanOmni 仓库，基线提交为
+`26fa491492d39a66eef0d9e805c7bf33bf2cb0ee`，用于复现环境和模型加载。它不是最终
+七分类运行时：该 Stage2 的原始 `inference.py` 依赖训练分支新增的
+`emotion_probs_from_logits`，并要求 `mm_infer` 返回输出、logits 和七分类分数。
+部署前必须将训练时实际导入的 `humanomni` 包同步到本目录；状态接口在扩展缺失时会
+明确显示文本降级，避免把模型生成的 `positive/neutral/negative` 误当成七分类。
 
 ## softcup 环境
 
@@ -30,7 +33,7 @@ SQLite。
 ```bash
 cd /home/gmn/codes/cup/services/emotion
 /home/gmn/.conda/envs/softcup/bin/python -c \
-  "from humanomni import model_init, mm_infer; import peft, torch; print(torch.cuda.is_available())"
+  "from humanomni import model_init, mm_infer, emotion_probs_from_logits; import peft, torch; print(torch.cuda.is_available())"
 ```
 
 真实烟测会加载 Stage1、视觉塔、音频塔、BERT 和 Stage2 LoRA，建议使用至少约 20 GB

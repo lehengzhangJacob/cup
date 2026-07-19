@@ -301,6 +301,43 @@
     .avatar-help { color:#71837a; font-size:12px; }
     .notice { right:28px; bottom:28px; padding:13px 17px; border-radius:3px; background:#183e36; }
     .empty { padding:30px; }
+    .report-subgrid { display:grid; grid-template-columns:minmax(0,1.32fr) minmax(260px,.92fr); gap:14px; margin-top:18px; align-items:start; }
+    .report-subpanel { min-width:0; padding:14px 15px 15px; border:1px solid #e2dfd4; border-top:3px solid #6f907d; background:#fffef9; }
+    .report-subpanel.sample-panel { border-top-color:var(--gold); }
+    .report-subpanel h3 { margin:0 0 11px; color:#52635b; font-size:13px; font-weight:700; }
+    .compact-meter-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; }
+    .compact-meter { min-width:0; padding:8px 0; border-bottom:1px solid #eeece4; }
+    .compact-meter:nth-last-child(-n+2) { border-bottom:0; }
+    .compact-meter-head { display:flex; justify-content:space-between; gap:8px; margin-bottom:6px; color:#61726a; font-size:12px; }
+    .compact-meter-head span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .compact-meter-head strong { flex:0 0 auto; color:var(--ink); font-variant-numeric:tabular-nums; }
+    .compact-meter .track { width:100%; }
+    .status-list,.sample-list { display:grid; gap:7px; }
+    .status-item,.sample-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; min-height:39px; padding:8px 10px; border:1px solid #e8e5dc; background:#faf8f1; }
+    .status-item span,.sample-item strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .status-item span { color:#61726a; font-size:12px; }
+    .status-item strong { color:var(--jade); font:700 16px/1 "Songti SC","STSong",serif; font-variant-numeric:tabular-nums; }
+    .sample-item { min-height:46px; background:#fffaf0; }
+    .sample-item strong { color:var(--ink); font-size:13px; }
+    .sample-item span { color:#718078; font-size:11px; white-space:nowrap; }
+    .sample-item b { color:var(--red); font-size:13px; }
+    .sample-item em { margin-left:5px; color:#7d6128; font-style:normal; }
+    .satisfaction-list { display:grid; gap:12px; }
+    .satisfaction-item { display:grid; grid-template-columns:54px minmax(96px,1fr) minmax(116px,max-content); align-items:center; gap:12px; min-height:30px; }
+    .satisfaction-item > span { color:#52635b; white-space:nowrap; }
+    .satisfaction-item .track { width:100%; }
+    .satisfaction-value { color:#33483f; font-size:12px; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+    .satisfaction-value strong { color:var(--ink); font-size:14px; }
+    .satisfaction-value em { margin-left:4px; color:#76837c; font-style:normal; }
+    .monthly-chart { overflow-x:auto; padding:13px 12px 7px; border:1px solid #e5e2d8; background:#fffef9; }
+    .monthly-chart svg { display:block; width:100%; min-width:620px; height:auto; }
+    .chart-legend { display:flex; align-items:center; gap:16px; margin:0 0 9px; color:#69776f; font-size:12px; }
+    .chart-key { display:inline-flex; align-items:center; gap:6px; }
+    .chart-key i { display:inline-block; width:18px; height:8px; background:#397e6d; }
+    .chart-key i.line { width:18px; height:0; border-top:3px solid var(--gold); background:transparent; }
+    .chart-details { margin-top:11px; color:#67766e; font-size:12px; }
+    .chart-details summary { width:max-content; cursor:pointer; color:var(--jade); font-weight:700; }
+    .chart-details > div { margin-top:9px; overflow:auto; }
     @media(max-width:1180px) {
       .metrics { grid-template-columns:repeat(3,1fr); }
       .grid { grid-template-columns:1fr; }
@@ -318,6 +355,7 @@
       .toolbar { flex-direction:column; }
       .upload { width:100%; }
       .upload input { max-width:none; }
+      .report-subgrid { grid-template-columns:1fr; }
     }
     @media(max-width:560px) {
       .metrics { grid-template-columns:1fr 1fr; }
@@ -327,6 +365,12 @@
       .actions { flex-wrap:wrap; }
       .upload { display:grid; }
       .avatar-preview { align-items:flex-start; }
+      .compact-meter-list { grid-template-columns:1fr; }
+      .compact-meter { border-bottom:1px solid #eeece4!important; }
+      .compact-meter:last-child { border-bottom:0!important; }
+      .satisfaction-item { grid-template-columns:48px minmax(60px,1fr) max-content; gap:8px; }
+      .satisfaction-value { font-size:11px; }
+      .chart-legend { flex-wrap:wrap; gap:8px 14px; }
     }
   </style>
 </head>
@@ -340,7 +384,7 @@
       <button data-view="avatar"><span class="nav-no">03</span>数字人管理</button>
       <button data-view="reports"><span class="nav-no">04</span>游客感受报告</button>
     </nav>
-    <div class="aside-foot">A5 景区导览服务<br><a id="visitorLink" href="https://localhost:8443/">返回游客交互端 →</a></div>
+    <div class="aside-foot">A5 景区导览服务<br><a id="visitorLink" href="https://139.159.150.134:20443/">返回游客交互端 →</a></div>
   </aside>
   <main>
     <header>
@@ -401,6 +445,38 @@
         <div class="card"><h2>满意度反馈</h2><ul class="list" id="recentFeedback"></ul></div>
       </div>
       <div class="card"><h2>服务改进报告</h2><div id="reportSuggestions"></div></div>
+      <div class="card">
+        <div class="card-head"><div><h2>游客对话多模态情绪</h2><div class="muted">来自游客与数字人的文字/授权语音对话</div></div><span class="tag" id="emotionModelStatus">检测中</span></div>
+        <div class="muted" id="emotionStatusDetail">正在检查 emotion_v5_stage2 运行环境</div>
+        <div class="report-subgrid">
+          <section class="report-subpanel"><h3>七分类分布</h3><div class="compact-meter-list" id="emotionDistribution"></div></section>
+          <section class="report-subpanel"><h3>任务与分析方式</h3><div class="status-list" id="emotionJobs"></div></section>
+        </div>
+        <h3 style="margin-top:22px">最近对话情绪事件</h3>
+        <div style="overflow:auto"><table><thead><tr><th>时间</th><th>输入</th><th>七分类</th><th>满意倾向</th><th>方式 / 状态</th></tr></thead><tbody id="recentEmotionEvents"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h2>景区 / 子景点实时满意度</h2>
+        <div class="muted">只统计游客端主动提交的 1–5 分评价；暂无数据时不使用历史样本或模拟值填充</div>
+        <div style="overflow:auto;margin-top:14px"><table><thead><tr><th>景区</th><th>景点</th><th>评价数</th><th>平均分</th><th>低分数</th></tr></thead><tbody id="attractionSatisfaction"></tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>公开 XLSX 历史游客洞察</h2><div class="muted" id="historicalScope">与实时游客数据分开展示</div></div><span class="tag official" id="historicalDbStatus">读取中</span></div>
+        <div class="metrics" style="margin-top:18px">
+          <div class="metric"><div class="label">访问记录</div><div class="value" id="historicalRows">—</div></div>
+          <div class="metric"><div class="label">游客数</div><div class="value" id="historicalTourists">—</div></div>
+          <div class="metric"><div class="label">景点数</div><div class="value" id="historicalAttractions">—</div></div>
+          <div class="metric"><div class="label">平均满意度</div><div class="value" id="historicalAverage">—</div></div>
+        </div>
+        <div class="report-subgrid">
+          <section class="report-subpanel"><h3>满意度分布</h3><div class="satisfaction-list" id="historicalSatisfaction"></div></section>
+          <section class="report-subpanel sample-panel"><h3>赛题景区相关样本</h3><div class="sample-list" id="scenicSamples"></div></section>
+        </div>
+        <h3 style="margin-top:22px">月度趋势</h3>
+        <div class="chart-legend"><span class="chart-key"><i></i>访问记录</span><span class="chart-key"><i class="line"></i>平均满意度（/5）</span></div>
+        <div class="monthly-chart" id="historicalMonthlyChart"></div>
+        <details class="chart-details"><summary>查看月度数据明细</summary><div><table><thead><tr><th>月份</th><th>访问记录</th><th>平均满意度</th></tr></thead><tbody id="historicalMonthly"></tbody></table></div></details>
+      </div>
     </section>
   </main>
 </div>
@@ -410,8 +486,6 @@
   const titles = {overview:"景区服务数据概览",knowledge:"景区知识库管理",avatar:"数字人形象管理",reports:"游客感受度报告"};
   let stats = {};
   let avatarCatalog = [];
-
-  $("visitorLink").href = `https://${location.hostname}:8443/`;
 
   function notify(message, error=false){ const el=$("notice"); el.textContent=message; el.style.background=error?"#a94c45":"#173e35"; el.style.display="block"; clearTimeout(notify.timer); notify.timer=setTimeout(()=>el.style.display="none",3200); }
   async function api(path, options={}) { const response=await fetch(path, options); let data={}; try{data=await response.json()}catch(_){data={detail:await response.text()}} if(response.status===401){location.replace("/login");throw new Error("登录状态已失效");} if(!response.ok) throw new Error(data.detail||"请求失败"); return data; }
@@ -444,10 +518,48 @@
     $("suggestions").innerHTML=suggestions.map(x=>`<div class="suggestion">${escapeHtml(x)}</div>`).join("");
     $("reportSuggestions").innerHTML=suggestions.map((x,i)=>`<div class="suggestion"><strong>建议 ${i+1}</strong><br>${escapeHtml(x)}</div>`).join("");
     $("recentQuestions").innerHTML=(data.recent_questions||[]).map((x,i)=>`<li><span class="tag">${String(i+1).padStart(2,"0")}</span>　${escapeHtml(x)}</li>`).join("")||'<li class="empty">暂无问答记录</li>';
-    $("recentFeedback").innerHTML=(data.recent_feedback||[]).map(x=>`<li><strong>${"★".repeat(x.rating)}${"☆".repeat(5-x.rating)}</strong><br>${escapeHtml(x.comment||"游客未填写文字评价")}<br><small class="muted">${shortDate(x.created_at)}</small></li>`).join("")||'<li class="empty">暂无满意度反馈</li>';
+    $("recentFeedback").innerHTML=(data.recent_feedback||[]).map(x=>`<li><strong>${"★".repeat(x.rating)}${"☆".repeat(5-x.rating)}</strong> · ${escapeHtml(x.attraction_name||x.scenic_area||"未标注景点")}<br>${escapeHtml(x.comment||"游客未填写文字评价")}<br><small class="muted">${shortDate(x.created_at)}</small></li>`).join("")||'<li class="empty">暂无满意度反馈</li>';
+    const emotion=data.emotion_distribution||{}, emotionLabels={happy:"愉悦",neutral:"平静",surprise:"惊讶",sad:"悲伤",fear:"恐惧",angry:"愤怒",disgust:"厌恶"};
+    const emotionRows=Object.keys(emotionLabels).map(name=>[name,Number(emotion[name]||0)]), emotionMax=Math.max(1,...emotionRows.map(([,count])=>count));
+    $("emotionDistribution").innerHTML=emotionRows.map(([name,count])=>`<div class="compact-meter"><div class="compact-meter-head"><span>${emotionLabels[name]}</span><strong>${count}</strong></div><div class="track"><div class="fill" style="width:${count/emotionMax*100}%"></div></div></div>`).join("")||'<div class="empty">暂无七分类结果</div>';
+    const jobs=data.emotion_job_status||{}, modes=data.analysis_modes||{};
+    $("emotionJobs").innerHTML=[...Object.entries(jobs).map(([name,count])=>[`任务 · ${name}`,count]),...Object.entries(modes).map(([name,count])=>[`方式 · ${name}`,count])].map(([name,count])=>`<div class="status-item"><span title="${escapeHtml(name)}">${escapeHtml(name)}</span><strong>${count}</strong></div>`).join("")||'<div class="empty">暂无情绪任务</div>';
+    $("recentEmotionEvents").innerHTML=(data.recent_emotion_events||[]).map(x=>`<tr><td>${shortDate(x.created_at)}</td><td>${escapeHtml(x.media_kind||"text")}</td><td>${escapeHtml(x.emotion||"—")}</td><td>${escapeHtml(x.sentiment||"—")}</td><td>${escapeHtml(x.analysis_mode||"—")} / ${escapeHtml(x.status||"—")}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无带有效情绪信号的游客对话</td></tr>';
+    $("attractionSatisfaction").innerHTML=(data.attraction_satisfaction||[]).map(x=>`<tr><td>${escapeHtml(x.scenic_area)}</td><td><strong>${escapeHtml(x.attraction_name)}</strong></td><td>${x.count}</td><td>${Number(x.avg_satisfaction).toFixed(2)} / 5</td><td>${x.low_rating_count}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无游客主动提交的景点评分</td></tr>';
   }
 
-  async function loadStats(){ try{ renderStats(await api("/v1/stats/overview")); }catch(error){notify(error.message,true);} }
+  async function loadStats(){ try{ renderStats(await api("/v1/admin/analytics/overview")); }catch(error){notify(error.message,true);} }
+  async function loadEmotionStatus(){ try{const data=await api("/v1/admin/emotion/status");$("emotionModelStatus").textContent=data.ready?"模型可用":"文本降级";$("emotionModelStatus").className=`tag ${data.ready?"official":""}`;$("emotionStatusDetail").textContent=`${data.model||"emotion_v5_stage2"} · ${data.detail||data.mode||"状态未知"} · 原始媒体${data.media_retained?"保留":"分析后删除"}`;}catch(error){$("emotionModelStatus").textContent="检测失败";$("emotionStatusDetail").textContent=error.message;}}
+  function renderMonthlyChart(rows){
+    const target=$("historicalMonthlyChart");
+    if(!rows.length){target.innerHTML='<div class="empty">暂无月度趋势数据</div>';return;}
+    const width=760,height=250,left=42,right=44,top=28,bottom=42,plotW=width-left-right,plotH=height-top-bottom;
+    const visitsMax=Math.max(1,...rows.map(item=>Number(item.visits)||0));
+    const step=plotW/rows.length,barW=Math.max(10,Math.min(28,step*.48));
+    const grid=[0,.5,1].map(ratio=>{const y=top+plotH*(1-ratio);return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" stroke="#e7e4da" stroke-width="1"/><text x="${left-7}" y="${y+4}" text-anchor="end" fill="#7d8983" font-size="10">${Math.round(visitsMax*ratio).toLocaleString()}</text>`;}).join("");
+    const bars=rows.map((item,index)=>{const value=Number(item.visits)||0,x=left+step*index+(step-barW)/2,h=value/visitsMax*plotH,y=top+plotH-h;return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="#397e6d" opacity=".88"><title>${escapeHtml(item.month)}：${value.toLocaleString()} 次访问</title></rect>`;}).join("");
+    const points=rows.map((item,index)=>{const score=Math.max(0,Math.min(5,Number(item.avg_satisfaction)||0)),x=left+step*(index+.5),y=top+plotH-score/5*plotH;return {x,y,score,month:item.month};});
+    const line=points.map((point,index)=>`${index?"L":"M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const dots=points.map(point=>`<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.5" fill="#fffef9" stroke="#b68335" stroke-width="2"><title>${escapeHtml(point.month)}：${point.score.toFixed(2)} / 5</title></circle>`).join("");
+    const labels=rows.map((item,index)=>`<text x="${(left+step*(index+.5)).toFixed(1)}" y="${height-17}" text-anchor="middle" fill="#718078" font-size="10">${escapeHtml(String(item.month).slice(5))}</text>`).join("");
+    target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="月度访问记录与平均满意度趋势"><text x="${left}" y="14" fill="#718078" font-size="10">访问记录</text><text x="${width-right}" y="14" text-anchor="end" fill="#9a742f" font-size="10">满意度 / 5</text>${grid}${bars}<path d="${line}" fill="none" stroke="#b68335" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labels}</svg>`;
+  }
+  function renderHistorical(data){
+    if(!data.available){$("historicalScope").textContent=data.reason||"历史数据不可用";$("historicalDbStatus").textContent="未导入";return;}
+    $("historicalScope").textContent=`${data.scope_note||""} · ${(data.date_range||[]).join(" 至 ")}`;
+    $("historicalRows").textContent=Number(data.rows||0).toLocaleString();
+    $("historicalTourists").textContent=Number(data.tourists||0).toLocaleString();
+    $("historicalAttractions").textContent=Number(data.attractions||0).toLocaleString();
+    $("historicalAverage").textContent=data.avg_satisfaction==null?"—":Number(data.avg_satisfaction).toFixed(2)+" / 5";
+    const imported=data.database?.imported;
+    $("historicalDbStatus").textContent=imported?`已入库 ${Number(data.database.rows||0).toLocaleString()} 行`:"仅聚合缓存";
+    const distribution=data.satisfaction_distribution||[], max=Math.max(1,...distribution.map(x=>x.count));
+    $("historicalSatisfaction").innerHTML=distribution.map(x=>`<div class="satisfaction-item"><span>${x.score} 分</span><div class="track"><div class="fill" style="width:${x.count/max*100}%"></div></div><div class="satisfaction-value"><strong>${Number(x.count).toLocaleString()}</strong><em>· ${x.percentage}%</em></div></div>`).join("");
+    $("scenicSamples").innerHTML=(data.scenic_samples||[]).map(x=>`<div class="sample-item"><strong title="${escapeHtml(x.name)}">${escapeHtml(x.name)}</strong><span><b>${Number(x.count).toLocaleString()}</b> 条<em>${Number(x.avg_satisfaction).toFixed(2)} 分</em></span></div>`).join("")||'<div class="empty">公开样本中暂无灵山或拈花湾相关记录</div>';
+    renderMonthlyChart(data.monthly_trend||[]);
+    $("historicalMonthly").innerHTML=(data.monthly_trend||[]).map(x=>`<tr><td>${escapeHtml(x.month)}</td><td>${Number(x.visits).toLocaleString()}</td><td>${Number(x.avg_satisfaction).toFixed(3)} / 5</td></tr>`).join("")||'<tr><td colspan="3" class="empty">暂无月度数据</td></tr>';
+  }
+  async function loadHistorical(){try{renderHistorical(await api("/v1/admin/analytics/historical"));}catch(error){$("historicalDbStatus").textContent="读取失败";$("historicalScope").textContent=error.message;}}
   async function loadHealth(){ try{const h=await api("/health"); $("healthText").textContent=`运行正常 · ${h.chunks} 个知识片段`; }catch(_){$("healthText").textContent="服务异常";} }
   async function loadDocuments(){ try{const data=await api("/v1/admin/kb/documents"); $("chunkCount").textContent=data.chunk_count; $("documents").innerHTML=data.documents.map(doc=>`<tr><td><strong>${escapeHtml(doc.name)}</strong></td><td><span class="tag ${doc.editable?"":"official"}">${doc.category}</span></td><td>${bytes(doc.size)}</td><td>${shortDate(doc.updated_at)}</td><td>${doc.editable?`<button class="btn danger" data-delete="${encodeURIComponent(doc.name)}">删除</button>`:"只读"}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无知识文档</td></tr>'; document.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteDocument(decodeURIComponent(btn.dataset.delete)));}catch(error){notify(error.message,true);} }
   async function deleteDocument(name){ if(!confirm(`确认删除管理员上传的「${name}」并重建知识库？`))return; try{await api(`/v1/admin/kb/documents/${encodeURIComponent(name)}`,{method:"DELETE"}); notify("文档已删除，知识库已重建"); await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);} }
@@ -467,9 +579,9 @@
   $("uploadKb").onclick=async()=>{const file=$("kbFile").files[0]; if(!file)return notify("请先选择 DOCX、TXT 或 Markdown 文件",true); const fd=new FormData();fd.append("file",file); $("uploadKb").disabled=true;$("uploadKb").textContent="构建中…";try{const data=await api("/v1/admin/kb/documents",{method:"POST",body:fd});notify(`知识库更新完成：${data.chunks} 个片段`);$("kbFile").value="";await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);}finally{$("uploadKb").disabled=false;$("uploadKb").textContent="上传并构建";}};
   $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value,costume:$("costume").value,expression:$("expression").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
   $("displayName").oninput=()=>$("avatarPreviewName").textContent=$("displayName").value||"灵山小向导";
-  $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar()]).then(()=>notify("数据已刷新"));
+  $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
   $("logout").onclick=async()=>{try{await fetch("/v1/admin/auth/logout",{method:"POST"});}finally{location.replace("/login");}};
-  Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar()]);
+  Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar(),loadEmotionStatus(),loadHistorical()]);
 </script>
 </body>
 </html>

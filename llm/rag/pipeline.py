@@ -391,6 +391,17 @@ class RAGPipeline:
             **self.sessions.stats(),
         }
 
+    def warmup(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        with self._retriever_lock:
+            self._retriever.retrieve("灵山胜境")
+            embedding = self._retriever.stats().get("embedding", {})
+        return {
+            "ready": True,
+            "retrieval_ms": int((time.perf_counter() - started) * 1000),
+            "embedding": embedding,
+        }
+
     def _prepare(
         self,
         question: str,

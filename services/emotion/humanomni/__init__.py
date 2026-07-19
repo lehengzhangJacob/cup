@@ -11,12 +11,46 @@ from .mm_utils import process_image, process_video, process_audio,tokenizer_mult
 from .constants import NUM_FRAMES, DEFAULT_IMAGE_TOKEN, DEFAULT_VIDEO_TOKEN, MODAL_INDEX_MAP, DEFAULT_AUDIO_TOKEN
 import transformers
 
+emotion_tokens = {
+    "positive": [30487],
+    "neutral": [59568],
+    "negative": [42224],
+}
+
+
+def emotion_probs_from_logits(logits):
+    """Return the training fork's three-way sentiment probabilities."""
+    if isinstance(logits, (list, tuple)):
+        if not logits:
+            raise ValueError("logits is empty")
+        logits = logits[0]
+    if isinstance(logits, torch.Tensor) and logits.ndim == 3:
+        logits = logits[0]
+    if not (isinstance(logits, torch.Tensor) and logits.ndim == 2):
+        raise ValueError(
+            f"Expected logits as [batch, vocab], got {type(logits)} "
+            f"with shape {getattr(logits, 'shape', None)}"
+        )
+    keys = list(emotion_tokens)
+    token_ids = torch.tensor(
+        [emotion_tokens[key][0] for key in keys],
+        device=logits.device,
+        dtype=torch.long,
+    )
+    probabilities = torch.softmax(logits.index_select(dim=-1, index=token_ids), dim=-1)
+    return [
+        {key: probabilities[row, index].item() for index, key in enumerate(keys)}
+        for row in range(probabilities.shape[0])
+    ]
+
+
 def model_init(model_path=None, **kwargs):
     # with_face = kwargs.get('with_face', False)
     model_path = "HumanOmni_7B" if model_path is None else model_path
     model_name = get_model_name_from_path(model_path)
 
     tokenizer, model, processor, context_len, audio_processor = load_pretrained_model(model_path, None, model_name, **kwargs)
+    model.eval()
 
     if tokenizer.pad_token is None and tokenizer.unk_token is not None:
         tokenizer.pad_token = tokenizer.unk_token
@@ -74,7 +108,7 @@ def mm_infer(image_or_video, instruct, model, tokenizer, audio=None, modal='vide
     # 1. vision preprocess (load & transform image or video).
 
     if modal == 'text' or modal == 'audio':
-        tensor = [(torch.zeros(32, 3, 384, 384).cuda().half(), "video")]
+        tensor = None
     else:
         if "video" in modal:
             vi_modal = "video"
@@ -98,10 +132,9 @@ def mm_infer(image_or_video, instruct, model, tokenizer, audio=None, modal='vide
 
     # 2. text preprocess (tag process & generate prompt).
     if isinstance(instruct, str):
-        message = [{'role': 'user', 'content': modal_token + '\n' + instruct}]
+        message = [{'role': 'user', 'content': instruct}]
     elif isinstance(instruct, list):
         message = copy.deepcopy(instruct)
-        message[0]['content'] = modal_token + '\n' + message[0]['content']
     else:
         raise ValueError(f"Unsupported type of instruct: {type(instruct)}")
 
@@ -140,7 +173,7 @@ def mm_infer(image_or_video, instruct, model, tokenizer, audio=None, modal='vide
 
 
     with torch.inference_mode():
-        output_ids = model.generate(
+        outputs = model.generate(
             input_ids,
             attention_mask=attention_masks,
             images=tensor,
@@ -152,9 +185,13 @@ def mm_infer(image_or_video, instruct, model, tokenizer, audio=None, modal='vide
             stopping_criteria=[stopping_criteria],
             pad_token_id=tokenizer.eos_token_id,
             prompts=question_prompt,
-            audios=audio
+            audios=audio,
+            output_scores=True,
+            output_logits=True,
+            return_dict_in_generate=True,
         )
 
-    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+    output_ids = outputs.sequences
+    text = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
 
-    return outputs
+    return text, outputs.logits, outputs.scores

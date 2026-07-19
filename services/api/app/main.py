@@ -5,6 +5,7 @@ import base64
 import binascii
 import io
 import json
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -61,13 +62,15 @@ from .ice import cloudflare_ice_servers, cloudflare_turn_config_error, cloudflar
 from .admin_analytics import build_overview
 from .admin_auth import ADMIN_COOKIE_NAME, create_admin_token, verify_admin_token
 from .attractions import attraction_by_id, attraction_catalog, ensure_attraction_schema
+from .avatar_reaction import avatar_reaction
 from .avatar_catalog import find_avatar_preview, list_avatar_ids
 from .emotion_analysis import analyze_text, emotion_analyzer
 from .kb import ROUTES
-from .location import resolve_location
+from .location import location_options, resolve_location
 from .rag_client import RAGClientError, rag
 from .speech_segments import SpeechSegmenter
 from .tourism_analytics import ensure_tourism_schema, tourism_analytics
+from .vision_analysis import parse_vision_observation, vision_prompt
 from .zhipu import zhipu
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
@@ -116,6 +119,7 @@ class LiveTalkingSpeakRequest(BaseModel):
     session_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1, max_length=2000)
     interrupt: bool = False
+    speed: float = Field(1.0, ge=0.8, le=1.2)
 
 
 class LiveTalkingSessionRequest(BaseModel):
@@ -347,6 +351,36 @@ def _linked_emotion_event(event_id: Optional[str], session_id: str) -> bool:
     return bool(row)
 
 
+def _avatar_reaction_for_event(event_id: Optional[str], message: str) -> dict[str, Any]:
+    """Use completed multimodal results when available, otherwise text now.
+
+    Audio inference is deliberately asynchronous so ASR stays responsive.  A
+    text-based provisional reaction lets the avatar respond immediately; the
+    completed audio+text result remains available to the next dialogue turn
+    and to the management report.
+    """
+    text_signal = analyze_text(message)
+    emotion = None
+    sentiment = text_signal.get("sentiment")
+    confidence = text_signal.get("confidence")
+    if event_id:
+        conn = _db()
+        row = conn.execute(
+            "SELECT emotion_label, sentiment, confidence, status FROM emotion_events WHERE id=?",
+            (event_id,),
+        ).fetchone()
+        conn.close()
+        if row and row[3] == "completed":
+            emotion = row[0]
+            sentiment = row[1] or sentiment
+            confidence = row[2] if row[2] is not None else confidence
+    return avatar_reaction(
+        emotion=emotion,
+        sentiment=sentiment,
+        confidence=confidence,
+    )
+
+
 async def _record_text_emotion(
     session_id: str,
     transcript: str,
@@ -392,14 +426,18 @@ async def _record_text_emotion(
 
 
 def _speech_text(text: str) -> str:
-    """Remove model-only JSON metadata before any TTS provider sees it."""
+    """Remove model metadata and make route separators natural for TTS."""
     spoken_lines: list[str] = []
     for line in text.strip().splitlines():
         stripped = line.strip()
         if stripped.startswith(("{", "```json", "```JSON")):
             break
         spoken_lines.append(line)
-    return "\n".join(spoken_lines).strip()
+    spoken = "\n".join(spoken_lines)
+    # Most Chinese voices pronounce U+2192 as "边". In route answers it is a
+    # navigation separator, so render it as a natural spoken transition.
+    spoken = re.sub(r"\s*(?:→|⇒|⟶|➜|➡|--?>)\s*", "，接着前往", spoken)
+    return spoken.lstrip("，、 \t\n").strip()
 
 
 def _pcm16_mono_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -546,6 +584,14 @@ async def health():
 async def model_routes():
     try:
         return await rag.model_routes()
+    except RAGClientError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.post("/v1/rag/warmup")
+async def rag_warmup():
+    try:
+        return await rag.warmup()
     except RAGClientError as exc:
         raise HTTPException(503, str(exc)) from exc
 
@@ -783,6 +829,7 @@ async def _stream_tts_to_livetalking(
     text: str,
     *,
     interrupt: bool,
+    speed: float = 1.0,
 ) -> None:
     if interrupt:
         await _livetalking_post(
@@ -802,7 +849,7 @@ async def _stream_tts_to_livetalking(
         async for event in zhipu.tts_stream(
             speech_text,
             voice=_avatar_settings()["voice"],
-            speed=LIVETALKING_TTS_SPEED,
+            speed=max(0.8, min(1.2, LIVETALKING_TTS_SPEED * speed)),
         ):
             choices = event.get("choices") or []
             delta = choices[0].get("delta", {}) if choices else {}
@@ -872,6 +919,8 @@ def _cancel_livetalking_speech_worker(session_id: str) -> None:
 
 def _start_livetalking_speech_worker(
     session_id: str,
+    *,
+    speed: float = 1.0,
 ) -> asyncio.Queue[Optional[str]]:
     _cancel_livetalking_speech_worker(session_id)
     queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
@@ -886,6 +935,7 @@ def _start_livetalking_speech_worker(
                 session_id,
                 segment,
                 interrupt=first,
+                speed=speed,
             )
             first = False
 
@@ -912,6 +962,7 @@ async def livetalking_speak(req: LiveTalkingSpeakRequest):
             req.session_id,
             req.text,
             interrupt=req.interrupt,
+            speed=req.speed,
         )
     except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         raise HTTPException(502, f"LiveTalking streaming TTS failed: {exc}") from exc
@@ -990,6 +1041,12 @@ async def locate(req: LocateRequest):
         code=req.code,
         spot_name=req.spot_name,
     )
+
+
+@app.get("/v1/location/options")
+async def get_location_options():
+    """Published QR/manual point registry used by the visitor-side locator."""
+    return location_options()
 
 
 @app.get("/v1/kb/stats")
@@ -1214,11 +1271,16 @@ async def chat(req: ChatRequest):
             req.message,
             "dialogue-text" if req.input_mode == "text" else "dialogue-voice-text",
         )
+    reaction = _avatar_reaction_for_event(emotion_event_id, req.message)
     _log(
         session_id,
         "user",
         req.message,
-        {"input_mode": req.input_mode, "emotion_event_id": emotion_event_id},
+        {
+            "input_mode": req.input_mode,
+            "emotion_event_id": emotion_event_id,
+            "avatar_reaction": reaction,
+        },
     )
 
     if not req.stream:
@@ -1233,6 +1295,8 @@ async def chat(req: ChatRequest):
         except RAGClientError as exc:
             raise HTTPException(503, str(exc)) from exc
         answer = str(result.get("answer") or "")
+        if reaction["prefix"]:
+            answer = f"{reaction['prefix']}\n{answer}"
         citations = result.get("citations") or []
         latency_ms = int(result.get("latency_ms") or 0)
         _log(
@@ -1244,6 +1308,7 @@ async def chat(req: ChatRequest):
                 "chunk_ids": [c.get("id") for c in citations if isinstance(c, dict)],
                 "history_turns": result.get("history_turns", 0),
                 "model_route": req.model_route,
+                "avatar_reaction": reaction,
             },
         )
         return {
@@ -1255,6 +1320,7 @@ async def chat(req: ChatRequest):
             "latency_ms": latency_ms,
             "model_route": req.model_route,
             "emotion_event_id": emotion_event_id,
+            "avatar_reaction": reaction,
         }
 
     async def event_gen():
@@ -1263,12 +1329,16 @@ async def chat(req: ChatRequest):
         latency_ms = 0
         history_turns = 0
         speech_queue = (
-            _start_livetalking_speech_worker(req.livetalking_session_id)
+            _start_livetalking_speech_worker(
+                req.livetalking_session_id,
+                speed=float(reaction["voice_speed"]),
+            )
             if req.livetalking_session_id
             else None
         )
         segmenter = SpeechSegmenter()
         cancelled = False
+        prefix_sent = False
         try:
             async for event in rag.chat_stream(
                 req.message,
@@ -1283,8 +1353,17 @@ async def chat(req: ChatRequest):
                     history_turns = int(event.get("history_turns") or 0)
                     event["session_id"] = session_id
                     event["emotion_event_id"] = emotion_event_id
+                    event["avatar_reaction"] = reaction
                 elif event_type == "delta":
                     token = str(event.get("content") or "")
+                    if not prefix_sent and reaction["prefix"]:
+                        prefix_sent = True
+                        prefix = f"{reaction['prefix']}\n"
+                        parts.append(prefix)
+                        if speech_queue:
+                            for segment in segmenter.feed(prefix):
+                                speech_queue.put_nowait(segment)
+                        yield f"data: {json.dumps({'type': 'delta', 'content': prefix}, ensure_ascii=False)}\n\n"
                     parts.append(token)
                     if speech_queue:
                         for segment in segmenter.feed(token):
@@ -1319,6 +1398,7 @@ async def chat(req: ChatRequest):
                     "chunk_ids": [c.get("id") for c in citations if isinstance(c, dict)],
                     "history_turns": history_turns,
                     "model_route": req.model_route,
+                    "avatar_reaction": reaction,
                 },
             )
 
@@ -1382,14 +1462,14 @@ def _looks_like_wav(data: bytes) -> bool:
 
 
 def _normalize_asr_audio(raw: bytes, filename: str) -> tuple[bytes, str]:
-    """Ensure payload is something glm-asr accepts (prefer wav)."""
+    """Convert every browser recording to a model-safe mono 16k WAV."""
     name = (filename or "audio.wav").lower()
-    if _looks_like_wav(raw) or name.endswith((".wav", ".mp3", ".m4a")):
-        if _looks_like_wav(raw) and not name.endswith(".wav"):
-            return raw, "audio.wav"
-        return raw, filename or "audio.wav"
+    if _looks_like_wav(raw):
+        return raw, "audio.wav"
 
-    # browser often sends webm/ogg — try ffmpeg if present
+    # MediaRecorder may produce WebM/Opus, Ogg or M4A depending on the
+    # browser.  Decode once on the server rather than relying on each browser
+    # to decode the blob again through AudioContext.decodeAudioData().
     import shutil
     import subprocess
     import tempfile
@@ -1398,15 +1478,28 @@ def _normalize_asr_audio(raw: bytes, filename: str) -> tuple[bytes, str]:
     if not ffmpeg:
         raise HTTPException(
             400,
-            "当前音频格式(webm/ogg)不被识别接口支持。请用页面「按住说话」(会录成 wav)，或上传 wav/mp3。",
+            "服务器未安装 ffmpeg，无法转换浏览器录音。请联系管理员安装 ffmpeg，或上传 WAV 文件。",
         )
-    suffix = ".webm" if "webm" in name else ".ogg"
+    suffix = Path(name).suffix.lower()
+    if suffix not in {".webm", ".ogg", ".m4a", ".mp4", ".mp3", ".aac", ".flac", ".wav"}:
+        suffix = ".webm"
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / f"in{suffix}"
         dst = Path(td) / "out.wav"
         src.write_bytes(raw)
         proc = subprocess.run(
-            [ffmpeg, "-y", "-i", str(src), "-ac", "1", "-ar", "16000", str(dst)],
+            [
+                ffmpeg,
+                "-nostdin",
+                "-y",
+                "-i",
+                str(src),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                str(dst),
+            ],
             capture_output=True,
             text=True,
         )
@@ -1515,19 +1608,30 @@ async def vision_guide(file: UploadFile = File(...), question: str = "这是灵�
     # first let vision describe, then ground with RAG
     vision_text = await zhipu.vision_describe(
         b64,
-        "请识别图片中可能的景区建筑/雕像/场景，用中文简短描述关键视觉特征与可能景点名。",
+        vision_prompt(),
     )
+    observation = parse_vision_observation(vision_text)
+    candidate_names = "、".join(item["name"] for item in observation["candidates"]) or "未匹配到资料库景点"
     try:
         result = await rag.chat(
             question,
             session_id=str(uuid.uuid4()),
-            context={"视觉识别结果": vision_text},
+            context={
+                "视觉识别结果": observation["summary"],
+                "资料库候选景点": candidate_names,
+                "确认要求": "候选不确定时应提示游客确认，不得把候选说成确定事实。",
+            },
         )
     except RAGClientError as exc:
         raise HTTPException(503, str(exc)) from exc
+    answer = result.get("answer", "")
+    if observation["requires_confirmation"]:
+        names = candidate_names if observation["candidates"] else "暂未匹配到资料库景点"
+        answer = f"我初步识别到：{names}。请您确认候选景点后，我再为您做准确讲解。\n{answer}"
     return {
         "vision": vision_text,
-        "answer": result.get("answer", ""),
+        "observation": observation,
+        "answer": answer,
         "citations": result.get("citations", []),
     }
 
@@ -1645,6 +1749,36 @@ async def admin_emotion_event(job_id: str):
         "error": row[15],
         "created_at": row[16],
         "completed_at": row[17],
+    }
+
+
+@app.get("/v1/emotion/reaction/{job_id}")
+async def visitor_emotion_reaction(job_id: str, session_id: str = ""):
+    """Expose only a session owner's safe avatar reaction, never raw media."""
+    safe_session = (session_id or "").strip()[:128]
+    if not safe_session:
+        raise HTTPException(400, "缺少会话标识")
+    conn = _db()
+    row = conn.execute(
+        """
+        SELECT emotion_label, sentiment, confidence, status, analysis_mode
+          FROM emotion_events
+         WHERE id=? AND session_id=? AND source LIKE 'dialogue-%'
+        """,
+        (job_id, safe_session),
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "情绪分析任务不存在")
+    completed = row[3] == "completed"
+    return {
+        "status": row[3],
+        "analysis_mode": row[4],
+        "avatar_reaction": avatar_reaction(
+            emotion=row[0] if completed else None,
+            sentiment=row[1] if completed else None,
+            confidence=row[2] if completed else None,
+        ),
     }
 
 
