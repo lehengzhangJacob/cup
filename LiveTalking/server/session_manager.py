@@ -52,6 +52,10 @@ class SessionManager:
     def has_session(self, sessionid: str) -> bool:
         """检查会话是否存在"""
         return sessionid in self.sessions and self.sessions[sessionid] is not None
+
+    def active_count(self) -> int:
+        """返回正在创建或已存活的会话数。"""
+        return len(self.sessions)
         
     async def create_session(self, params: dict, sessionid: str = None) -> str:
         """
@@ -65,7 +69,7 @@ class SessionManager:
             sessionid = _rand_session_id()
             
         # 检查是否达到最大会话数
-        active_count = sum(1 for s in self.sessions.values() if s is not None)
+        active_count = self.active_count()
         if active_count >= self.max_session:
             raise MaxSessionError(
                 f"Maximum session limit reached ({active_count}/{self.max_session})"
@@ -76,9 +80,13 @@ class SessionManager:
         self.sessions[sessionid] = None
 
         # 在线程池中构建 session（加载模型非常耗时）
-        avatar_session = await asyncio.get_event_loop().run_in_executor(
-            None, self.build_session_fn, sessionid, params
-        )
+        try:
+            avatar_session = await asyncio.get_event_loop().run_in_executor(
+                None, self.build_session_fn, sessionid, params
+            )
+        except Exception:
+            self.sessions.pop(sessionid, None)
+            raise
         self.sessions[sessionid] = avatar_session
         return sessionid
         

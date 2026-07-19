@@ -33,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
-    private static final String APP_URL = "https://lingshanguide.de5.net/";
+    private static final String APP_URL = "https://139.159.150.134:20443/";
     private static final int REQUEST_APP_PERMISSIONS = 1001;
     private static final int REQUEST_WEB_PERMISSIONS = 1002;
     private static final int REQUEST_FILE_CHOOSER = 1003;

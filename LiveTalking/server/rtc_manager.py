@@ -4,8 +4,10 @@
 
 import json
 import asyncio
+import os
 import random
 import copy
+import time
 from typing import Dict, Optional
 import queue
 
@@ -23,6 +25,7 @@ from utils.logger import logger
 
 from server.session_manager import session_manager
 from server.session_manager import MaxSessionError
+from server.gpu_lifecycle import GPUUnavailableError, GPULifecycle
 
 class RTCManager:
     """
@@ -31,14 +34,21 @@ class RTCManager:
     管理 PeerConnection 生命周期、音视频轨道收发、DataChannel。
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, gpu_lifecycle: Optional[GPULifecycle] = None):
         """
         Args:
             opt: 全局配置
         """
         self.opt = opt
+        self.gpu_lifecycle = gpu_lifecycle
         self.pcs: set = set()
         self.session_pcs: Dict[str, RTCPeerConnection] = {}
+        self.session_last_seen: Dict[str, float] = {}
+        self.session_lease_tasks: Dict[str, asyncio.Task[None]] = {}
+        self.session_lease_seconds = max(
+            15.0,
+            float(os.getenv("LIVETALKING_SESSION_LEASE_SECONDS", "45")),
+        )
 
     def _ice_servers(self, params) -> list[RTCIceServer]:
         servers: list[RTCIceServer] = []
@@ -73,12 +83,39 @@ class RTCManager:
 
     async def _close_session(self, sessionid: str):
         """Close the peer connection and always release its session slot."""
+        lease_task = self.session_lease_tasks.pop(sessionid, None)
+        if lease_task is not None and lease_task is not asyncio.current_task():
+            lease_task.cancel()
+        self.session_last_seen.pop(sessionid, None)
         pc = self.session_pcs.pop(sessionid, None)
         if pc is not None:
             self.pcs.discard(pc)
             if pc.connectionState != "closed":
                 await pc.close()
         session_manager.remove_session(sessionid)
+        if self.gpu_lifecycle is not None:
+            self.gpu_lifecycle.schedule_offload()
+
+    async def _watch_session_lease(self, sessionid: str) -> None:
+        interval = min(10.0, max(2.0, self.session_lease_seconds / 3))
+        try:
+            while sessionid in self.session_pcs:
+                await asyncio.sleep(interval)
+                last_seen = self.session_last_seen.get(sessionid)
+                if last_seen is None:
+                    return
+                idle_seconds = time.monotonic() - last_seen
+                if idle_seconds < self.session_lease_seconds:
+                    continue
+                logger.info(
+                    "Closing expired browser session %s after %.0fs without heartbeat",
+                    sessionid,
+                    idle_seconds,
+                )
+                await self._close_session(sessionid)
+                return
+        except asyncio.CancelledError:
+            return
 
     async def handle_close_session(self, request):
         """Explicit cleanup used when a browser offer fails or the page exits."""
@@ -89,6 +126,22 @@ class RTCManager:
         await self._close_session(sessionid)
         return web.json_response({"code": 0, "msg": "ok"})
 
+    async def handle_heartbeat(self, request):
+        params = await request.json()
+        sessionid = str(params.get("sessionid") or "").strip()
+        if not sessionid:
+            return web.json_response(
+                {"code": -1, "msg": "sessionid is required"},
+                status=400,
+            )
+        if sessionid not in self.session_pcs or not session_manager.has_session(sessionid):
+            return web.json_response(
+                {"code": -1, "msg": "session not found"},
+                status=404,
+            )
+        self.session_last_seen[sessionid] = time.monotonic()
+        return web.json_response({"code": 0, "msg": "ok"})
+
     async def handle_offer(self, request):
         """处理 WebRTC offer 信令"""
         params = await request.json()
@@ -96,13 +149,21 @@ class RTCManager:
 
         # 通过 SessionManager 构建（内部会检查 max_session）
         try:
+            if self.gpu_lifecycle is not None:
+                await self.gpu_lifecycle.acquire()
             sessionid = await session_manager.create_session(params)
-        except MaxSessionError as e:
+        except (GPUUnavailableError, MaxSessionError) as e:
             logger.warning("Rejecting offer: %s", e)
+            if self.gpu_lifecycle is not None:
+                self.gpu_lifecycle.schedule_offload()
             return web.Response(
                 content_type="application/json",
                 text=json.dumps({"code": -1, "msg": str(e)}),
             )
+        except Exception:
+            if self.gpu_lifecycle is not None:
+                self.gpu_lifecycle.schedule_offload()
+            raise
         logger.info('offer sessionid=%s', sessionid)
         avatar_session = session_manager.get_session(sessionid)
 
@@ -114,6 +175,10 @@ class RTCManager:
         )
         self.pcs.add(pc)
         self.session_pcs[sessionid] = pc
+        self.session_last_seen[sessionid] = time.monotonic()
+        self.session_lease_tasks[sessionid] = asyncio.create_task(
+            self._watch_session_lease(sessionid)
+        )
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -171,6 +236,8 @@ class RTCManager:
 
     async def handle_rtcpush(self, push_url, sessionid: str):
         """RTCPush 模式：主动推流"""
+        if self.gpu_lifecycle is not None:
+            await self.gpu_lifecycle.acquire()
         import aiohttp
         await session_manager.create_session({}, sessionid)
         avatar_session = session_manager.get_session(sessionid)
@@ -202,7 +269,24 @@ class RTCManager:
 
     async def shutdown(self):
         """关闭所有 PeerConnection"""
+        lease_tasks = list(self.session_lease_tasks.values())
+        self.session_lease_tasks.clear()
+        for task in lease_tasks:
+            task.cancel()
+        if lease_tasks:
+            await asyncio.gather(*lease_tasks, return_exceptions=True)
         coros = [pc.close() for pc in self.pcs]
         await asyncio.gather(*coros)
         self.pcs.clear()
         self.session_pcs.clear()
+        self.session_last_seen.clear()
+        session_manager.sessions.clear()
+        if self.gpu_lifecycle is not None:
+            await self.gpu_lifecycle.shutdown()
+
+    def gpu_status(self) -> dict:
+        if self.gpu_lifecycle is None:
+            return {"mode": "fixed", "active_sessions": session_manager.active_count()}
+        status = self.gpu_lifecycle.status()
+        status["session_lease_seconds"] = self.session_lease_seconds
+        return status

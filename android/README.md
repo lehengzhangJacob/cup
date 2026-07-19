@@ -2,7 +2,7 @@
 
 原生 Android WebView 外壳，默认打开：
 
-`https://lingshanguide.de5.net/`
+`https://139.159.150.134:20443/`
 
 支持 WebRTC 数字人、麦克风语音输入、拍照/文件上传和浏览器定位。模型、RAG、语音和 LiveTalking 继续在服务器运行，APK 不包含模型权重。
 

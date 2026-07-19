@@ -3,10 +3,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PUBLIC_ENV="${PUBLIC_ENV:-$ROOT/deploy/public.env}"
+DIRECT_ENV="${DIRECT_ENV:-$ROOT/deploy/direct.env}"
 if [[ -f "$PUBLIC_ENV" ]]; then
   set -a
   # shellcheck disable=SC1090
   source "$PUBLIC_ENV"
+  set +a
+fi
+if [[ -f "$DIRECT_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$DIRECT_ENV"
   set +a
 fi
 LOCAL_TURN_ENABLED="${LOCAL_TURN_ENABLED:-true}"
@@ -18,6 +25,7 @@ API_SSL_PORT="${API_SSL_PORT:-8443}"
 API_SSL_BACKEND_PORT="${API_SSL_BACKEND_PORT:-9443}"
 ADMIN_SSL_PORT="${ADMIN_SSL_PORT:-8444}"
 ADMIN_HTTP_PORT="${ADMIN_HTTP_PORT:-8011}"
+UVICORN_KEEP_ALIVE="${UVICORN_KEEP_ALIVE:-3600}"
 
 # Validate public security settings before stopping a healthy deployment.
 admin_password="${ADMIN_PASSWORD:-}"
@@ -47,6 +55,10 @@ RAG_RESTART="${RAG_RESTART:-true}" bash "$ROOT/deploy/start_rag.sh"
 # Qwen2-7B is loaded only after the local route is selected, then unloaded idle.
 if [[ "${LOCAL_LLM_AUTOSTART:-true}" =~ ^(1|true|yes)$ ]]; then
   bash "$ROOT/deploy/start_local_llm.sh"
+fi
+
+if [[ "${LIVETALKING_CPU_STANDBY:-false}" =~ ^(1|true|yes)$ ]]; then
+  bash "$ROOT/deploy/start_livetalking.sh"
 fi
 
 CERT_DIR="$ROOT/deploy/certs"
@@ -94,16 +106,23 @@ export NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com"
 export no_proxy="$NO_PROXY"
 export ADMIN_PORT="$ADMIN_SSL_PORT"
 
+# Keep the supplied XLSX as queryable source data, not only as a generated
+# dashboard cache. The importer is idempotent and skips unchanged files.
+"$PYTHON" -m scripts.import_tourism_dataset
+
 nohup "$PYTHON" -m uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" \
+  --timeout-keep-alive "$UVICORN_KEEP_ALIVE" \
   > "$ROOT/deploy/api.log" 2>&1 &
 echo $! > "$ROOT/deploy/api.pid"
 
 nohup "$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$API_SSL_BACKEND_PORT" \
+  --timeout-keep-alive "$UVICORN_KEEP_ALIVE" \
   --ssl-keyfile "$KEY" --ssl-certfile "$CERT" \
   > "$ROOT/deploy/api-ssl.log" 2>&1 &
 echo $! > "$ROOT/deploy/api-ssl.pid"
 
 nohup "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port "$ADMIN_SSL_PORT" \
+  --timeout-keep-alive "$UVICORN_KEEP_ALIVE" \
   --ssl-keyfile "$KEY" --ssl-certfile "$CERT" \
   > "$ROOT/deploy/admin-ssl.log" 2>&1 &
 echo $! > "$ROOT/deploy/admin-ssl.pid"
@@ -111,6 +130,7 @@ echo $! > "$ROOT/deploy/admin-ssl.pid"
 # Loopback-only HTTP origin for Cloudflare Tunnel; public traffic remains HTTPS.
 nohup env ADMIN_PORT="$ADMIN_HTTP_PORT" "$PYTHON" -m uvicorn app.main:app \
   --host 127.0.0.1 --port "$ADMIN_HTTP_PORT" \
+  --timeout-keep-alive "$UVICORN_KEEP_ALIVE" \
   > "$ROOT/deploy/admin-http.log" 2>&1 &
 echo $! > "$ROOT/deploy/admin-http.pid"
 

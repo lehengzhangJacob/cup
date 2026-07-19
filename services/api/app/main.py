@@ -11,13 +11,13 @@ import subprocess
 import uuid
 import wave
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +32,7 @@ from .config import (
     CORS_ORIGINS,
     DATA_DIR,
     DOCS_DIR,
+    EMOTION_KEEP_MEDIA,
     LOG_DB,
     PUBLIC_ADMIN_URL,
     PUBLIC_APP_URL,
@@ -43,6 +44,8 @@ from .config import (
     TURN_CREDENTIAL,
     TURN_ENABLED,
     TURN_PORT,
+    TURN_PUBLIC_HOST,
+    TURN_UDP_ENABLED,
     TURN_USERNAME,
     ROOT,
     UPLOADS_DIR,
@@ -55,12 +58,16 @@ from .config import (
     load_api_key,
 )
 from .ice import cloudflare_ice_servers, cloudflare_turn_config_error, cloudflare_turn_configured
+from .admin_analytics import build_overview
 from .admin_auth import ADMIN_COOKIE_NAME, create_admin_token, verify_admin_token
+from .attractions import attraction_by_id, attraction_catalog, ensure_attraction_schema
 from .avatar_catalog import find_avatar_preview, list_avatar_ids
+from .emotion_analysis import analyze_text, emotion_analyzer
 from .kb import ROUTES
 from .location import resolve_location
 from .rag_client import RAGClientError, rag
 from .speech_segments import SpeechSegmenter
+from .tourism_analytics import ensure_tourism_schema, tourism_analytics
 from .zhipu import zhipu
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
@@ -75,6 +82,8 @@ class ChatRequest(BaseModel):
     spot_id: Optional[str] = Field(None, max_length=100)
     livetalking_session_id: Optional[str] = Field(None, min_length=1)
     model_route: Literal["cloud", "local"] = "cloud"
+    input_mode: Literal["text", "voice"] = "text"
+    emotion_event_id: Optional[str] = Field(None, max_length=128)
 
 
 class RecommendRequest(BaseModel):
@@ -115,6 +124,7 @@ class LiveTalkingSessionRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     session_id: Optional[str] = None
+    attraction_id: str = Field(..., min_length=1, max_length=30)
     rating: int = Field(..., ge=1, le=5)
     comment: str = Field("", max_length=1000)
 
@@ -130,6 +140,19 @@ class AvatarSettingsRequest(BaseModel):
 class AdminLoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=1, max_length=200)
+
+
+def _ensure_column(
+    conn: sqlite3.Connection,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    existing = {
+        str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def _db() -> sqlite3.Connection:
@@ -152,9 +175,14 @@ def _db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS feedback (
             id TEXT PRIMARY KEY,
             session_id TEXT,
+            attraction_id TEXT,
+            scenic_area TEXT,
+            attraction_name TEXT,
             rating INTEGER NOT NULL,
             comment TEXT,
             sentiment TEXT,
+            source TEXT NOT NULL DEFAULT 'live',
+            emotion_event_id TEXT,
             created_at TEXT
         )
         """
@@ -172,25 +200,60 @@ def _db() -> sqlite3.Connection:
         )
         """
     )
+    # Migrate deployments created before attraction-level satisfaction was
+    # introduced. SQLite's ADD COLUMN preserves all existing rows.
+    _ensure_column(conn, "feedback", "attraction_id", "TEXT")
+    _ensure_column(conn, "feedback", "scenic_area", "TEXT")
+    _ensure_column(conn, "feedback", "attraction_name", "TEXT")
+    _ensure_column(conn, "feedback", "source", "TEXT NOT NULL DEFAULT 'live'")
+    _ensure_column(conn, "feedback", "emotion_event_id", "TEXT")
+    ensure_attraction_schema(conn)
+    ensure_tourism_schema(conn)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS emotion_events (
+            id TEXT PRIMARY KEY,
+            session_id TEXT,
+            source TEXT NOT NULL,
+            transcript TEXT,
+            rating INTEGER,
+            media_kind TEXT,
+            emotion_label TEXT,
+            emotion_scores TEXT,
+            sentiment TEXT,
+            valence REAL,
+            confidence REAL,
+            aspects TEXT,
+            status TEXT NOT NULL,
+            model_name TEXT,
+            analysis_mode TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_logs_role_created "
+        "ON chat_logs(role, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_feedback_attraction_created "
+        "ON feedback(attraction_id, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_emotion_events_created "
+        "ON emotion_events(created_at)"
+    )
     conn.commit()
     return conn
 
 
 def _infer_sentiment(text: str, rating: Optional[int] = None) -> str:
-    if rating is not None:
-        if rating >= 4:
-            return "positive"
-        if rating <= 2:
-            return "negative"
-    positive = ("喜欢", "满意", "很好", "不错", "漂亮", "方便", "感谢", "推荐", "开心")
-    negative = ("不满", "失望", "不好", "太慢", "拥挤", "排队", "投诉", "贵", "累", "生气")
-    positive_hits = sum(word in text for word in positive)
-    negative_hits = sum(word in text for word in negative)
-    if positive_hits > negative_hits:
-        return "positive"
-    if negative_hits > positive_hits:
-        return "negative"
-    return "neutral"
+    return str(analyze_text(text, rating).get("sentiment") or "neutral")
 
 
 def _avatar_settings() -> dict[str, str]:
@@ -255,6 +318,79 @@ def _log(session_id: str, role: str, content: str, meta: Optional[dict] = None) 
     conn.close()
 
 
+def _conversation_context(session_id: str, limit: int = 6) -> list[dict[str, str]]:
+    conn = _db()
+    rows = conn.execute(
+        "SELECT role, content FROM chat_logs WHERE session_id=? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (session_id, limit),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "speaker": "tourist" if role == "user" else "guide",
+            "text": str(content or "")[:1000],
+        }
+        for role, content in reversed(rows)
+    ]
+
+
+def _linked_emotion_event(event_id: Optional[str], session_id: str) -> bool:
+    if not event_id:
+        return False
+    conn = _db()
+    row = conn.execute(
+        "SELECT 1 FROM emotion_events WHERE id=? AND session_id=? AND source LIKE 'dialogue-%'",
+        (event_id, session_id),
+    ).fetchone()
+    conn.close()
+    return bool(row)
+
+
+async def _record_text_emotion(
+    session_id: str,
+    transcript: str,
+    source: str = "dialogue-text",
+) -> str:
+    event_id = str(uuid.uuid4())
+    result = await emotion_analyzer.analyze(None, transcript)
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _db()
+    conn.execute(
+        """
+        INSERT INTO emotion_events
+            (id, session_id, source, transcript, rating, media_kind,
+             emotion_label, emotion_scores, sentiment, valence, confidence,
+             aspects, status, model_name, analysis_mode, error,
+             created_at, completed_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            event_id,
+            session_id,
+            source,
+            transcript[:4000],
+            None,
+            "text",
+            result.get("emotion"),
+            json.dumps(result.get("scores") or {}, ensure_ascii=False),
+            result.get("sentiment"),
+            result.get("valence"),
+            result.get("confidence"),
+            json.dumps(result.get("aspects") or [], ensure_ascii=False),
+            "completed",
+            result.get("model"),
+            result.get("analysis_mode") or "text",
+            result.get("model_error") or None,
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return event_id
+
+
 def _speech_text(text: str) -> str:
     """Remove model-only JSON metadata before any TTS provider sees it."""
     spoken_lines: list[str] = []
@@ -287,6 +423,14 @@ def _pcm16_mono_wav(pcm: bytes, sample_rate: int) -> bytes:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_api_key()
+    conn = _db()
+    conn.execute(
+        "UPDATE emotion_events SET status='failed', "
+        "error='服务重启，未完成的分析任务已终止' "
+        "WHERE status IN ('queued','processing')"
+    )
+    conn.commit()
+    conn.close()
     turn_config_error = cloudflare_turn_config_error()
     if turn_config_error:
         raise RuntimeError(turn_config_error)
@@ -324,15 +468,6 @@ def _is_admin_listener(request: Request) -> bool:
     return _request_port(request) == ADMIN_PORT
 
 
-def _admin_url(request: Request, path: str = "/admin") -> str:
-    if PUBLIC_ADMIN_URL:
-        return f"{PUBLIC_ADMIN_URL}{path}"
-    hostname = request.url.hostname or "localhost"
-    if ":" in hostname and not hostname.startswith("["):
-        hostname = f"[{hostname}]"
-    return f"https://{hostname}:{ADMIN_PORT}{path}"
-
-
 def _admin_authenticated(request: Request) -> bool:
     return verify_admin_token(request.cookies.get(ADMIN_COOKIE_NAME))
 
@@ -361,13 +496,8 @@ async def separate_admin_boundary(request: Request, call_next):
     auth_free = path in {"/v1/admin/auth/login", "/v1/admin/auth/logout"}
 
     if not _is_admin_listener(request):
-        if admin_page or path == "/login":
-            return RedirectResponse(_admin_url(request, "/admin"), status_code=307)
-        if admin_api:
-            return JSONResponse(
-                {"detail": "管理接口仅在独立后台端口提供"},
-                status_code=404,
-            )
+        if admin_page or path == "/login" or admin_api:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
         return await call_next(request)
 
     allowed = (
@@ -503,6 +633,21 @@ async def _livetalking_post(path: str, payload: dict, timeout: float = 10.0) -> 
     return data
 
 
+def _direct_turn_server(fallback_hostname: str | None = None) -> dict[str, Any]:
+    public_app_hostname = urlparse(PUBLIC_APP_URL).hostname if PUBLIC_APP_URL else None
+    hostname = TURN_PUBLIC_HOST or fallback_hostname or public_app_hostname or "localhost"
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    urls = [f"turn:{hostname}:{TURN_PORT}?transport=tcp"]
+    if TURN_UDP_ENABLED:
+        urls.insert(0, f"turn:{hostname}:{TURN_PORT}?transport=udp")
+    return {
+        "urls": urls,
+        "username": TURN_USERNAME,
+        "credential": TURN_CREDENTIAL,
+    }
+
+
 _livetalking_start_lock = asyncio.Lock()
 _livetalking_last_used_file = ROOT / "deploy" / "livetalking" / "last-used"
 
@@ -516,7 +661,6 @@ async def _ensure_livetalking_started() -> bool:
     if not LIVETALKING_ENABLED:
         raise HTTPException(503, "LiveTalking is disabled")
     async with _livetalking_start_lock:
-        was_ready = False
         try:
             async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
                 response = await client.get(f"{LIVETALKING_URL}/api/admin/config")
@@ -524,7 +668,8 @@ async def _ensure_livetalking_started() -> bool:
         except httpx.HTTPError:
             pass
         else:
-            was_ready = True
+            _mark_livetalking_used()
+            return False
 
         def start_service() -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -543,7 +688,29 @@ async def _ensure_livetalking_started() -> bool:
             detail = (completed.stderr or completed.stdout).strip()
             raise HTTPException(503, f"LiveTalking start failed: {detail}")
         _mark_livetalking_used()
-    return not was_ready
+    return True
+
+
+_livetalking_warm_task: asyncio.Task[None] | None = None
+
+
+def _schedule_livetalking_warmup() -> None:
+    global _livetalking_warm_task
+    if not LIVETALKING_ENABLED:
+        return
+    if _livetalking_warm_task and not _livetalking_warm_task.done():
+        return
+
+    async def warmup() -> None:
+        global _livetalking_warm_task
+        try:
+            await _ensure_livetalking_started()
+        except Exception as exc:
+            print(f"[warn] LiveTalking background warmup failed: {exc}")
+        finally:
+            _livetalking_warm_task = None
+
+    _livetalking_warm_task = asyncio.create_task(warmup())
 
 
 @app.get("/v1/livetalking/status")
@@ -558,15 +725,8 @@ async def livetalking_status(request: Request):
         except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
             print(f"[warn] Cloudflare TURN credentials unavailable: {exc}")
             ice_detail = "公网 WebRTC 中继凭据获取失败"
-    elif TURN_ENABLED and not PUBLIC_APP_URL:
-        hostname = request.url.hostname or "localhost"
-        if ":" in hostname and not hostname.startswith("["):
-            hostname = f"[{hostname}]"
-        turn = {
-            "urls": [f"turn:{hostname}:{TURN_PORT}?transport=tcp"],
-            "username": TURN_USERNAME,
-            "credential": TURN_CREDENTIAL,
-        }
+    elif TURN_ENABLED:
+        turn = _direct_turn_server(request.url.hostname)
         ice_servers = [turn]
     elif PUBLIC_APP_URL:
         ice_detail = "公网模式需要配置 Cloudflare TURN"
@@ -611,7 +771,9 @@ async def livetalking_offer(req: LiveTalkingOfferRequest):
         except (httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
             print(f"[warn] Cloudflare TURN credentials unavailable: {exc}")
             raise HTTPException(503, "公网 WebRTC 中继凭据获取失败") from exc
-    elif PUBLIC_APP_URL:
+    elif TURN_ENABLED:
+        payload["ice_servers"] = [_direct_turn_server()]
+    elif PUBLIC_APP_URL and not TURN_ENABLED:
         raise HTTPException(503, "公网模式需要配置 Cloudflare TURN")
     return await _livetalking_post("/offer", payload, timeout=20.0)
 
@@ -632,11 +794,10 @@ async def _stream_tts_to_livetalking(
     if not speech_text:
         return
 
-    total_pcm_bytes = 0
+    pcm_audio = bytearray()
     sample_rate: Optional[int] = None
     chunk_count = 0
     tts_started_at = asyncio.get_running_loop().time()
-    first_upload_ms: Optional[int] = None
     async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
         async for event in zhipu.tts_stream(
             speech_text,
@@ -664,38 +825,33 @@ async def _stream_tts_to_livetalking(
             if not pcm_chunk:
                 continue
             chunk_count += 1
-            total_pcm_bytes += len(pcm_chunk)
-            if total_pcm_bytes > 32 * 1024 * 1024:
+            pcm_audio.extend(pcm_chunk)
+            if len(pcm_audio) > 32 * 1024 * 1024:
                 raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
 
-            # Forward each decoded TTS chunk immediately. The previous code waited
-            # for the whole sentence, adding the complete first-sentence duration
-            # to time-to-first-audio even though both upstream and downstream are
-            # capable of streaming/queueing.
-            wav_audio = _pcm16_mono_wav(pcm_chunk, sample_rate)
-            response = await client.post(
-                f"{LIVETALKING_URL}/humanaudio",
-                data={"sessionid": session_id},
-                files={"file": ("speech.wav", wav_audio, "audio/wav")},
-            )
-            response.raise_for_status()
-            data = response.json()
-            if isinstance(data, dict) and data.get("code") not in (None, 0):
-                raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
-            _mark_livetalking_used()
-            if first_upload_ms is None:
-                first_upload_ms = round(
-                    (asyncio.get_running_loop().time() - tts_started_at) * 1000
-                )
-
-        if not total_pcm_bytes or sample_rate is None:
+        if not pcm_audio or sample_rate is None:
             raise RuntimeError("GLM-TTS returned no PCM audio")
 
+        # Upload one complete semantic segment. LiveTalking resamples and fades
+        # every uploaded WAV independently, so forwarding each provider chunk as
+        # its own WAV creates artificial micro-pauses and can clip syllables at
+        # chunk boundaries.
+        wav_audio = _pcm16_mono_wav(bytes(pcm_audio), sample_rate)
+        response = await client.post(
+            f"{LIVETALKING_URL}/humanaudio",
+            data={"sessionid": session_id},
+            files={"file": ("speech.wav", wav_audio, "audio/wav")},
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict) and data.get("code") not in (None, 0):
+            raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
+        _mark_livetalking_used()
+
         print(
-            "[livetalking] streamed TTS audio: "
+            "[livetalking] queued semantic TTS audio: "
             f"session={session_id} chunks={chunk_count} "
-            f"samples={total_pcm_bytes // 2} sample_rate={sample_rate} "
-            f"first_upload_ms={first_upload_ms} "
+            f"samples={len(pcm_audio) // 2} sample_rate={sample_rate} "
             f"total_ms={round((asyncio.get_running_loop().time() - tts_started_at) * 1000)}"
         )
 
@@ -787,6 +943,14 @@ async def livetalking_close(req: LiveTalkingSessionRequest):
     _cancel_livetalking_speech_worker(req.session_id)
     return await _livetalking_post(
         "/close_session",
+        {"sessionid": req.session_id},
+    )
+
+
+@app.post("/v1/livetalking/heartbeat")
+async def livetalking_heartbeat(req: LiveTalkingSessionRequest):
+    return await _livetalking_post(
+        "/heartbeat",
         {"sessionid": req.session_id},
     )
 
@@ -999,28 +1163,63 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
 
 @app.post("/v1/feedback")
 async def feedback(req: FeedbackRequest):
-    sentiment = _infer_sentiment(req.comment, req.rating)
+    attraction = attraction_by_id(req.attraction_id.strip())
+    if not attraction:
+        raise HTTPException(400, "请选择有效的景区或子景点")
+    sentiment = analyze_text(req.comment, req.rating)["sentiment"]
     conn = _db()
     conn.execute(
-        "INSERT INTO feedback VALUES (?,?,?,?,?,?)",
+        """
+        INSERT INTO feedback
+            (id, session_id, attraction_id, scenic_area, attraction_name,
+             rating, comment, sentiment, source, emotion_event_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """,
         (
             str(uuid.uuid4()),
             req.session_id or "anonymous",
+            attraction["id"],
+            attraction["scenic_area"],
+            attraction["name"],
             req.rating,
             req.comment.strip(),
             sentiment,
+            "live",
+            None,
             datetime.now(timezone.utc).isoformat(),
         ),
     )
     conn.commit()
     conn.close()
-    return {"ok": True, "sentiment": sentiment, "message": "感谢您的反馈"}
+    return {
+        "ok": True,
+        "sentiment": sentiment,
+        "attraction": attraction,
+        "message": "感谢您的反馈",
+    }
+
+
+@app.get("/v1/attractions")
+async def attractions():
+    return {"scenic_areas": attraction_catalog(), "source": "dataset.docx"}
 
 
 @app.post("/v1/chat")
 async def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
-    _log(session_id, "user", req.message)
+    emotion_event_id = req.emotion_event_id
+    if not _linked_emotion_event(emotion_event_id, session_id):
+        emotion_event_id = await _record_text_emotion(
+            session_id,
+            req.message,
+            "dialogue-text" if req.input_mode == "text" else "dialogue-voice-text",
+        )
+    _log(
+        session_id,
+        "user",
+        req.message,
+        {"input_mode": req.input_mode, "emotion_event_id": emotion_event_id},
+    )
 
     if not req.stream:
         try:
@@ -1055,6 +1254,7 @@ async def chat(req: ChatRequest):
             "retrieval_ms": result.get("retrieval_ms", 0),
             "latency_ms": latency_ms,
             "model_route": req.model_route,
+            "emotion_event_id": emotion_event_id,
         }
 
     async def event_gen():
@@ -1082,6 +1282,7 @@ async def chat(req: ChatRequest):
                     citations = event.get("citations") or []
                     history_turns = int(event.get("history_turns") or 0)
                     event["session_id"] = session_id
+                    event["emotion_event_id"] = emotion_event_id
                 elif event_type == "delta":
                     token = str(event.get("content") or "")
                     parts.append(token)
@@ -1215,8 +1416,13 @@ def _normalize_asr_audio(raw: bytes, filename: str) -> tuple[bytes, str]:
 
 
 @app.post("/v1/asr")
-async def asr(file: UploadFile = File(...)):
-    """智谱语音识别。推荐上传 wav/mp3；webm 需本机有 ffmpeg。"""
+async def asr(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session_id: str = Form(""),
+    emotion_consent: bool = Form(False),
+):
+    """Recognize a visitor utterance and optionally analyze its audio emotion."""
     raw = await file.read()
     if not raw:
         raise HTTPException(400, "empty audio")
@@ -1230,7 +1436,74 @@ async def asr(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(502, f"asr failed: {e}") from e
-    return {"text": text}
+    safe_session = (session_id or str(uuid.uuid4())).strip()[:128]
+    context_turns = _conversation_context(safe_session)
+    if emotion_consent:
+        event_id = str(uuid.uuid4())
+        suffix = Path(fname).suffix.lower()
+        if suffix not in {".wav", ".mp3", ".m4a", ".flac", ".ogg"}:
+            suffix = ".wav"
+        media_dir = DATA_DIR / "emotion_media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        media_path = media_dir / f"{event_id}{suffix}"
+        media_path.write_bytes(audio)
+        now = datetime.now(timezone.utc).isoformat()
+        conn = _db()
+        conn.execute(
+            """
+            INSERT INTO emotion_events
+                (id, session_id, source, transcript, rating, media_kind,
+                 emotion_label, emotion_scores, sentiment, valence, confidence,
+                 aspects, status, model_name, analysis_mode, error,
+                 created_at, completed_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                event_id,
+                safe_session,
+                "dialogue-voice",
+                text[:4000],
+                None,
+                "audio",
+                None,
+                "{}",
+                None,
+                None,
+                None,
+                "[]",
+                "queued",
+                emotion_analyzer.model_name,
+                None,
+                None,
+                now,
+                None,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        background_tasks.add_task(
+            _process_emotion_job,
+            event_id,
+            media_path,
+            text[:4000],
+            None,
+            context_turns,
+        )
+        analysis_status = "queued"
+    else:
+        event_id = await _record_text_emotion(
+            safe_session,
+            text,
+            source="dialogue-voice-text",
+        )
+        analysis_status = "completed-text-only"
+    return {
+        "text": text,
+        "session_id": safe_session,
+        "emotion_event_id": event_id,
+        "emotion_analysis": analysis_status,
+        "audio_retained": bool(emotion_consent and EMOTION_KEEP_MEDIA),
+    }
 
 
 @app.post("/v1/vision/guide")
@@ -1259,116 +1532,159 @@ async def vision_guide(file: UploadFile = File(...), question: str = "这是灵�
     }
 
 
+async def _process_emotion_job(
+    job_id: str,
+    media_path: Path,
+    transcript: str,
+    rating: Optional[int],
+    context_turns: Optional[list[dict[str, str]]] = None,
+) -> None:
+    conn = _db()
+    conn.execute(
+        "UPDATE emotion_events SET status='processing' WHERE id=?",
+        (job_id,),
+    )
+    conn.commit()
+    conn.close()
+    try:
+        result = await emotion_analyzer.analyze(
+            media_path,
+            transcript,
+            rating,
+            context_turns=context_turns,
+        )
+        completed_at = datetime.now(timezone.utc).isoformat()
+        conn = _db()
+        conn.execute(
+            """
+            UPDATE emotion_events
+               SET emotion_label=?, emotion_scores=?, sentiment=?, valence=?,
+                   confidence=?, aspects=?, status='completed', model_name=?,
+                   analysis_mode=?, error=?, completed_at=?
+             WHERE id=?
+            """,
+            (
+                result.get("emotion"),
+                json.dumps(result.get("scores") or {}, ensure_ascii=False),
+                result.get("sentiment"),
+                result.get("valence"),
+                result.get("confidence"),
+                json.dumps(result.get("aspects") or [], ensure_ascii=False),
+                result.get("model"),
+                result.get("analysis_mode"),
+                result.get("model_error") or None,
+                completed_at,
+                job_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        conn = _db()
+        conn.execute(
+            "UPDATE emotion_events SET status='failed', error=?, completed_at=? "
+            "WHERE id=?",
+            (
+                str(exc)[:2000],
+                datetime.now(timezone.utc).isoformat(),
+                job_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+    finally:
+        if not EMOTION_KEEP_MEDIA:
+            media_path.unlink(missing_ok=True)
+
+
+@app.get("/v1/admin/emotion/status")
+async def admin_emotion_status():
+    status = emotion_analyzer.status()
+    conn = _db()
+    rows = conn.execute(
+        "SELECT status, COUNT(*) FROM emotion_events GROUP BY status"
+    ).fetchall()
+    conn.close()
+    status["jobs"] = {str(name): int(count) for name, count in rows}
+    status["media_retained"] = EMOTION_KEEP_MEDIA
+    return status
+
+
+@app.get("/v1/admin/emotion/events/{job_id}")
+async def admin_emotion_event(job_id: str):
+    conn = _db()
+    row = conn.execute(
+        """
+        SELECT id, session_id, source, transcript, rating, media_kind,
+               emotion_label, emotion_scores, sentiment, valence, confidence,
+               aspects, status, model_name, analysis_mode, error,
+               created_at, completed_at
+          FROM emotion_events WHERE id=?
+        """,
+        (job_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "情感分析任务不存在")
+    return {
+        "id": row[0],
+        "session_id": row[1],
+        "source": row[2],
+        "transcript": row[3],
+        "rating": row[4],
+        "media_kind": row[5],
+        "emotion": row[6],
+        "scores": json.loads(row[7] or "{}"),
+        "sentiment": row[8],
+        "valence": row[9],
+        "confidence": row[10],
+        "aspects": json.loads(row[11] or "[]"),
+        "status": row[12],
+        "model": row[13],
+        "analysis_mode": row[14],
+        "error": row[15],
+        "created_at": row[16],
+        "completed_at": row[17],
+    }
+
+
+@app.get("/v1/admin/analytics/historical")
+async def admin_historical_analytics():
+    return await asyncio.to_thread(tourism_analytics.load)
+
+
+@app.post("/v1/admin/analytics/historical/rebuild")
+async def admin_historical_analytics_rebuild():
+    return await asyncio.to_thread(tourism_analytics.load, True)
+
+
+@app.get("/v1/admin/analytics/overview")
+async def admin_analytics_overview():
+    conn = _db()
+    try:
+        return build_overview(conn, ROUTES)
+    finally:
+        conn.close()
+
+
 @app.get("/v1/stats/overview")
 async def stats_overview():
     conn = _db()
-    user_rows = conn.execute(
-        "SELECT session_id, content, meta, created_at FROM chat_logs "
-        "WHERE role='user' ORDER BY created_at DESC"
-    ).fetchall()
-    assistant_rows = conn.execute(
-        "SELECT meta FROM chat_logs WHERE role='assistant' ORDER BY created_at DESC LIMIT 500"
-    ).fetchall()
-    feedback_rows = conn.execute(
-        "SELECT rating, comment, sentiment, created_at FROM feedback "
-        "ORDER BY created_at DESC"
-    ).fetchall()
-    conn.close()
-
-    now = datetime.now(timezone.utc)
-    today = now.date().isoformat()
-    week_start = (now.date() - timedelta(days=6)).isoformat()
-    recent_questions = [row[1] for row in user_rows[:200]]
-    today_sessions = {row[0] for row in user_rows if row[3][:10] == today}
-    week_sessions = {row[0] for row in user_rows if row[3][:10] >= week_start}
-
-    hot = ["灵山大佛", "梵宫", "九龙灌浴", "祥符禅寺", "路线", "五印坛城"]
-    counts = {key: sum(1 for question in recent_questions if key in question) for key in hot}
-
-    daily = []
-    for offset in range(6, -1, -1):
-        day = (now.date() - timedelta(days=offset)).isoformat()
-        day_rows = [row for row in user_rows if row[3][:10] == day]
-        daily.append(
-            {
-                "date": day,
-                "turns": len(day_rows),
-                "visitors": len({row[0] for row in day_rows}),
-            }
-        )
-
-    sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
-    for _, content, meta_text, _ in user_rows[:500]:
-        try:
-            sentiment = json.loads(meta_text or "{}").get("sentiment")
-        except json.JSONDecodeError:
-            sentiment = None
-        sentiment = sentiment or _infer_sentiment(content)
-        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
-    for _, _, sentiment, _ in feedback_rows:
-        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
-
-    ratings = [row[0] for row in feedback_rows]
-    satisfaction_trend = []
-    for offset in range(6, -1, -1):
-        day = (now.date() - timedelta(days=offset)).isoformat()
-        values = [row[0] for row in feedback_rows if row[3][:10] == day]
-        satisfaction_trend.append(
-            {
-                "date": day,
-                "score": round(sum(values) / len(values), 2) if values else None,
-                "count": len(values),
-            }
-        )
-
-    latencies = []
-    for (meta_text,) in assistant_rows:
-        try:
-            latency = json.loads(meta_text or "{}").get("latency_ms")
-        except json.JSONDecodeError:
-            latency = None
-        if isinstance(latency, (int, float)):
-            latencies.append(float(latency))
-
-    suggestions = []
-    if sentiment_counts.get("negative", 0) > sentiment_counts.get("positive", 0):
-        suggestions.append("负向反馈偏多，建议复核高频问题回答与现场排队体验。")
-    if counts.get("路线", 0) > 0:
-        suggestions.append("路线咨询活跃，可在入口增加分众路线二维码和预计时长提示。")
-    if counts.get("九龙灌浴", 0) > 0:
-        suggestions.append("九龙灌浴关注度较高，建议突出表演时刻和最佳观看位置。")
-    if not suggestions:
-        suggestions.append("当前服务运行平稳，建议持续扩充高频问题知识库并收集满意度。")
-
-    return {
-        "service_turns": len(user_rows),
-        "unique_visitors": len({row[0] for row in user_rows}),
-        "today_visitors": len(today_sessions),
-        "week_visitors": len(week_sessions),
-        "avg_satisfaction": round(sum(ratings) / len(ratings), 2) if ratings else None,
-        "feedback_count": len(feedback_rows),
-        "avg_response_ms": round(sum(latencies) / len(latencies)) if latencies else None,
-        "hot_topics": sorted(
-            [{"name": k, "count": v} for k, v in counts.items()],
-            key=lambda x: x["count"],
-            reverse=True,
-        ),
-        "sentiment": sentiment_counts,
-        "daily_service": daily,
-        "satisfaction_trend": satisfaction_trend,
-        "recent_questions": recent_questions[:10],
-        "recent_feedback": [
-            {
-                "rating": row[0],
-                "comment": row[1],
-                "sentiment": row[2],
-                "created_at": row[3],
-            }
-            for row in feedback_rows[:10]
-        ],
-        "service_suggestions": suggestions,
-        "routes": ROUTES,
-    }
+    try:
+        overview = build_overview(conn, ROUTES)
+        return {
+            key: overview[key]
+            for key in (
+                "service_turns",
+                "unique_visitors",
+                "today_visitors",
+                "week_visitors",
+                "avg_satisfaction",
+                "avg_response_ms",
+            )
+        }
+    finally:
+        conn.close()
 
 
 @app.get("/admin")
@@ -1394,6 +1710,7 @@ async def admin_login_page(request: Request):
 async def index():
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
+        _schedule_livetalking_warmup()
         return FileResponse(index_path)
     return {
         "name": "Lingshan AI Guide API",

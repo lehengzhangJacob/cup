@@ -40,11 +40,6 @@
       font-weight: 700;
     }
     header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-    .admin-link {
-      color: var(--gold); text-decoration: none; font-size: 12px;
-      border: 1px solid rgba(212,178,106,.42); border-radius: 999px; padding: 7px 12px;
-      background: rgba(0,0,0,.18);
-    }
     main {
       max-width: 1080px;
       margin: 0 auto;
@@ -365,19 +360,6 @@
       font-size: 12px;
       letter-spacing: .05em;
     }
-    .admin-link {
-      display: inline-flex;
-      align-items: center;
-      min-height: 38px;
-      padding: 8px 14px;
-      color: var(--pine-deep);
-      border: 1px solid rgba(31, 90, 79, .36);
-      border-radius: 0;
-      background: transparent;
-      font-size: 12px;
-      transition: background .18s ease, color .18s ease, transform .18s ease;
-    }
-    .admin-link:hover { color: #fffaf1; background: var(--pine); transform: translateY(-1px); }
     main {
       width: min(1480px, calc(100% - 48px));
       max-width: none;
@@ -676,8 +658,12 @@
     }
     .feedback summary { color: var(--ink-soft); cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
     .feedback-row { margin-top: 11px; }
-    .feedback-row { grid-template-columns: 112px 1fr auto; }
+    .feedback-row { grid-template-columns:minmax(115px,1fr) minmax(145px,1.2fr) 112px; }
+    #feedbackComment { grid-column:1 / 3; }
+    #sendFeedback { grid-column:3; }
     .feedback-row button { min-height: 40px; border-radius: 2px; }
+    .emotion-consent { grid-column:1/-1; display:flex; gap:8px; align-items:center; color:var(--ink-soft); font-size:12px; }
+    .emotion-consent input { width:auto; flex:0 0 auto; }
     .hint { color: var(--ink-soft); font-size: 12px; line-height: 1.65; }
     .rec-dot { background: var(--cinnabar); }
     @media (max-width: 1100px) {
@@ -695,7 +681,6 @@
       header { align-items: flex-start; gap: 12px; }
       header h1 { font-size: 23px; line-height: 1.15; }
       header p { max-width: 205px; line-height: 1.5; }
-      .admin-link { padding: 8px 9px; font-size: 11px; text-align: center; }
       .stage { min-height: 600px; }
       .stage-footer { grid-template-columns: 1fr; gap: 8px; }
       .quick-prompts { justify-content: flex-start; }
@@ -708,6 +693,7 @@
       .location-method { grid-template-columns: 1fr; }
       .location-method button { width: 100%; }
       .feedback-row { grid-template-columns: 1fr; }
+      #feedbackComment,#sendFeedback { grid-column:auto; }
       .settings-grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -717,7 +703,6 @@
     <div>
       <h1>灵山小向导 · 灵曦</h1>
     </div>
-    <a class="admin-link" href="/admin">景区管理后台 →</a>
   </header>
   <main>
     <section class="card stage">
@@ -741,14 +726,6 @@
                 <button type="button" data-hair="classic" aria-pressed="true">雾紫</button>
                 <button type="button" data-hair="chestnut" aria-pressed="false">茶棕</button>
                 <button type="button" data-hair="ink" aria-pressed="false">墨青</button>
-              </div>
-            </div>
-            <div class="style-group">
-              <span class="style-label">服装</span>
-              <div class="style-options" id="costumeOptions">
-                <button type="button" data-costume="classic" aria-pressed="true">云墨灰</button>
-                <button type="button" data-costume="jade" aria-pressed="false">灵山青</button>
-                <button type="button" data-costume="cinnabar" aria-pressed="false">朱砂红</button>
               </div>
             </div>
           </div>
@@ -885,11 +862,14 @@
             <label>服务地址</label>
             <input id="base" value="" placeholder="默认当前站点" />
           </div>
+          <label class="emotion-consent"><input id="emotionConsent" type="checkbox" /> 允许本次语音使用原声与 ASR 文本分析情绪；原音频默认在分析后删除</label>
         </div>
       </details>
       <details class="feedback">
         <summary>本次体验反馈</summary>
         <div class="feedback-row">
+          <select id="feedbackArea" aria-label="景区"><option value="">加载景区…</option></select>
+          <select id="feedbackAttraction" aria-label="景点"><option value="">请选择景点</option></select>
           <select id="rating" aria-label="满意度"><option value="5">5分 · 非常满意</option><option value="4">4分 · 满意</option><option value="3">3分 · 一般</option><option value="2">2分 · 不满意</option><option value="1">1分 · 很不满意</option></select>
           <input id="feedbackComment" maxlength="1000" placeholder="可填写建议或感受" />
           <button id="sendFeedback" class="secondary" type="button">提交反馈</button>
@@ -898,10 +878,6 @@
     </section>
   </main>
 
-  <script src="/static/vendor/live2dcubismcore.min.js"></script>
-  <script src="/static/vendor/pixi.min.js"></script>
-  <script src="/static/vendor/cubism4.min.js"></script>
-  <script src="/static/js/lingxi-live2d.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const base = () => ($("base").value.trim() || location.origin);
@@ -928,6 +904,7 @@
       avatarId: null,
     };
     let liveTalkingStartPromise = null;
+    let liveTalkingServiceStartPromise = null;
 
     const savedModelRoute = localStorage.getItem("lingshan-model-route");
     if (savedModelRoute === "cloud" || savedModelRoute === "local") {
@@ -1001,18 +978,58 @@
     }
 
     // ---------- Live2D init ----------
-    async function bootLive2D() {
-      try {
-        await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
-        $("modelLoading").classList.add("is-hidden");
-        $("styleButton").disabled = false;
-        $("avatarHint").textContent = "灵曦已就绪";
-        $("status").textContent = "已准备好";
-      } catch (err) {
-        console.error(err);
-        $("modelLoading").innerHTML = "<strong>Live2D 载入失败</strong><span>" + String(err.message || err) + "</span>";
-        $("avatarHint").textContent = "Live2D 失败，文字/语音问答仍可用";
-      }
+    let live2DReady = false;
+    let live2DBootPromise = null;
+    let live2DScriptsPromise = null;
+
+    function loadLive2DScripts() {
+      if (window.LingxiLive2D) return Promise.resolve();
+      if (live2DScriptsPromise) return live2DScriptsPromise;
+      const sources = [
+        "/static/vendor/live2dcubismcore.min.js",
+        "/static/vendor/pixi.min.js",
+        "/static/vendor/cubism4.min.js",
+        "/static/js/lingxi-live2d.js",
+      ];
+      live2DScriptsPromise = sources.reduce(
+        (previous, source) => previous.then(() => new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = source;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Live2D 脚本加载失败：" + source));
+          document.head.appendChild(script);
+        })),
+        Promise.resolve(),
+      ).catch(error => {
+        live2DScriptsPromise = null;
+        throw error;
+      });
+      return live2DScriptsPromise;
+    }
+
+    function bootLive2D() {
+      if (live2DReady) return Promise.resolve(true);
+      if (live2DBootPromise) return live2DBootPromise;
+      live2DBootPromise = (async () => {
+        try {
+          await loadLive2DScripts();
+          await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
+          live2DReady = true;
+          $("modelLoading").classList.add("is-hidden");
+          $("styleButton").disabled = false;
+          $("avatarHint").textContent = "灵曦已就绪";
+          $("status").textContent = "已准备好";
+          return true;
+        } catch (err) {
+          console.error(err);
+          $("modelLoading").innerHTML = "<strong>Live2D 载入失败</strong><span>" + String(err.message || err) + "</span>";
+          $("avatarHint").textContent = "Live2D 失败，文字/语音问答仍可用";
+          return false;
+        }
+      })().finally(() => {
+        live2DBootPromise = null;
+      });
+      return live2DBootPromise;
     }
 
 
@@ -1033,6 +1050,7 @@
       document.getElementById("avatarBadge").textContent = "灵曦 · 已准备";
       document.getElementById("avatarHint").textContent = message || "灵曦已准备好";
       document.getElementById("styleButton").disabled = false;
+      void bootLive2D();
     }
 
     function ensureLiveTalkingPlayback() {
@@ -1063,12 +1081,16 @@
       if (liveTalkingState.ready || liveTalkingState.connecting) return liveTalkingState.ready;
       liveTalkingState.connecting = true;
       try {
-        const statusResponse = await fetch(base() + "/v1/livetalking/status", { cache: "no-store" });
+        const statusResponse = await fetch(base() + "/v1/livetalking/status", {
+          cache: "no-store",
+          priority: "high",
+        });
         if (!statusResponse.ok) throw new Error("LiveTalking 状态读取失败");
         const status = await statusResponse.json();
         liveTalkingState.avatarId = status.avatar_id || null;
         if (!status.enabled || !status.ready) {
           fallbackToLive2D("灵曦正在准备，您可以先开始提问");
+          await bootLive2D();
           return false;
         }
 
@@ -1110,7 +1132,9 @@
           if (state === "connected") {
             liveTalkingState.ready = true;
             activateLiveTalkingView();
-            document.getElementById("status").textContent = "灵曦已准备好";
+            if (!document.getElementById("ask").disabled) {
+              document.getElementById("status").textContent = "灵曦已准备好";
+            }
             resolveConnected(true);
           } else if (state === "failed") {
             rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
@@ -1126,6 +1150,7 @@
         await waitForIceGathering(pc);
         const offerResponse = await fetch(base() + "/v1/livetalking/offer", {
           method: "POST",
+          priority: "high",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sdp: pc.localDescription.sdp,
@@ -1172,19 +1197,31 @@
           }).catch(() => {});
         }
         fallbackToLive2D("灵曦暂时无法连接，已切换到轻量模式");
+        await bootLive2D();
         return false;
       } finally {
         liveTalkingState.connecting = false;
       }
     }
 
+    function warmLiveTalkingService() {
+      if (!liveTalkingServiceStartPromise) {
+        liveTalkingServiceStartPromise = (async () => {
+          const response = await fetch(base() + "/v1/livetalking/start", { method: "POST" });
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        })().finally(() => {
+          liveTalkingServiceStartPromise = null;
+        });
+      }
+      return liveTalkingServiceStartPromise;
+    }
+
     async function ensureLiveTalkingOnDemand() {
       if (!liveTalkingStartPromise) {
         liveTalkingStartPromise = (async () => {
           $("avatarHint").textContent = "灵曦正在准备…";
-          const response = await fetch(base() + "/v1/livetalking/start", { method: "POST" });
-          if (!response.ok) throw new Error(await response.text());
-          const result = await response.json();
+          const result = await warmLiveTalkingService();
           if (result.started && liveTalkingState.pc) {
             try { liveTalkingState.pc.close(); } catch (_) {}
             liveTalkingState.pc = null;
@@ -1356,7 +1393,6 @@
 
     const expressionButtons = [...document.querySelectorAll("[data-expression]")];
     const hairButtons = [...document.querySelectorAll("[data-hair]")];
-    const costumeButtons = [...document.querySelectorAll("[data-costume]")];
 
     expressionButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1372,14 +1408,6 @@
         setPressed(hairButtons, btn.dataset.hair, "hair");
       });
     });
-    costumeButtons.forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        stopSpeech("已切换服装 · 语音已停止");
-        await LingxiLive2D.setCostume(btn.dataset.costume);
-        setPressed(costumeButtons, btn.dataset.costume, "costume");
-      });
-    });
-
     function setEmotion(e) {
       if (window.LingxiLive2D) LingxiLive2D.setEmotion(e || "calm");
       const mapped = { smile: "smile", calm: "natural", solemn: "gentle", surprise: "bright" }[e] || "natural";
@@ -1854,6 +1882,61 @@
       return createPcmSpeechPipeline(interactionStartedAt);
     }
 
+    function createDeferredSpeechPipeline(interactionStartedAt, readyPromise) {
+      const queuedSegments = [];
+      let delegate = null;
+      let finished = false;
+      let cancelled = false;
+      let resolved = false;
+      let resolveDone;
+      const done = new Promise(resolve => { resolveDone = resolve; });
+
+      function settle() {
+        if (resolved) return;
+        resolved = true;
+        if (currentSpeechPipeline === pipeline) currentSpeechPipeline = null;
+        resolveDone();
+      }
+
+      const pipeline = {
+        kind: "deferred",
+        enqueue(text) {
+          if (cancelled || finished) return;
+          if (delegate) delegate.enqueue(text);
+          else queuedSegments.push(text);
+        },
+        finish() {
+          if (cancelled || finished) return;
+          finished = true;
+          if (delegate) delegate.finish();
+        },
+        cancel() {
+          if (cancelled) return;
+          cancelled = true;
+          queuedSegments.length = 0;
+          if (delegate) delegate.cancel();
+          else settle();
+        },
+        done,
+      };
+      currentSpeechPipeline = pipeline;
+
+      Promise.resolve(readyPromise)
+        .catch(() => false)
+        .then(() => {
+          if (cancelled) return;
+          delegate = createSpeechPipeline(interactionStartedAt);
+          currentSpeechPipeline = pipeline;
+          queuedSegments.splice(0).forEach(segment => delegate.enqueue(segment));
+          if (finished) delegate.finish();
+          return delegate.done;
+        })
+        .catch(error => console.error(error))
+        .finally(settle);
+
+      return pipeline;
+    }
+
     async function speak(text, interactionStartedAt = performance.now()) {
       if (!text) return Promise.resolve();
       stopSpeech();
@@ -1869,25 +1952,35 @@
       return pipeline.done;
     }
 
-    async function askText(message, interactionStartedAt = performance.now()) {
+    async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null) {
       if (!message) return;
-      stopSpeech("正在按需启动数字人…");
+      stopSpeech("正在连接数字人并思考…");
       const btn = $("ask");
       btn.disabled = true;
       $("log").textContent = "";
       setEmotion("calm");
 
-      try {
-        await ensureLiveTalkingOnDemand();
-      } catch (error) {
+      const liveTalkingReadyPromise = ensureLiveTalkingOnDemand().catch(error => {
         console.error(error);
         fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
-      }
+        return false;
+      });
       $("status").textContent = "思考中…";
 
+      const interactionToken = speechToken;
       const serverDrivenSpeech = !!(liveTalkingState.ready && liveTalkingState.sessionId);
-      const pipeline = createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech });
+      let pipeline = null;
       let speechCursor = 0;
+
+      function speechPipeline() {
+        if (interactionToken !== speechToken) return null;
+        if (!pipeline) {
+          pipeline = liveTalkingState.ready || xmovState.ready
+            ? createSpeechPipeline(interactionStartedAt, { serverDriven: serverDrivenSpeech })
+            : createDeferredSpeechPipeline(interactionStartedAt, liveTalkingReadyPromise);
+        }
+        return pipeline;
+      }
 
       function nextSegmentEnd(visibleText, flush) {
         const rest = visibleText.slice(speechCursor);
@@ -1903,19 +1996,12 @@
 
         const clauseBoundary = /[，,：:]/g;
         while ((match = clauseBoundary.exec(rest)) !== null) {
-          if (rest.slice(0, match.index).trim().length >= 8) {
+          if (rest.slice(0, match.index).trim().length >= 24) {
             return match.index + 1;
           }
         }
 
-        if (rest.length >= 40) {
-          const limit = Math.min(40, rest.length);
-          let softEnd = -1;
-          for (let i = 18; i < limit; i++) {
-            if ("，,：:".includes(rest[i])) softEnd = i + 1;
-          }
-          return softEnd > 0 ? softEnd : limit;
-        }
+        if (rest.length >= 120) return 120;
         return flush ? rest.length : 0;
       }
 
@@ -1925,7 +2011,8 @@
           if (!end) break;
           const segment = visibleText.slice(speechCursor, speechCursor + end).trim();
           speechCursor += end;
-          if (segment) pipeline.enqueue(segment);
+          const activePipeline = segment ? speechPipeline() : null;
+          if (activePipeline) activePipeline.enqueue(segment);
         }
       }
 
@@ -1939,6 +2026,8 @@
             session_id: sessionId,
             livetalking_session_id: serverDrivenSpeech ? liveTalkingState.sessionId : null,
             model_route: $("modelRoute").value,
+            input_mode: inputMode,
+            emotion_event_id: emotionEventId,
             stream: true
           })
         });
@@ -1976,7 +2065,7 @@
         const parsed = stripMeta(full);
         $("log").textContent = parsed.text;
         enqueueReadySpeech(parsed.text, true);
-        pipeline.finish();
+        if (pipeline) pipeline.finish();
         if (parsed.emotion) setEmotion(parsed.emotion);
       } catch (e) {
         stopSpeech();
@@ -2118,6 +2207,8 @@
       $("status").innerHTML = '<span class="rec-dot"></span>识别中…';
       const fd = new FormData();
       fd.append("file", enc.blob, "speech.wav");
+      if (sessionId) fd.append("session_id", sessionId);
+      fd.append("emotion_consent", String($("emotionConsent").checked));
       const r = await fetch(base() + "/v1/asr", { method: "POST", body: fd });
       if (!r.ok) {
         let msg = await r.text();
@@ -2128,11 +2219,12 @@
         throw new Error("识别失败: " + msg);
       }
       const data = await r.json();
+      sessionId = data.session_id || sessionId;
       const text = (data.text || "").trim();
       if (!text) throw new Error("未识别到内容");
       $("q").value = text;
       $("status").textContent = "识别：" + text;
-      await askText(text, interactionStartedAt);
+      await askText(text, interactionStartedAt, "voice", data.emotion_event_id || null);
     }
 
     let mediaRecorder = null;
@@ -2360,8 +2452,45 @@
         .catch(error => showLocationState("二维码定位失败：" + String(error.message || error)));
     }
 
+    let feedbackAreas = [];
+    function renderFeedbackAttractions() {
+      const area = feedbackAreas.find(item => item.id === $("feedbackArea").value);
+      $("feedbackAttraction").replaceChildren();
+      for (const item of area?.children || []) {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.name;
+        $("feedbackAttraction").appendChild(option);
+      }
+    }
+    async function loadFeedbackAttractions() {
+      try {
+        const response = await fetch(base() + "/v1/attractions");
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        feedbackAreas = data.scenic_areas || [];
+        $("feedbackArea").replaceChildren();
+        for (const area of feedbackAreas) {
+          const option = document.createElement("option");
+          option.value = area.id;
+          option.textContent = area.name;
+          $("feedbackArea").appendChild(option);
+        }
+        renderFeedbackAttractions();
+      } catch (error) {
+        $("feedbackArea").innerHTML = '<option value="">景区加载失败</option>';
+        $("status").textContent = "满意度景点目录加载失败：" + String(error.message || error);
+      }
+    }
+    $("feedbackArea").addEventListener("change", renderFeedbackAttractions);
+    loadFeedbackAttractions();
+
     $("sendFeedback").addEventListener("click", async () => {
       const button = $("sendFeedback");
+      if (!$("feedbackAttraction").value) {
+        $("status").textContent = "请先选择要评价的景区或子景点";
+        return;
+      }
       button.disabled = true;
       try {
         const response = await fetch(base() + "/v1/feedback", {
@@ -2369,6 +2498,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             session_id: sessionId,
+            attraction_id: $("feedbackAttraction").value,
             rating: Number($("rating").value),
             comment: $("feedbackComment").value.trim(),
           }),
@@ -2386,10 +2516,35 @@
       }
     });
 
-    // Keep the page GPU-free until the visitor starts an interaction.
+    async function refreshLiveTalkingLease() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        await ensureLiveTalkingOnDemand();
+        const activeSessionId = liveTalkingState.sessionId;
+        if (!liveTalkingState.ready || !activeSessionId) return;
+        const response = await fetch(base() + "/v1/livetalking/heartbeat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: activeSessionId }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+      } catch (error) {
+        console.warn("LiveTalking 预连接失败，将在交互时重试", error);
+        liveTalkingState.ready = false;
+        liveTalkingState.sessionId = null;
+        if (liveTalkingState.pc) {
+          try { liveTalkingState.pc.close(); } catch (_) {}
+        }
+        liveTalkingState.pc = null;
+      }
+    }
+
+    document.addEventListener("visibilitychange", refreshLiveTalkingLease);
+    window.setInterval(refreshLiveTalkingLease, 15000);
+    void refreshLiveTalkingLease();
+
     void refreshModelRoutes();
     $("modelLoading").querySelector("span:last-child").textContent = "灵曦正在准备…";
-    void bootLive2D();
   </script>
 </body>
 </html>
