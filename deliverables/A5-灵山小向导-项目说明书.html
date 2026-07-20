@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>灵山小向导·灵曦——软件需求与总体设计说明书</title>
+  <style>
+    :root { --ink:#19352f; --jade:#276655; --red:#ad4939; --gold:#b27b2c; --muted:#63736d; --line:#d9d5ca; --paper:#fffdf7; }
+    @page { size:A4; margin:15mm 14mm 17mm; }
+    * { box-sizing:border-box; }
+    html { background:#ece9df; }
+    body { max-width:210mm; margin:0 auto; padding:17mm 15mm; background:var(--paper); color:#263b36; font:10.6pt/1.72 "Noto Sans CJK SC","Microsoft YaHei",sans-serif; }
+    h1,h2,h3 { color:var(--ink); page-break-after:avoid; break-after:avoid-page; }
+    h1 { margin:0; padding-top:8mm; text-align:center; font-size:28pt; letter-spacing:.08em; }
+    h1 + h2 { margin:3mm 0 9mm; padding:0 0 5mm; border-bottom:2px solid var(--jade); text-align:center; font-size:17pt; color:var(--red); }
+    h2 { margin:10mm 0 4mm; padding:0 0 2mm 4mm; border-left:4px solid var(--red); border-bottom:1px solid var(--line); font-size:17pt; }
+    h3 { margin:7mm 0 2mm; font-size:13pt; color:var(--jade); }
+    p { margin:2.1mm 0; orphans:3; widows:3; }
+    ul,ol { margin:2mm 0 3mm 6mm; padding-left:5mm; }
+    li { margin:1mm 0; }
+    table { width:100%; margin:3mm 0 5mm; border-collapse:collapse; break-inside:avoid; page-break-inside:avoid; font-size:9.3pt; }
+    th,td { padding:1.8mm 2.2mm; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#e9efe9; color:var(--ink); font-weight:700; }
+    tbody tr:nth-child(even) { background:#f8f6ef; }
+    a { color:var(--jade); text-decoration:none; }
+    code { padding:.2mm 1mm; border-radius:2px; background:#f0eee6; color:#7c3b31; font-family:"DejaVu Sans Mono",monospace; font-size:9.4pt; }
+    pre { margin:3mm 0 5mm; padding:4mm; border-left:3px solid var(--gold); background:#f2efe7; white-space:pre-wrap; break-inside:avoid; page-break-inside:avoid; }
+    pre code { padding:0; background:none; color:#1f3d35; font-size:8.8pt; }
+    img { display:block; width:100%; max-height:168mm; margin:5mm auto 2mm; border:1px solid #d8d3c8; object-fit:contain; break-inside:avoid; page-break-inside:avoid; }
+    p:has(> img) { break-inside:avoid; page-break-inside:avoid; }
+    p > em:only-child { display:block; margin:0 0 5mm; text-align:center; color:var(--muted); font-size:9pt; }
+    strong { color:var(--ink); }
+    hr { border:0; border-top:1px solid var(--line); }
+    @media print {
+      html,body { background:#fff; }
+      body { max-width:none; margin:0; padding:0; }
+      a { color:inherit; }
+      h2 { break-before:auto; }
+    }
+  </style>
+</head>
+<body>
+<h1>灵山小向导·灵曦——软件工程文档</h1>
+<blockquote>
+<p>项目名称：景区导览服务 AI 数字人系统<br />
+文档类型：软件需求与设计说明<br />
+更新日期：2026-07-20</p>
+</blockquote>
+<h2>1. 文档概述</h2>
+<h3>1.1 编写目的</h3>
+<p>本文档说明“灵山小向导·灵曦”的软件需求、系统架构、核心流程、数据结构、接口、
+部署和测试方案，作为开发、联调、测试与后续维护的统一依据。</p>
+<h3>1.2 系统范围</h3>
+<p>系统包含游客端、景区管理端、导览 API、RAG 服务、语音与视觉模型接口、数字人服务、
+情绪分析服务和本地数据存储。系统不负责票务交易、真实地图导航和景区硬件控制。</p>
+<h3>1.3 术语</h3>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RAG</td>
+<td>检索增强生成，先检索景区资料，再生成回答</td>
+</tr>
+<tr>
+<td>ASR / TTS</td>
+<td>语音识别 / 语音合成</td>
+</tr>
+<tr>
+<td>SSE</td>
+<td>服务端事件，用于流式返回模型文本</td>
+</tr>
+<tr>
+<td>WebRTC</td>
+<td>数字人实时音视频传输协议</td>
+</tr>
+<tr>
+<td>LiveTalking</td>
+<td>数字人口型驱动与音视频服务</td>
+</tr>
+<tr>
+<td>HumanOmni</td>
+<td>音视频情绪分析模型</td>
+</tr>
+</tbody>
+</table>
+<h2>2. 系统概述</h2>
+<h3>2.1 建设目标</h3>
+<p>系统为游客提供文字问答、语音问答、数字人讲解、路线推荐、拍照识景、定位辅助和
+满意度反馈；为景区管理人员提供知识维护、数字人配置、服务统计和游客感受度分析。</p>
+<h3>2.2 用户角色</h3>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>主要职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>游客</td>
+<td>提问、听取讲解、查询路线、识别景点、提交反馈</td>
+</tr>
+<tr>
+<td>内容管理员</td>
+<td>维护景区知识文档并重建索引</td>
+</tr>
+<tr>
+<td>运营管理员</td>
+<td>查看访问量、热门咨询、响应时间和游客反馈</td>
+</tr>
+<tr>
+<td>系统维护人员</td>
+<td>启停服务、检查健康状态、管理 GPU 与日志</td>
+</tr>
+</tbody>
+</table>
+<h3>2.3 系统边界</h3>
+<ul>
+<li>游客端只能访问公开导览接口，不能直接访问管理接口。</li>
+<li>管理端使用独立登录会话和来源校验。</li>
+<li>RAG 与 LiveTalking 只作为内部服务，由 FastAPI 网关调用。</li>
+<li>GLM 模型通过服务端 API 调用，密钥不下发到浏览器。</li>
+<li>知识库回答只以已导入的景区资料为事实依据。</li>
+</ul>
+<h2>3. 需求分析</h2>
+<h3>3.1 功能需求</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>模块</th>
+<th>功能要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR-01</td>
+<td>景区问答</td>
+<td>支持文字提问、连续追问、引用来源和资料不足时拒答</td>
+</tr>
+<tr>
+<td>FR-02</td>
+<td>语音交互</td>
+<td>浏览器录音后完成 ASR，并进入统一问答流程</td>
+</tr>
+<tr>
+<td>FR-03</td>
+<td>数字人讲解</td>
+<td>将回答按完整语义句合成语音并驱动口型，通过 WebRTC 播放</td>
+</tr>
+<tr>
+<td>FR-04</td>
+<td>路线推荐</td>
+<td>根据兴趣、时间和当前位置生成游览路线</td>
+</tr>
+<tr>
+<td>FR-05</td>
+<td>拍照识景</td>
+<td>视觉模型识别图片，再由景区知识库校准讲解</td>
+</tr>
+<tr>
+<td>FR-06</td>
+<td>定位辅助</td>
+<td>支持 GPS、景点码和手动选择，并在定位失败时降级</td>
+</tr>
+<tr>
+<td>FR-07</td>
+<td>游客反馈</td>
+<td>对具体景区或景点提交 1–5 分和文字建议</td>
+</tr>
+<tr>
+<td>FR-08</td>
+<td>管理登录</td>
+<td>管理员登录、会话验证和退出</td>
+</tr>
+<tr>
+<td>FR-09</td>
+<td>知识管理</td>
+<td>上传、查看、删除管理员文档并触发索引重建</td>
+</tr>
+<tr>
+<td>FR-10</td>
+<td>数字人配置</td>
+<td>配置显示名称、已安装形象和合成声音；表情由情绪策略实时驱动</td>
+</tr>
+<tr>
+<td>FR-11</td>
+<td>运营分析</td>
+<td>展示游客量、问答量、响应时间、热门主题和反馈</td>
+</tr>
+<tr>
+<td>FR-12</td>
+<td>感受度分析</td>
+<td>保存情绪、文本倾向、方面、置信度和分析状态</td>
+</tr>
+</tbody>
+</table>
+<h3>3.2 非功能需求</h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>类别</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NFR-01</td>
+<td>性能</td>
+<td>热链路语音问答目标为 5 秒内开始数字人非静音播报</td>
+</tr>
+<tr>
+<td>NFR-02</td>
+<td>可用性</td>
+<td>RAG、数字人或情绪模型失败时应明确提示或降级，不阻塞基础问答</td>
+</tr>
+<tr>
+<td>NFR-03</td>
+<td>安全</td>
+<td>管理接口鉴权；模型密钥仅在服务端保存；限制文件类型和大小</td>
+</tr>
+<tr>
+<td>NFR-04</td>
+<td>可维护性</td>
+<td>API、RAG、数字人和分析模块独立部署，提供健康检查</td>
+</tr>
+<tr>
+<td>NFR-05</td>
+<td>资源</td>
+<td>GPU 模型按需启用，空闲后释放 CUDA 上下文</td>
+</tr>
+<tr>
+<td>NFR-06</td>
+<td>可追溯性</td>
+<td>回答记录引用片段、响应时间、模型路线和会话标识</td>
+</tr>
+</tbody>
+</table>
+<h3>3.3 系统用例图</h3>
+<p><img src="diagrams/01-use-case.svg" alt="灵山小向导系统用例图" /></p>
+<h3>3.4 主要用例</h3>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>前置条件</th>
+<th>主流程</th>
+<th>异常处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>景区问答</td>
+<td>游客端可访问 API</td>
+<td>提交问题→检索知识→流式生成→展示引用</td>
+<td>RAG 不可用时返回明确错误</td>
+</tr>
+<tr>
+<td>语音数字人问答</td>
+<td>HTTPS 麦克风授权成功</td>
+<td>录音→ASR→RAG→TTS→数字人口型→WebRTC 播放</td>
+<td>数字人不可用时回退文字或轻量模式</td>
+</tr>
+<tr>
+<td>知识库更新</td>
+<td>管理员已登录</td>
+<td>上传文档→校验→切片→向量化→重建索引</td>
+<td>文件不合法或重建失败时保留旧索引</td>
+</tr>
+<tr>
+<td>运营分析</td>
+<td>管理员已登录</td>
+<td>查询日志、反馈、情绪和历史数据→聚合展示</td>
+<td>数据不足时显示“暂无”</td>
+</tr>
+</tbody>
+</table>
+<h2>4. 系统设计</h2>
+<h3>4.1 总体架构</h3>
+<p><img src="diagrams/02-system-architecture.svg" alt="灵山小向导系统总体架构图" /></p>
+<p>系统采用分层服务架构。FastAPI 负责对外接口和业务编排；RAG、GLM 多模态、
+LiveTalking 和 HumanOmni 作为独立服务；SQLite、FAISS、文档和模型资源分别管理。</p>
+<h3>4.2 模块划分</h3>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>代码位置</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>导览 API</td>
+<td><code>services/api/app/</code></td>
+<td>会话、问答、语音、视觉、路线、定位、反馈和管理接口</td>
+</tr>
+<tr>
+<td>RAG 服务</td>
+<td><code>llm/api.py</code>、<code>llm/rag/</code></td>
+<td>文档切片、向量检索、提示构建、会话和模型生成</td>
+</tr>
+<tr>
+<td>数字人服务</td>
+<td><code>LiveTalking/</code></td>
+<td>会话管理、音频队列、口型推理和 WebRTC 输出</td>
+</tr>
+<tr>
+<td>情绪分析</td>
+<td><code>services/emotion/</code></td>
+<td>音视频情绪推理、文本降级和结构化结果</td>
+</tr>
+<tr>
+<td>管理前端</td>
+<td><code>services/api/static/</code></td>
+<td>登录、知识管理、数字人设置和数据展示</td>
+</tr>
+<tr>
+<td>部署脚本</td>
+<td><code>deploy/</code></td>
+<td>服务启动、TLS、TURN 和公网转发</td>
+</tr>
+</tbody>
+</table>
+<h3>4.3 语音问答时序</h3>
+<p><img src="diagrams/03-voice-sequence.svg" alt="语音问答与数字人播报时序图" /></p>
+<p>模型回答采用 SSE 流式返回。FastAPI 使用语义边界切分完整句子，并行衔接 TTS 和
+LiveTalking，避免等待全文完成。新问题到达时取消旧播报队列，防止音频重叠。</p>
+<h3>4.4 异常与降级</h3>
+<table>
+<thead>
+<tr>
+<th>故障</th>
+<th>系统处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RAG 服务不可用</td>
+<td>返回 503 和明确错误，不生成无知识依据的答案</td>
+</tr>
+<tr>
+<td>LiveTalking 不可用</td>
+<td>保留文字回答，前端切换轻量数字人或静态状态</td>
+</tr>
+<tr>
+<td>ASR 失败</td>
+<td>提示重新录音，游客仍可使用文字输入</td>
+</tr>
+<tr>
+<td>情绪模型失败</td>
+<td>记录失败状态并使用文本倾向，不影响问答</td>
+</tr>
+<tr>
+<td>GPS 不可用</td>
+<td>使用景点码或手动选择位置</td>
+</tr>
+<tr>
+<td>GPU 不足</td>
+<td>选择其他空闲卡；无法分配时返回可恢复错误</td>
+</tr>
+</tbody>
+</table>
+<h2>5. 数据设计</h2>
+<h3>5.1 实体关系</h3>
+<p><img src="diagrams/04-data-er.svg" alt="核心数据 ER 图" /></p>
+<p><code>session_id</code> 是应用层逻辑会话键；标记为 <code>AK*</code>、<code>FK*</code> 的字段由应用层维护关联，
+当前 SQLite 未声明外键约束。</p>
+<h3>5.2 核心数据表</h3>
+<table>
+<thead>
+<tr>
+<th>数据表</th>
+<th>主键</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chat_logs</code></td>
+<td><code>id</code></td>
+<td>保存用户与助手消息、元数据和时间</td>
+</tr>
+<tr>
+<td><code>feedback</code></td>
+<td><code>id</code></td>
+<td>保存景点评分、意见和倾向</td>
+</tr>
+<tr>
+<td><code>emotion_events</code></td>
+<td><code>id</code></td>
+<td>保存情绪任务、结果、模式和错误</td>
+</tr>
+<tr>
+<td><code>avatar_settings</code></td>
+<td>固定 <code>id=1</code></td>
+<td>保存当前数字人配置</td>
+</tr>
+<tr>
+<td><code>attractions</code></td>
+<td><code>id</code></td>
+<td>保存景区与子景点目录</td>
+</tr>
+<tr>
+<td><code>tourism_visits</code></td>
+<td><code>id</code></td>
+<td>保存历史游客访问事实</td>
+</tr>
+<tr>
+<td><code>dataset_imports</code></td>
+<td><code>source_file</code></td>
+<td>保存历史数据导入版本和行数</td>
+</tr>
+</tbody>
+</table>
+<h3>5.3 知识库数据</h3>
+<p>景区文档按标题和段落切片，BGE-M3 生成 1024 维归一化向量，FAISS <code>IndexFlatIP</code>
+执行相似度检索。每个片段保留来源、标题和片段 ID，回答返回引用信息。管理员文档和
+官方资料分开管理，索引重建成功后再替换当前索引。</p>
+<h2>6. 接口设计</h2>
+<h3>6.1 公开接口</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/chat</code></td>
+<td>文字问答；支持普通 JSON 或 SSE 流式响应</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/asr</code></td>
+<td>上传录音并返回识别文本和情绪任务 ID</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/tts</code></td>
+<td>将文本合成为 WAV</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/vision/guide</code></td>
+<td>图片识别并结合 RAG 生成景点讲解</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/recommend</code></td>
+<td>生成个性化游览路线</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/locate</code></td>
+<td>解析 GPS、景点码或手动位置</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/feedback</code></td>
+<td>提交景点评分和建议</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/livetalking/offer</code></td>
+<td>建立数字人 WebRTC 会话</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/livetalking/heartbeat</code></td>
+<td>保持数字人会话并检测页面活跃状态</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/livetalking/close</code></td>
+<td>关闭会话并触发资源释放</td>
+</tr>
+</tbody>
+</table>
+<h3>6.2 管理接口</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/admin/auth/login</code></td>
+<td>管理员登录</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/admin/auth/logout</code></td>
+<td>注销管理会话</td>
+</tr>
+<tr>
+<td><code>GET/POST/DELETE</code></td>
+<td><code>/v1/admin/kb/documents</code></td>
+<td>查看、上传和删除知识文档</td>
+</tr>
+<tr>
+<td><code>GET/PUT</code></td>
+<td><code>/v1/admin/avatar</code></td>
+<td>查询和更新数字人配置</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/admin/analytics/overview</code></td>
+<td>查询实时运营概览</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/admin/analytics/historical</code></td>
+<td>查询历史游客分析</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/admin/emotion/status</code></td>
+<td>查询情绪任务统计</td>
+</tr>
+</tbody>
+</table>
+<h3>6.3 流式事件</h3>
+<p><code>/v1/chat</code> 的 SSE 响应包含 <code>meta</code>、<code>delta</code>、<code>done</code> 和 <code>error</code> 事件。<code>meta</code> 提供会话、
+引用和数字人反应；<code>delta</code> 提供增量文本；<code>done</code> 提供总延迟；<code>error</code> 提供可显示错误。</p>
+<h2>7. 部署设计</h2>
+<p>当前比赛演示环境暂时采用“本地 GPU 计算节点 + 华为云公网转发节点”的两级部署：
+核心服务运行在一台配备 4 张 NVIDIA RTX 3090 的本地服务器上，承担大模型、RAG、
+数字人和多模态情感分析等计算；华为云服务器仅作为公网入口，转发游客端、管理后台、
+HTTPS 与 WebRTC/TURN 流量，不承担模型推理。该拓扑属于当前演示部署方式，并非系统
+运行的固定硬件要求，后续可迁移至景区私有服务器或云端 GPU 环境。</p>
+<h3>7.1 服务与端口</h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th style="text-align:right">端口</th>
+<th>暴露范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>游客 HTTP/API</td>
+<td style="text-align:right">8001</td>
+<td>游客与接口调用方</td>
+</tr>
+<tr>
+<td>游客 HTTPS + TURN/TCP</td>
+<td style="text-align:right">8443</td>
+<td>麦克风与 WebRTC 公网入口</td>
+</tr>
+<tr>
+<td>LiveTalking</td>
+<td style="text-align:right">8010</td>
+<td>仅内部</td>
+</tr>
+<tr>
+<td>RAG</td>
+<td style="text-align:right">8020</td>
+<td>仅本机</td>
+</tr>
+<tr>
+<td>管理后台</td>
+<td style="text-align:right">8444</td>
+<td>管理员</td>
+</tr>
+</tbody>
+</table>
+<h3>7.2 启动方式</h3>
+<pre><code class="language-bash">cd /home/gmn/codes/cup
+bash deploy/start_livetalking.sh
+bash deploy/start_api.sh
+</code></pre>
+<h3>7.3 GPU 生命周期</h3>
+<ul>
+<li>LiveTalking 在页面建立 WebRTC 会话后选择 0–3 号 GPU 中的空闲卡。</li>
+<li>页面关闭或心跳超时后停止数字人 GPU 进程。</li>
+<li>RAG embedding 使用 CPU 常驻协调器和按需 GPU worker。</li>
+<li>RAG worker 连续请求复用，空闲 180 秒后退出并释放 CUDA 上下文。</li>
+<li>完整 Qwen2-7B 与轻量 Qwen3-1.7B 使用独立服务，只在选择对应路线时动态选卡和加载；无满足条件 GPU 或真实 CUDA OOM 会向游客端返回明确错误。</li>
+</ul>
+<h3>7.4 安全要求</h3>
+<ul>
+<li>麦克风访问使用 HTTPS 或 localhost 安全上下文。</li>
+<li>管理后台使用签名会话 Cookie 和请求来源校验。</li>
+<li>RAG、LiveTalking 与模型密钥不直接暴露给游客端。</li>
+<li>上传文件校验扩展名、大小和保存路径，禁止路径穿越。</li>
+<li>多模态原始媒体默认在分析后删除，只保留结构化结果。</li>
+</ul>
+<h2>8. 测试与验收</h2>
+<h3>8.1 测试层次</h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单元测试</td>
+<td>文档切片、向量检索、会话、语义分段、鉴权和数据聚合</td>
+</tr>
+<tr>
+<td>接口测试</td>
+<td>问答、ASR、TTS、视觉、定位、反馈、管理和数字人接口</td>
+</tr>
+<tr>
+<td>集成测试</td>
+<td>ASR→RAG→TTS→LiveTalking 完整链路</td>
+</tr>
+<tr>
+<td>稳定性测试</td>
+<td>服务重启、模型失败、页面关闭、心跳超时和 GPU 回收</td>
+</tr>
+<tr>
+<td>安全测试</td>
+<td>未登录管理访问、非法上传、超大请求和密钥泄露检查</td>
+</tr>
+</tbody>
+</table>
+<h3>8.2 验收条件</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>条件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>知识问答</td>
+<td>标准事实题准确率不低于 90%，回答提供知识引用</td>
+</tr>
+<tr>
+<td>语音链路</td>
+<td>热链路在 5 秒目标内开始非静音数字人播报</td>
+</tr>
+<tr>
+<td>降级能力</td>
+<td>RAG、ASR、数字人或情绪模型失败时有明确反馈</td>
+</tr>
+<tr>
+<td>管理隔离</td>
+<td>未登录用户不能访问知识、配置和运营管理接口</td>
+</tr>
+<tr>
+<td>资源释放</td>
+<td>页面无活动或 worker 空闲后，相关 GPU 推理进程退出</td>
+</tr>
+<tr>
+<td>数据真实性</td>
+<td>无评分或无情绪结果时显示“暂无”，不得生成虚假指标</td>
+</tr>
+</tbody>
+</table>
+<h2>9. 维护与约束</h2>
+<h3>9.1 当前约束</h3>
+<ul>
+<li>默认问答、语音和视觉依赖 GLM 云端模型，公网波动会影响时延。</li>
+<li>当前数字人使用已安装头像模型；新增外观需要制作新的模型资源。</li>
+<li>GPS、Wi-Fi 和二维码定位属于适配接口，生产部署需接入真实位置服务。</li>
+<li>高并发部署需要增加 GPU 配额、会话队列、限流和容量测试。</li>
+<li>维护时同步更新接口文档并执行知识库回归，定期检查日志、数据导入和服务健康状态。</li>
+</ul>
+
+</body>
+</html>

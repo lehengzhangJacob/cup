@@ -112,6 +112,11 @@ try {
   await admin.waitForTimeout(1200);
   await screenshot(admin, "10-admin-reports.png");
 
+  const emotionCard = admin.locator("#reports > .card").nth(1);
+  await emotionCard.scrollIntoViewIfNeeded();
+  await admin.waitForTimeout(300);
+  await screenshot(admin, "12-admin-emotion-analysis.png");
+
   const historicalCard = admin.locator("#reports > .card").last();
   await historicalCard.scrollIntoViewIfNeeded();
   await admin.waitForTimeout(300);

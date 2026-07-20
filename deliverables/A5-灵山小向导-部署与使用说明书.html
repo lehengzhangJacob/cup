@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>灵山小向导·灵曦——产品部署与使用说明书</title>
+  <style>
+    :root { --ink:#19352f; --jade:#276655; --red:#ad4939; --gold:#b27b2c; --muted:#63736d; --line:#d9d5ca; --paper:#fffdf7; }
+    @page { size:A4; margin:15mm 14mm 17mm; }
+    * { box-sizing:border-box; }
+    html { background:#ece9df; }
+    body { max-width:210mm; margin:0 auto; padding:17mm 15mm; background:var(--paper); color:#263b36; font:10.6pt/1.72 "Noto Sans CJK SC","Microsoft YaHei",sans-serif; }
+    h1,h2,h3 { color:var(--ink); page-break-after:avoid; break-after:avoid-page; }
+    h1 { margin:0; padding-top:8mm; text-align:center; font-size:28pt; letter-spacing:.08em; }
+    h1 + h2 { margin:3mm 0 9mm; padding:0 0 5mm; border-bottom:2px solid var(--jade); text-align:center; font-size:17pt; color:var(--red); }
+    h2 { margin:10mm 0 4mm; padding:0 0 2mm 4mm; border-left:4px solid var(--red); border-bottom:1px solid var(--line); font-size:17pt; }
+    h3 { margin:7mm 0 2mm; font-size:13pt; color:var(--jade); }
+    p { margin:2.1mm 0; orphans:3; widows:3; }
+    ul,ol { margin:2mm 0 3mm 6mm; padding-left:5mm; }
+    li { margin:1mm 0; }
+    table { width:100%; margin:3mm 0 5mm; border-collapse:collapse; break-inside:avoid; page-break-inside:avoid; font-size:9.3pt; }
+    th,td { padding:1.8mm 2.2mm; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#e9efe9; color:var(--ink); font-weight:700; }
+    tbody tr:nth-child(even) { background:#f8f6ef; }
+    a { color:var(--jade); text-decoration:none; }
+    code { padding:.2mm 1mm; border-radius:2px; background:#f0eee6; color:#7c3b31; font-family:"DejaVu Sans Mono",monospace; font-size:9.4pt; }
+    pre { margin:3mm 0 5mm; padding:4mm; border-left:3px solid var(--gold); background:#f2efe7; white-space:pre-wrap; break-inside:avoid; page-break-inside:avoid; }
+    pre code { padding:0; background:none; color:#1f3d35; font-size:8.8pt; }
+    img { display:block; width:100%; max-height:168mm; margin:5mm auto 2mm; border:1px solid #d8d3c8; object-fit:contain; break-inside:avoid; page-break-inside:avoid; }
+    p:has(> img) { break-inside:avoid; page-break-inside:avoid; }
+    p > em:only-child { display:block; margin:0 0 5mm; text-align:center; color:var(--muted); font-size:9pt; }
+    strong { color:var(--ink); }
+    hr { border:0; border-top:1px solid var(--line); }
+    @media print {
+      html,body { background:#fff; }
+      body { max-width:none; margin:0; padding:0; }
+      a { color:inherit; }
+      h2 { break-before:auto; }
+    }
+  </style>
+</head>
+<body>
+<h1>灵山小向导·灵曦</h1>
+<h2>产品部署与使用说明书</h2>
+<p>项目：景区导览服务 AI 数字人系统<br />
+赛题组别：A5 景区导览服务 AI 数字人<br />
+更新日期：2026 年 7 月 20 日</p>
+<p><img src="manual-assets/01-visitor-home.png" alt="游客交互端实际运行界面" /></p>
+<p><em>图 1　游客交互端实际运行界面（数字人已连接）</em></p>
+<h2>1. 产品简介</h2>
+<p>“灵山小向导·灵曦”是一套面向灵山胜境与拈花湾禅意小镇的 AI 数字人导览系统。
+游客可通过网页或 Android APK 与数字人进行文字、语音和表情交互，获得景区知识问答、
+个性化路线、拍照识景、位置讲解及景点评价服务。景区管理员可通过独立后台维护知识库、
+识景参考图库和数字人形象，并查看实时运营指标、游客对话情绪、景点满意度和公开 XLSX
+历史游客洞察。</p>
+<p>系统的主要技术能力如下：</p>
+<ul>
+<li>本地 BGE-M3 + FAISS 景区知识库检索，结合云端 GLM、轻量 Qwen3-1.7B 或完整 Qwen2-7B 生成回答。</li>
+<li>ASR 语音识别、TTS 语音合成和 LiveTalking Wav2Lip 实时口型驱动。</li>
+<li>Live2D 情感表情模式作为多模态表达及数字人降级方案。</li>
+<li>GLM 视觉模型初识别 + 本地 SigLIP/CLIP 景区参考图库复核 + 游客确认纠错。</li>
+<li>手机真实 GPS、景点二维码、区域节点和手动选择相结合的多源定位。</li>
+<li>HumanOmni Stage1 + <code>emotion_v5_stage2</code> 七分类语音—文本情绪分析；模型不可用时明确标记文本降级。</li>
+<li>SQLite 实时运营数据与赛题 XLSX 历史数据分层存储、分开展示。</li>
+</ul>
+<h2>2. 使用入口与运行条件</h2>
+<h3>2.1 当前演示入口</h3>
+<ul>
+<li>游客交互端：<a href="https://139.159.150.134:20443/">https://139.159.150.134:20443/</a></li>
+<li>管理员后台：<a href="https://139.159.150.134:20444/admin">https://139.159.150.134:20444/admin</a>，<a href="#41-%E7%99%BB%E5%BD%95%E4%B8%8E%E5%AE%89%E5%85%A8%E8%BE%B9%E7%95%8C">查看测试账号和密码</a></li>
+<li>Android APK：<a href="https://139.159.150.134:20443/static/downloads/lingshan-guide-v1.0.2.apk">https://139.159.150.134:20443/static/downloads/lingshan-guide-v1.0.2.apk</a></li>
+<li>本机 API 文档：<code>http://127.0.0.1:8001/docs</code></li>
+</ul>
+<h3>2.2 客户端建议</h3>
+<ul>
+<li>桌面端建议使用最新版 Chrome 或 Edge，分辨率不低于 1366×768。</li>
+<li>手机端可使用 Chrome、系统浏览器或项目 APK。</li>
+<li>语音功能需要 HTTPS 安全页面和麦克风权限。</li>
+<li>拍照识景与二维码扫描需要摄像头权限。</li>
+<li>GPS 定位需要系统定位权限；Android APK 已声明精确和粗略定位权限。</li>
+<li>数字人 WebRTC 播放需要网络可访问公网入口及 TURN 中继。</li>
+</ul>
+<h3>2.3 首次访问</h3>
+<ol>
+<li>打开游客交互端，等待左侧数字人画面显示并出现“灵曦已准备好”。</li>
+<li>浏览器询问麦克风、摄像头或定位权限时，只在使用对应功能时授权。</li>
+<li>若使用自签名的内网 HTTPS 地址，首次访问需在浏览器中确认继续访问；当前公网入口使用服务器证书。</li>
+<li>页面加载失败时先刷新一次，并检查 <code>/health</code> 是否返回 <code>ok=true</code>。</li>
+</ol>
+<h2>3. 游客交互端使用方法</h2>
+<h3>3.1 数字人与文字问答</h3>
+<p>游客端左侧为数字人舞台，右侧为功能面板。数字人连接成功后可直接使用。</p>
+<ol>
+<li>在“问答”页输入景区问题，例如“灵山大佛有多高？用了多少铜？”。</li>
+<li>点击“开始问答”。系统先从景区知识库检索相关资料，再流式生成回答。</li>
+<li>页面显示回答文本与知识库依据，同时将完整语义句送入 TTS 和数字人口型服务。</li>
+<li>在上一段仍在播报时再次提问，系统会打断旧播报，避免语音重叠。</li>
+<li>“大佛故事”“两小时路线”“亲子游建议”可用于快速演示。</li>
+</ol>
+<p>回答中用于展示路线的 <code>→</code>、<code>&gt;</code> 等符号会在送入 TTS 前转为停顿或“接着前往”，不会按
+“边”逐字朗读。</p>
+<h3>3.2 语音问答与情绪授权</h3>
+<ol>
+<li>点击“点击说话”，允许浏览器使用麦克风。</li>
+<li>正常说出问题，再次点击结束录音；系统自动完成音频格式兼容、ASR 转写和问答。</li>
+<li>如需启用七分类多模态情绪分析，展开“更多设置”，勾选情绪分析授权后再录音。</li>
+<li>授权后系统把原声、ASR 文本和最近对话上下文异步送入情绪模型，问答本身无需等待情绪任务完成。</li>
+<li>原始音频默认在分析后删除；对话文本与情绪标签按部署配置定期清理。</li>
+</ol>
+<p>系统不采集游客人脸视频进行情绪判断。管理员也不需要上传音频或视频；管理后台展示的
+多模态情绪来自游客与数字人的已授权真实语音对话。</p>
+<h3>3.3 个性化路线</h3>
+<p>点击“路线”，选择“历史文化”“自然风光”或“亲子家庭”，再点击“为我推荐路线”。
+系统结合兴趣、景区知识和当前对话生成路线，并由数字人讲解。</p>
+<p><img src="manual-assets/02-visitor-route.png" alt="游客端个性化路线页面" /></p>
+<p><em>图 2　个性化路线页面</em></p>
+<h3>3.4 拍照识景</h3>
+<ol>
+<li>点击“识景”，选择“拍照识景”。手机会优先打开后置摄像头，桌面浏览器可选择图片。</li>
+<li>系统检查图片类型、大小、清晰度和重复内容。</li>
+<li>GLM 视觉模型给出景点候选，本地 SigLIP/CLIP 再与管理员维护的参考图库进行相似度复核。</li>
+<li>当置信度不足或模型候选冲突时，页面要求游客确认正确景点，不直接生成确定性结论。</li>
+<li>游客确认会保存为纠错记录，管理员可据此补充参考图和后续评测集。</li>
+</ol>
+<p>识景准确率依赖参考图库覆盖度。管理员应为每个子景点准备至少 5 张不同角度、天气和昼夜
+画面，并确保拥有图片使用权。</p>
+<h3>3.5 位置讲解</h3>
+<p>定位页提供四种使用方式：</p>
+<ul>
+<li>“使用当前位置”：调用手机或浏览器 GPS。</li>
+<li>“摄像头扫码/景点点位码”：适合室内、建筑遮挡和入口标牌。</li>
+<li>“景区 Wi-Fi”：当前为手动区域节点选择，并未读取手机真实 BSSID。</li>
+<li>“手动选择”：不依赖任何权限，始终可用。</li>
+</ul>
+<p><img src="manual-assets/03-visitor-location.png" alt="游客端定位页面" /></p>
+<p><em>图 3　GPS 与多源降级定位页面</em></p>
+<p>当前后端配置了 9 个带公开来源的 WGS-84 近似锚点，覆盖灵山大佛、九龙灌浴、祥符禅寺、
+灵山梵宫、五印坛城、梵天花海、香月花街、五灯湖和鹿鸣谷。公开点位不是景区现场测绘值，
+因此 GPS 命中后只给出候选景点，游客必须确认后才开始讲解。正式部署时应由景区实测坐标替换，
+并接入真实 Wi-Fi BSSID、蓝牙信标或景区地图服务。</p>
+<h3>3.6 景点满意度反馈</h3>
+<p>展开“本次体验反馈”，依次选择景区、子景点和 1–5 分满意度，可填写文字建议后提交。
+灵山胜境和拈花湾禅意小镇及其子景点使用统一目录，评分会写入实时数据库，并在管理员后台
+的满意度趋势、景点明细和服务建议中使用。</p>
+<p><img src="manual-assets/04-visitor-feedback-and-emotion.png" alt="情绪授权与满意度反馈页面" /></p>
+<p><em>图 4　更多设置中的情绪授权与景点满意度反馈</em></p>
+<p>七分类情绪是模型根据对话推断的情感信号；1–5 分满意度是游客主动表达的服务评价。
+两者含义不同，系统分开保存、分开展示，不使用 XLSX 的满意度分数训练七分类模型。</p>
+<h3>3.7 数字人呈现模式</h3>
+<p>“更多设置”中可切换：</p>
+<ul>
+<li>拟真口型模式：使用 LiveTalking Wav2Lip，根据合成语音实时驱动口型。</li>
+<li>情感表情模式：使用 Live2D，根据文本/语音情绪映射自然讲解、关怀安慰、积极互动等反应。</li>
+</ul>
+<h2>4. 管理员后台使用方法</h2>
+<h3>4.1 登录与安全边界</h3>
+<p>管理员后台使用独立公网端口。访问管理地址后输入管理员账号和密码，登录成功后获得
+HttpOnly、Secure、SameSite 会话 Cookie。未登录用户不能访问管理页面、运营接口、
+知识库修改或数字人配置接口。</p>
+<p><img src="manual-assets/05-admin-login.png" alt="管理员登录页面" /></p>
+<p><em>图 5　管理员登录页面</em></p>
+<p>测试账号：admin
+密码：admin12345678</p>
+<p>完成管理工作后应点击右上角“退出登录”。</p>
+<h3>4.2 数据概览</h3>
+<p>“数据概览”展示：</p>
+<ul>
+<li>今日服务游客、近 7 日游客、累计问答、平均满意度和平均响应时间。</li>
+<li>近 7 日服务趋势、游客情感趋势和实时满意度趋势。</li>
+<li>热门咨询主题和智能服务建议。</li>
+</ul>
+<p><img src="manual-assets/06-admin-overview.png" alt="管理员数据概览" /></p>
+<p><em>图 6　实时运营数据概览</em></p>
+<p>实时指标只来自系统实际产生的对话、情绪任务和游客主动评分。没有样本时显示“暂无”或
+“样本不足”，不会用随机数填充。智能服务建议由近 7 天真实数据触发：系统检查负向服务方面、
+平均响应是否超过 5 秒、平均评分是否偏低，以及路线/定位咨询量，并同时展示证据与时间范围。</p>
+<h3>4.3 景区知识库管理</h3>
+<p>“知识库管理”列出官方资料和管理员资料：</p>
+<ul>
+<li>官方资料为只读，防止误删基础知识。</li>
+<li>管理员可上传 <code>.docx</code>、<code>.txt</code> 或 <code>.md</code>，同名文件视为更新。</li>
+<li>上传成功后服务执行文档解析、切片、BGE-M3 向量化和 FAISS 索引重建。</li>
+<li>新索引构建成功后才替换当前索引；失败时返回明确错误并保留旧索引。</li>
+<li>管理员上传的文档可删除，删除后自动重建索引。</li>
+</ul>
+<p><img src="manual-assets/07-admin-knowledge.png" alt="景区知识库管理" /></p>
+<p><em>图 7　景区知识文档管理与索引状态</em></p>
+<p>更新知识库后，应在游客端至少测试三个事实问题，并确认回答引用了新文档内容。</p>
+<h3>4.4 识景参考图库</h3>
+<p>在知识库页面向下滚动可维护识景参考图库：</p>
+<ol>
+<li>选择对应子景点。</li>
+<li>上传 JPG、PNG 或 WebP 图片。</li>
+<li>填写公开来源链接或授权信息，以及画面角度说明。</li>
+<li>上传后图片进入本地参考索引，下一次识景即可参与复核。</li>
+<li>根据覆盖景点、质量充分、需补充和游客纠错记录持续补齐素材。</li>
+</ol>
+<p><img src="manual-assets/08-admin-vision-library.png" alt="识景参考图库管理" /></p>
+<p><em>图 8　识景参考图库、覆盖率和纠错质量指标</em></p>
+<h3>4.5 数字人管理</h3>
+<p>“数字人管理”可配置数字人称呼、已安装形象和合成声音。保存后对新会话生效；已有游客
+会话不强制中断。服装由所选形象素材确定，表情由对话情绪策略实时驱动，不提供无效文本配置项。</p>
+<p><img src="manual-assets/09-admin-avatar.png" alt="数字人形象管理" /></p>
+<p><em>图 9　数字人形象与声音配置</em></p>
+<p>这里只能选择服务器已经安装并通过校验的数字人资源。新增人物外观需要先制作头像素材和
+口型模型，不能仅靠填写服装文本即时生成新真人形象。</p>
+<h3>4.6 游客感受度报告</h3>
+<p>“游客感受报告”包含近期问题、主动满意度反馈、服务改进报告、多模态情绪、子景点实时
+满意度和公开 XLSX 历史游客洞察。</p>
+<p><img src="manual-assets/10-admin-reports.png" alt="游客感受度报告" /></p>
+<p><em>图 10　近期游客问题、主动评分与有证据的服务改进建议</em></p>
+<p>多模态情绪模块展示七类情绪分布、任务状态、分析方式和最近情绪事件：</p>
+<ul>
+<li>七分类为愉悦、平静、惊讶、悲伤、恐惧、愤怒和厌恶。</li>
+<li><code>audio-text</code> 表示原声与 ASR 文本成功进入多模态模型。</li>
+<li><code>text</code> 表示纯文字对话分析。</li>
+<li><code>text-fallback</code> 表示多模态环境不可用时使用文本降级，不能宣传为真实多模态结果。</li>
+<li><code>queued / processing / completed / failed</code> 表示异步任务状态。</li>
+</ul>
+<p>管理员不上传游客媒体。模型状态应以后台显示和 <code>/v1/admin/emotion/status</code> 为准；仅看到
+模型文件目录存在，不等于七分类推理链路已经可用。</p>
+<p><img src="manual-assets/12-admin-emotion-analysis.png" alt="游客对话多模态情绪分析" /></p>
+<p><em>图 11　游客对话七分类情绪、分析方式与事件状态</em></p>
+<h3>4.7 公开 XLSX 历史游客洞察</h3>
+<p>赛题 XLSX 的 17 列明细会在服务启动时按文件指纹幂等导入 SQLite。当前公开数据集整体
+包含 140,447 条访问记录、50,000 名游客和 152 个景点。满意度分布、月度趋势和景区
+平均满意度只统计其中 777 条灵山/拈花湾相关记录；“访问记录/游客数/景点数”则明确标为
+整个公开数据集规模。</p>
+<p><img src="manual-assets/11-admin-historical-data.png" alt="公开 XLSX 历史游客洞察" /></p>
+<p><em>图 12　灵山/拈花湾满意度分布、景点样本和月度趋势</em></p>
+<p>实时数据与历史 XLSX 数据分开展示，避免把比赛提供的历史样本伪装成系统实时客流。</p>
+<h2>5. 数据来源与数据流</h2>
+<h3>5.1 实时数据</h3>
+<ul>
+<li><code>chat_logs</code>：游客问题、数字人回答、引用片段、会话与响应时间。</li>
+<li><code>feedback</code>：游客对景区或子景点提交的 1–5 分和文字建议。</li>
+<li><code>emotion_events</code>：情绪任务、七分类、置信度、倾向、分析方式与失败原因。</li>
+<li><code>avatar_settings</code>：当前数字人配置。</li>
+<li>识景参考图与纠错记录：管理员授权素材及游客确认结果。</li>
+</ul>
+<h3>5.2 历史数据</h3>
+<ul>
+<li><code>tourism_visits</code>：赛题 XLSX 的 17 列游客访问明细。</li>
+<li><code>dataset_imports</code>：源文件指纹、导入时间、行数和存储版本。</li>
+<li><code>attractions</code>：资料包 DOCX 中解析出的灵山胜境、拈花湾及子景点目录。</li>
+</ul>
+<h3>5.3 知识数据</h3>
+<p>官方资料和管理员上传资料被解析成带来源的知识片段，BGE-M3 生成 1024 维向量，FAISS
+执行相似度检索。回答返回引用片段；资料不足时应说明知识库中未找到可靠依据。</p>
+<h2>6. 服务器部署与重启</h2>
+<h3>6.1 运行环境</h3>
+<ul>
+<li>当前演示系统暂时部署在一台配备 4 张 NVIDIA RTX 3090 的本地 GPU 服务器上；华为云
+服务器负责公网 HTTPS、管理后台和 WebRTC/TURN 流量转发，不承担模型推理。</li>
+<li>Linux + NVIDIA GPU + CUDA 12.x。</li>
+<li><code>ccc</code> Conda 环境：导览 API、ASR/TTS 调用和 LiveTalking。</li>
+<li><code>softcup</code> Conda 环境：BGE-M3/FAISS、SigLIP/CLIP、HumanOmni 情绪推理。</li>
+<li>本地模型目录、智谱 API Key、景区资料包和 SQLite 数据目录已配置。</li>
+</ul>
+<p>上述“4×RTX 3090 + 华为云转发”是比赛期间的临时演示拓扑，不是软件的固定硬件约束；
+服务可按相同接口部署到景区私有服务器或云端 GPU 实例。</p>
+<h3>6.2 启动完整服务</h3>
+<pre><code class="language-bash">cd /home/gmn/codes/cup
+bash deploy/start_livetalking.sh
+bash deploy/start_api.sh
+</code></pre>
+<p><code>start_api.sh</code> 会检查并启动 RAG、游客 API、HTTPS/TURN 入口和独立管理端，并按源文件
+指纹导入或跳过未变化的 XLSX。两条本地 Qwen 路线都在游客首次选择时，从候选 GPU
+中选择满足显存门槛的空闲卡并按需启动，不在系统启动时固定占用某张 GPU；完整 7B 默认
+要求 18 GiB 空闲显存，轻量 1.7B 默认要求 6 GiB。</p>
+<h3>6.3 主要端口</h3>
+<ul>
+<li><code>8001</code>：游客 HTTP 与公开 API。</li>
+<li><code>8443</code>：游客 HTTPS 与 TURN/TCP。</li>
+<li><code>8010</code>：LiveTalking 内部服务，不直接提供给游客。</li>
+<li><code>8020</code>：RAG 内部服务，仅监听本机。</li>
+<li><code>8021</code>：完整本地 Qwen2-7B OpenAI 兼容服务，按需加载。</li>
+<li><code>8022</code>：轻量本地 Qwen3-1.7B OpenAI 兼容服务，按需加载。</li>
+<li><code>8444</code>：管理员 HTTPS。</li>
+<li><code>8011</code>：公网反向代理使用的本机管理员 HTTP 源站。</li>
+</ul>
+<h3>6.4 重启后验证</h3>
+<pre><code class="language-bash">curl -sS http://127.0.0.1:8001/health
+curl -sS http://127.0.0.1:8020/health
+curl -sS http://127.0.0.1:8001/v1/livetalking/status
+curl -sS http://127.0.0.1:8001/v1/location/options
+</code></pre>
+<p>随后人工检查：</p>
+<ol>
+<li>游客页数字人由“正在准备”变为“已准备好”。</li>
+<li>完成一次文字问答并确认存在知识库依据。</li>
+<li>完成一次语音录制并确认 ASR、回答、TTS 和口型正常。</li>
+<li>在管理员后台确认实时概览、历史 XLSX 和知识片段数已加载。</li>
+<li>勾选情绪授权完成一条语音，检查任务是否由 <code>queued</code> 进入 <code>completed</code> 或明确的 <code>failed/text-fallback</code>。</li>
+</ol>
+<h2>7. APK 使用与构建</h2>
+<p>APK 是原生 Android WebView 外壳，默认打开当前公网游客端。模型、RAG、语音与数字人
+均在服务器运行，因此后端和网页功能更新通常无需重新打包 APK。</p>
+<p>重新构建时执行：</p>
+<pre><code class="language-bash">cd /home/gmn/codes/cup
+bash android/build-apk.sh
+</code></pre>
+<h2>8. 隐私与安全说明</h2>
+<ul>
+<li>语音多模态情绪分析必须由游客主动勾选授权。</li>
+<li>情绪分析不采集人脸视频；原始语音默认在任务完成或失败后删除。</li>
+<li>对话文本与情绪标签默认保留 30 天，聚合统计长期保留。</li>
+<li>系统提供按 <code>session_id</code> 导出或删除游客可识别数据的 API。</li>
+<li>管理员会话使用独立端口、签名 Cookie、来源校验和上传文件校验。</li>
+<li>API Key、管理员密码、会话密钥和 TURN 长期凭据只保存在服务器环境文件中。</li>
+<li>公开 GPS 坐标保留数据来源并要求游客确认，不标记为景区实测数据。</li>
+<li>第三方图片必须取得许可后由管理员上传，系统不自动下载受版权保护的 VR 素材。</li>
+</ul>
+<h2>9. 常见问题处理</h2>
+<h3>9.1 点击说话后无法录音</h3>
+<ul>
+<li>确认使用 HTTPS 或 localhost。</li>
+<li>检查浏览器/系统麦克风权限和其他程序是否独占麦克风。</li>
+<li>若出现 <code>Unable to decode audio data</code>，刷新页面后重新录制，并使用最新版 Chrome；当前前端会根据浏览器实际 MIME 类型封装并由后端转码。</li>
+<li>仍失败时可先使用文字问答，不影响 RAG 和数字人基础演示。</li>
+</ul>
+<h3>9.2 数字人无画面或无声音</h3>
+<ul>
+<li>检查 <code>/v1/livetalking/status</code> 是否为 <code>ready=true</code>。</li>
+<li>检查 <code>deploy/livetalking/service.log</code> 和浏览器 WebRTC 控制台。</li>
+<li>确认公网 TURN 可用、浏览器未静音；必要时切换到情感表情模式。</li>
+</ul>
+<h3>9.3 GPS 命中错误景点</h3>
+<ul>
+<li>查看手机报告的精度和候选点距离，不要跳过确认步骤。</li>
+<li>室内或建筑密集区优先扫描景点二维码。</li>
+<li>当前公开点位仅为近似值，正式部署应进行现场实测。</li>
+</ul>
+<h3>9.4 识景准确率低</h3>
+<ul>
+<li>检查图片是否过暗、模糊或只包含通用建筑局部。</li>
+<li>在管理后台查看参考图库覆盖率，为对应子景点补充多角度授权图。</li>
+<li>要求游客确认候选并记录纠错，再运行固定评测集，不以单张演示图判断整体准确率。</li>
+</ul>
+<h3>9.5 情绪模型显示“文本降级”</h3>
+<ul>
+<li>检查 Stage1 基座、Stage2 LoRA、BERT、训练版 HumanOmni 源码和 <code>softcup</code> 环境是否完整。</li>
+<li>确认训练分支提供 <code>emotion_probs_from_logits</code>，并且 <code>mm_infer</code> 能返回七分类分数。</li>
+<li>检查 <code>EMOTION_GPU</code> 对应显卡显存和后台任务错误信息。</li>
+<li>文本降级只保证管理洞察不中断，不等同于多模态模型验证通过。</li>
+</ul>
+<h3>9.6 管理后台数据为空</h3>
+<ul>
+<li>点击“刷新数据”并确认登录会话未过期。</li>
+<li>检查游客是否实际完成了对话或评分；无样本时显示“暂无”属于正确行为。</li>
+<li>检查 XLSX 导入状态、源文件路径及 <code>deploy/api.log</code>。</li>
+</ul>
+<h2>10. 日志位置</h2>
+<ul>
+<li>导览 API：<code>deploy/api.log</code></li>
+<li>HTTPS API：<code>deploy/api-ssl.log</code></li>
+<li>管理后台：<code>deploy/admin-http.log</code>、<code>deploy/admin-ssl.log</code></li>
+<li>RAG：<code>deploy/rag.log</code></li>
+<li>RAG 看护：<code>deploy/rag-watchdog.log</code></li>
+<li>本地 Qwen：<code>deploy/local-llm.log</code></li>
+<li>数字人：<code>deploy/livetalking/service.log</code></li>
+<li>SigLIP/CLIP：<code>deploy/vision-clip.log</code>（启用时）</li>
+</ul>
+
+</body>
+</html>
