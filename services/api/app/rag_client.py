@@ -156,8 +156,20 @@ class RAGClient:
                     f"{self.base_url}{path}",
                     json=json,
                 )
-            response.raise_for_status()
+            if response.is_error:
+                try:
+                    payload = response.json()
+                    detail = payload.get("detail") if isinstance(payload, dict) else None
+                except ValueError:
+                    detail = None
+                if detail:
+                    raise RAGClientError(str(detail))
+                raise RAGClientError(
+                    f"RAG service returned {response.status_code}: {response.text[:500]}"
+                )
             data = response.json()
+        except RAGClientError:
+            raise
         except (httpx.HTTPError, ValueError) as exc:
             raise RAGClientError(f"RAG service unavailable: {exc}") from exc
         if not isinstance(data, dict):

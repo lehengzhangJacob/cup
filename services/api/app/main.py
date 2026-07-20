@@ -71,6 +71,7 @@ from .admin_auth import ADMIN_COOKIE_NAME, create_admin_token, verify_admin_toke
 from .attractions import attraction_by_id, attraction_catalog, ensure_attraction_schema
 from .avatar_reaction import avatar_reaction
 from .avatar_catalog import find_avatar_preview, list_avatar_ids
+from .demo_data import clear_demo_data, demo_data_status, seed_demo_data
 from .emotion_analysis import analyze_text, emotion_analyzer
 from .kb import ROUTES
 from .location import (
@@ -114,7 +115,7 @@ class ChatRequest(BaseModel):
     stream: bool = True
     spot_id: Optional[str] = Field(None, max_length=100)
     livetalking_session_id: Optional[str] = Field(None, min_length=1)
-    model_route: Literal["cloud", "local"] = "cloud"
+    model_route: Literal["cloud", "local", "local_lite"] = "cloud"
     input_mode: Literal["text", "voice"] = "text"
     emotion_event_id: Optional[str] = Field(None, max_length=128)
 
@@ -167,8 +168,6 @@ class AvatarSettingsRequest(BaseModel):
     display_name: str = Field("灵山小向导", min_length=1, max_length=30)
     avatar_id: str = Field(LIVETALKING_AVATAR_ID, min_length=1, max_length=100)
     voice: str = Field(TTS_VOICE, min_length=1, max_length=50)
-    costume: str = Field("禅意导游", max_length=50)
-    expression: str = Field("亲切自然", max_length=50)
 
 
 class AdminLoginRequest(BaseModel):
@@ -253,6 +252,9 @@ def _db() -> sqlite3.Connection:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS avatar_settings (
+            -- costume/expression are legacy compatibility columns. They are
+            -- intentionally not exposed by the API because no runtime consumes
+            -- them; keep them only to avoid a destructive SQLite migration.
             id INTEGER PRIMARY KEY CHECK (id = 1),
             display_name TEXT NOT NULL,
             avatar_id TEXT NOT NULL,
@@ -324,7 +326,7 @@ def _infer_sentiment(text: str, rating: Optional[int] = None) -> str:
 def _avatar_settings() -> dict[str, str]:
     conn = _db()
     row = conn.execute(
-        "SELECT display_name, avatar_id, voice, costume, expression, updated_at "
+        "SELECT display_name, avatar_id, voice, updated_at "
         "FROM avatar_settings WHERE id=1"
     ).fetchone()
     conn.close()
@@ -333,16 +335,12 @@ def _avatar_settings() -> dict[str, str]:
             "display_name": row[0],
             "avatar_id": row[1],
             "voice": row[2],
-            "costume": row[3],
-            "expression": row[4],
-            "updated_at": row[5],
+            "updated_at": row[3],
         }
     return {
         "display_name": "灵山小向导",
         "avatar_id": LIVETALKING_AVATAR_ID,
         "voice": TTS_VOICE,
-        "costume": "禅意导游",
-        "expression": "亲切自然",
         "updated_at": "",
     }
 
@@ -1453,22 +1451,22 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
     conn.execute(
         """
         INSERT INTO avatar_settings
+            -- Empty values satisfy legacy NOT NULL columns when a fresh row is
+            -- created. Existing legacy values are left untouched on updates.
             (id, display_name, avatar_id, voice, costume, expression, updated_at)
         VALUES (1,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
             display_name=excluded.display_name,
             avatar_id=excluded.avatar_id,
             voice=excluded.voice,
-            costume=excluded.costume,
-            expression=excluded.expression,
             updated_at=excluded.updated_at
         """,
         (
             req.display_name.strip(),
             req.avatar_id,
             req.voice,
-            req.costume,
-            req.expression,
+            "",
+            "",
             now,
         ),
     )
@@ -1642,7 +1640,16 @@ async def chat(req: ChatRequest):
                         prefix = f"{reaction['prefix']}\n"
                         parts.append(prefix)
                         if speech_queue:
-                            for segment in segmenter.feed(prefix):
+                            # Keep the visual prefix as its own line, but speak
+                            # it as an introductory clause together with the
+                            # first answer sentence.  A standalone TTS request
+                            # here caused an unnatural stop before every reply.
+                            spoken_prefix = re.sub(
+                                r"[。！？!?，,；;]+$",
+                                "",
+                                reaction["prefix"].strip(),
+                            )
+                            for segment in segmenter.feed(f"{spoken_prefix}，"):
                                 speech_queue.put_nowait(segment)
                         yield f"data: {json.dumps({'type': 'delta', 'content': prefix}, ensure_ascii=False)}\n\n"
                     parts.append(token)
@@ -2377,6 +2384,33 @@ async def admin_analytics_overview():
         conn.close()
 
 
+@app.get("/v1/admin/demo-data")
+async def admin_demo_data_status():
+    conn = _db()
+    try:
+        return demo_data_status(conn)
+    finally:
+        conn.close()
+
+
+@app.post("/v1/admin/demo-data")
+async def admin_seed_demo_data():
+    conn = _db()
+    try:
+        return seed_demo_data(conn)
+    finally:
+        conn.close()
+
+
+@app.delete("/v1/admin/demo-data")
+async def admin_clear_demo_data():
+    conn = _db()
+    try:
+        return clear_demo_data(conn)
+    finally:
+        conn.close()
+
+
 @app.get("/v1/stats/overview")
 async def stats_overview():
     conn = _db()
@@ -2421,7 +2455,14 @@ async def index():
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
         _schedule_livetalking_warmup()
-        return FileResponse(index_path)
+        return FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     return {
         "name": "Lingshan AI Guide API",
         "docs": "/docs",

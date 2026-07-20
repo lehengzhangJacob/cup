@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .demo_data import demo_data_status
 from .emotion_analysis import EMOTION_LABELS, analyze_text
 
 
@@ -100,6 +101,7 @@ def build_overview(
 ) -> dict[str, Any]:
     days = _last_days()
     today, week_start = days[-1], days[0]
+    demo_data = demo_data_status(conn)
     service_turns, unique_visitors = conn.execute(
         "SELECT COUNT(*), COUNT(DISTINCT session_id) FROM chat_logs WHERE role='user'"
     ).fetchone()
@@ -330,7 +332,12 @@ def build_overview(
         "emotion_completed_count": int(completed_emotion_count),
         "satisfaction_trend_ready": int(feedback_count or 0) >= 5,
         "minimum_feedback_for_trend": 5,
-        "note": "实时指标只统计游客端真实对话、情绪和主动评分；赛题 XLSX 历史样本在历史分析页单独展示。",
+        "contains_demo_data": demo_data["active"],
+        "note": (
+            "当前实时指标包含明确标注的答辩演示数据；可在数据概览中一键清除。"
+            if demo_data["active"]
+            else "实时指标只统计游客端真实对话、情绪和主动评分；赛题 XLSX 历史样本在历史分析页单独展示。"
+        ),
     }
 
     recent_events = []
@@ -402,4 +409,5 @@ def build_overview(
         "service_suggestion_evidence": suggestion_entries,
         "data_quality": data_quality,
         "routes": routes,
+        "demo_data": demo_data,
     }

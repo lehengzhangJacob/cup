@@ -86,6 +86,23 @@ def test_vision_correction_record_and_retrieval(tmp_path, monkeypatch):
         monkeypatch.setattr(config, "VISION_REFERENCES_DIR", original_dir)
 
 
+def test_empty_candidates_are_recorded_as_missed_recognition(tmp_path, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "VISION_REFERENCES_DIR", tmp_path / "refs")
+    record_vision_correction(
+        model_candidates=[],
+        user_confirmed_id="LS-011",
+        image_sha256="f" * 64,
+    )
+
+    corrections = list_vision_corrections(limit=10)
+    assert len(corrections) == 1
+    assert corrections[0]["model_candidates"] == []
+    assert corrections[0]["user_confirmed"] == "灵山大佛"
+    assert corrections[0]["image_sha256"] == "f" * 20
+
+
 def test_gallery_summary_coverage_metrics(tmp_path, monkeypatch):
     """测试参考图库覆盖率和质量指标计算。"""
     from app import config

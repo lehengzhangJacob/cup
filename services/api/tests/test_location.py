@@ -45,6 +45,33 @@ def test_stale_gps_is_not_trusted():
     assert result["reason"] == "stale_position"
 
 
+def test_far_away_gps_is_not_offered_as_confirmable_scenic_candidate():
+    result = resolve_location(
+        "gps",
+        lat=39.9042,
+        lng=116.4074,
+        accuracy_m=20,
+        timestamp_ms=time.time() * 1000,
+    )
+    assert result["resolved"] is False
+    assert result["reason"] == "outside_coverage"
+    assert result["distance_m"] > 600
+    assert result["requires_confirmation"] is False
+
+
+def test_far_away_stale_gps_is_not_confirmable_either():
+    result = resolve_location(
+        "gps",
+        lat=39.9042,
+        lng=116.4074,
+        accuracy_m=20,
+        timestamp_ms=(time.time() - 300) * 1000,
+    )
+    assert result["resolved"] is False
+    assert result["reason"] == "stale_position"
+    assert result["requires_confirmation"] is False
+
+
 def test_unknown_qr_and_wifi_nodes_do_not_false_positive():
     assert resolve_location("qr", code="BAD-CODE")["resolved"] is False
     assert resolve_location("wifi", code="BAD-NODE")["resolved"] is False

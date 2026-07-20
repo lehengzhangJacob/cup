@@ -326,7 +326,7 @@ def resolve_location(
                 **result,
                 **gps_meta,
                 "reason": "stale_position",
-                "requires_confirmation": True,
+                "requires_confirmation": distance_m <= GPS_CANDIDATE_RADIUS_M,
                 "note": "GPS 位置已经过期，不能据此自动讲解，请重新定位或选择点位。",
             }
         if accuracy is None or accuracy > GPS_USABLE_ACCURACY_M:

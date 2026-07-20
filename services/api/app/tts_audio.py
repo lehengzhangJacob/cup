@@ -12,6 +12,18 @@ class GlmTtsWatermarkFilter:
         self.sample_rate = sample_rate
         self.pending = bytearray()
         self.decided = False
+        self.fade_applied = False
+
+    def _prepare_first_audio(self, pcm: bytes) -> bytes:
+        if not pcm or self.fade_applied:
+            return pcm
+        self.fade_applied = True
+        # Each GLM-TTS request can start with a small non-zero transient even
+        # when watermarking is disabled.  Separately synthesized sentences are
+        # joined into one answer stream, so that transient otherwise becomes
+        # an audible click at every sentence boundary.  Fade only the first
+        # 10 ms of each request; this is short enough to preserve consonants.
+        return fade_in_pcm16(pcm, self.sample_rate, milliseconds=10)
 
     def feed(self, pcm: bytes) -> bytes:
         if self.decided:
@@ -26,7 +38,7 @@ class GlmTtsWatermarkFilter:
             return b""
         self.pending.clear()
         self.decided = True
-        return cleaned
+        return self._prepare_first_audio(cleaned)
 
     def finish(self) -> bytes:
         if self.decided:
@@ -38,7 +50,32 @@ class GlmTtsWatermarkFilter:
         )
         self.pending.clear()
         self.decided = True
-        return cleaned
+        return self._prepare_first_audio(cleaned)
+
+
+def fade_in_pcm16(pcm: bytes, sample_rate: int, *, milliseconds: int = 10) -> bytes:
+    """Remove a PCM boundary click with a very short linear fade-in."""
+    if (
+        not pcm
+        or len(pcm) % 2
+        or not 8_000 <= sample_rate <= 96_000
+        or milliseconds <= 0
+    ):
+        return pcm
+
+    samples = array("h")
+    samples.frombytes(pcm)
+    if sys.byteorder != "little":
+        samples.byteswap()
+
+    fade_samples = min(len(samples), max(2, round(sample_rate * milliseconds / 1000)))
+    denominator = max(1, fade_samples - 1)
+    for index in range(fade_samples):
+        samples[index] = round(samples[index] * index / denominator)
+
+    if sys.byteorder != "little":
+        samples.byteswap()
+    return samples.tobytes()
 
 
 def strip_glm_tts_watermark_pcm16(pcm: bytes, sample_rate: int) -> bytes:

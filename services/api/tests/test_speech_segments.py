@@ -26,11 +26,12 @@ class SpeechSegmenterTests(unittest.TestCase):
         self.assertEqual(segmenter.feed("祝您游览愉快"), [])
         self.assertEqual(segmenter.finish(), ["祝您游览愉快"])
 
-    def test_emits_first_complete_clause_for_low_latency(self):
+    def test_keeps_short_first_clause_for_natural_prosody(self):
         segmenter = SpeechSegmenter()
+        self.assertEqual(segmenter.feed("灵山大佛高88米，"), [])
         self.assertEqual(
-            segmenter.feed("灵山大佛高88米，含台基总高101.5米。"),
-            ["灵山大佛高88米，", "含台基总高101.5米。"],
+            segmenter.feed("含台基总高101.5米。"),
+            ["灵山大佛高88米，含台基总高101.5米。"],
         )
 
     def test_keeps_later_short_clauses_together_for_natural_prosody(self):
@@ -50,8 +51,15 @@ class SpeechSegmenterTests(unittest.TestCase):
         self.assertEqual(segmenter.feed(text), [])
         self.assertEqual(
             segmenter.feed("，现在才说完。"),
-            [text + "，", "现在才说完。"],
+            [text + "，现在才说完。"],
         )
+
+    def test_splits_a_very_long_clause_at_comma_for_bounded_latency(self):
+        segmenter = SpeechSegmenter()
+        clause = "这是一段为了验证超长内容仍然可以及时开始播报而准备的完整测试文本"
+
+        self.assertGreaterEqual(len(clause), 24)
+        self.assertEqual(segmenter.feed(clause + "，"), [clause + "，"])
 
     def test_does_not_split_inside_streamed_clock_time(self):
         segmenter = SpeechSegmenter()
@@ -59,5 +67,5 @@ class SpeechSegmenterTests(unittest.TestCase):
         self.assertEqual(segmenter.feed("开放时间为19:"), [])
         self.assertEqual(
             segmenter.feed("00，请合理安排。"),
-            ["开放时间为19:00，", "请合理安排。"],
+            ["开放时间为19:00，请合理安排。"],
         )

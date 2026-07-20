@@ -6,7 +6,7 @@ import re
 class SpeechSegmenter:
     def __init__(
         self,
-        first_clause_limit: int = 8,
+        first_clause_limit: int = 24,
         clause_limit: int = 24,
         hard_limit: int = 120,
     ) -> None:

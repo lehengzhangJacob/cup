@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -u
+set -o pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RETRY_SECONDS="${API_STACK_RETRY_SECONDS:-3}"
@@ -9,11 +10,16 @@ FAILURE_THRESHOLD="${API_STACK_FAILURE_THRESHOLD:-3}"
 
 trap 'exit 0' INT TERM
 
+json_health_ok() {
+  /usr/bin/python3 -c 'import json, sys; raise SystemExit(0 if json.load(sys.stdin).get("ok") is True else 1)'
+}
+
 stack_ready() {
-  curl -fsS --max-time 2 "http://127.0.0.1:8001/health" >/dev/null 2>&1 \
+  curl -fsS --max-time 2 "http://127.0.0.1:8001/health" 2>/dev/null | json_health_ok \
     && curl -kfsS --max-time 2 "https://127.0.0.1:8443/health" >/dev/null 2>&1 \
     && curl -kfsS --max-time 2 "https://127.0.0.1:8444/health" >/dev/null 2>&1 \
-    && curl -fsS --max-time 2 "http://127.0.0.1:8011/health" >/dev/null 2>&1
+    && curl -fsS --max-time 2 "http://127.0.0.1:8011/health" >/dev/null 2>&1 \
+    && curl -fsS --max-time 2 "http://127.0.0.1:8020/health" 2>/dev/null | json_health_ok
 }
 
 while true; do

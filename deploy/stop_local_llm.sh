@@ -2,9 +2,20 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PID_FILE="$ROOT/deploy/local-llm.pid"
-WATCHDOG_PID_FILE="$ROOT/deploy/local-llm-watchdog.pid"
-LAST_USED_FILE="$ROOT/deploy/local-llm.last-used"
+PROFILE="${LOCAL_LLM_PROFILE:-full}"
+if [[ "$PROFILE" == "lite" ]]; then
+  FILE_PREFIX="local-llm-lite"
+  SERVICE_LABEL="Lightweight local Qwen3-1.7B"
+elif [[ "$PROFILE" == "full" ]]; then
+  FILE_PREFIX="local-llm"
+  SERVICE_LABEL="Full local Qwen2-7B"
+else
+  echo "Unsupported LOCAL_LLM_PROFILE: $PROFILE" >&2
+  exit 1
+fi
+PID_FILE="$ROOT/deploy/${FILE_PREFIX}.pid"
+WATCHDOG_PID_FILE="$ROOT/deploy/${FILE_PREFIX}-watchdog.pid"
+LAST_USED_FILE="$ROOT/deploy/${FILE_PREFIX}.last-used"
 
 if [[ -f "$WATCHDOG_PID_FILE" ]]; then
   watchdog_pid="$(tr -dc '0-9' < "$WATCHDOG_PID_FILE")"
@@ -14,7 +25,7 @@ if [[ -f "$WATCHDOG_PID_FILE" ]]; then
 fi
 
 if [[ ! -f "$PID_FILE" ]]; then
-  echo "Local LLM is not running"
+  echo "$SERVICE_LABEL is not running"
   exit 0
 fi
 
@@ -27,4 +38,4 @@ if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
   done
 fi
 rm -f "$PID_FILE" "$WATCHDOG_PID_FILE" "$LAST_USED_FILE"
-echo "Local LLM stopped; model GPU memory released"
+echo "$SERVICE_LABEL stopped; model GPU memory released"

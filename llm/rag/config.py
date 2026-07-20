@@ -96,6 +96,41 @@ LOCAL_LLM_LAST_USED_FILE = Path(
         str(PROJECT_ROOT / "deploy" / "local-llm.last-used"),
     )
 ).expanduser()
+LOCAL_LLM_LOG_FILE = Path(
+    os.getenv(
+        "RAG_LOCAL_LLM_LOG_FILE",
+        str(PROJECT_ROOT / "deploy" / "local-llm.log"),
+    )
+).expanduser()
+LOCAL_LITE_LLM_BASE_URL = os.getenv(
+    "RAG_LOCAL_LITE_LLM_BASE_URL",
+    "http://127.0.0.1:8022/v1",
+).rstrip("/")
+LOCAL_LITE_LLM_MODEL = os.getenv(
+    "RAG_LOCAL_LITE_LLM_MODEL",
+    "/home/datasets/EMO_GEN/EMO_GEN_model/Qwen/Qwen3-1.7B",
+).strip()
+LOCAL_LITE_LLM_API_KEY = os.getenv(
+    "RAG_LOCAL_LITE_LLM_API_KEY", "local"
+).strip() or "local"
+LOCAL_LITE_LLM_START_SCRIPT = Path(
+    os.getenv(
+        "RAG_LOCAL_LITE_LLM_START_SCRIPT",
+        str(PROJECT_ROOT / "deploy" / "start_local_lite_llm.sh"),
+    )
+).expanduser()
+LOCAL_LITE_LLM_LAST_USED_FILE = Path(
+    os.getenv(
+        "RAG_LOCAL_LITE_LLM_LAST_USED_FILE",
+        str(PROJECT_ROOT / "deploy" / "local-llm-lite.last-used"),
+    )
+).expanduser()
+LOCAL_LITE_LLM_LOG_FILE = Path(
+    os.getenv(
+        "RAG_LOCAL_LITE_LLM_LOG_FILE",
+        str(PROJECT_ROOT / "deploy" / "local-llm-lite.log"),
+    )
+).expanduser()
 
 SESSION_TTL_SECONDS = int(os.getenv("RAG_SESSION_TTL_SECONDS", "3600"))
 SESSION_MAX_COUNT = int(os.getenv("RAG_SESSION_MAX_COUNT", "1000"))

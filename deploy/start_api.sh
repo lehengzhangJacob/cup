@@ -52,10 +52,14 @@ fi
 # must not bounce the independent RAG coordinator unless explicitly requested.
 RAG_RESTART="${RAG_RESTART:-false}" bash "$ROOT/deploy/start_rag.sh"
 
-# The local OpenAI-compatible server starts without loading model weights.
-# Qwen2-7B is loaded only after the local route is selected, then unloaded idle.
-if [[ "${LOCAL_LLM_AUTOSTART:-true}" =~ ^(1|true|yes)$ ]]; then
+# By default, do not bind the local LLM to a GPU during stack startup. The
+# first local-model request starts it, selects a sufficiently free GPU, and
+# the watchdog stops it after the configured idle period.
+if [[ "${LOCAL_LLM_AUTOSTART:-false}" =~ ^(1|true|yes)$ ]]; then
   bash "$ROOT/deploy/start_local_llm.sh"
+fi
+if [[ "${LOCAL_LITE_LLM_AUTOSTART:-false}" =~ ^(1|true|yes)$ ]]; then
+  bash "$ROOT/deploy/start_local_lite_llm.sh"
 fi
 
 if [[ "${LIVETALKING_CPU_STANDBY:-false}" =~ ^(1|true|yes)$ ]]; then

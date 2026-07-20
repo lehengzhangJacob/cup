@@ -182,6 +182,23 @@ def test_local_route_uses_local_client_and_model():
     assert local_client.completions.calls[0]["model"].endswith("Qwen2-7B-Instruct")
 
 
+def test_lightweight_local_route_uses_qwen3_client_and_model():
+    retriever = FakeRetriever()
+    cloud_client = FakeClient()
+    local_lite_client = FakeClient()
+    pipeline = RAGPipeline(
+        retriever=retriever,
+        client=cloud_client,
+        local_lite_client=local_lite_client,
+    )
+
+    result = pipeline.query_result("灵山大佛多高？", model_route="local_lite")
+
+    assert result.answer == "灵山大佛通高88米。"
+    assert cloud_client.completions.calls == []
+    assert local_lite_client.completions.calls[0]["model"].endswith("Qwen3-1.7B")
+
+
 def test_cloud_flash_uses_low_latency_default():
     pipeline, _, client, _ = make_pipeline()
 

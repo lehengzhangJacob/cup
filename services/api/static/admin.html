@@ -372,6 +372,11 @@
       .satisfaction-value { font-size:11px; }
       .chart-legend { flex-wrap:wrap; gap:8px 14px; }
     }
+    .demo-data-panel { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:16px; padding:15px 17px; border:1px dashed #c7b17d; border-radius:3px; background:#fffaf0; }
+    .demo-data-panel.active { border-style:solid; border-color:#d39b37; background:#fff5dc; }
+    .demo-data-title { display:flex; align-items:center; gap:8px; margin-bottom:3px; font-weight:700; }
+    .demo-data-actions { display:flex; flex:0 0 auto; gap:8px; }
+    @media(max-width:780px) { .demo-data-panel { align-items:flex-start; flex-direction:column; } .demo-data-actions { width:100%; flex-wrap:wrap; } }
   </style>
 </head>
 <body>
@@ -393,6 +398,10 @@
     </header>
 
     <section class="view active" id="overview">
+      <div class="demo-data-panel" id="demoDataPanel">
+        <div><div class="demo-data-title">答辩演示数据 <span class="tag official" id="demoDataBadge" hidden>已计入统计</span></div><div class="muted" id="demoDataStatus">正在检查演示数据状态…</div></div>
+        <div class="demo-data-actions"><button class="btn primary" id="seedDemoData">生成演示数据</button><button class="btn danger" id="clearDemoData" hidden>清除演示数据</button></div>
+      </div>
       <div class="metrics">
         <div class="metric"><div class="label">今日服务游客</div><div class="value" id="todayVisitors">—</div><div class="note">按会话去重</div></div>
         <div class="metric"><div class="label">近 7 日游客</div><div class="value" id="weekVisitors">—</div><div class="note">滚动统计</div></div>
@@ -462,8 +471,6 @@
               <div class="avatar-choices" id="avatarChoices" role="radiogroup" aria-label="数字人形象"></div>
               <span class="avatar-help">形象包含人物、服装和背景素材；保存后刷新游客端即可看到新形象。</span>
             </div>
-            <label>服装风格<input id="costume" maxlength="50" /></label>
-            <label>默认表情<input id="expression" maxlength="50" /></label>
           </div>
           <button class="btn primary" style="margin-top:20px" type="submit">保存数字人配置</button>
         </form>
@@ -488,7 +495,7 @@
       </div>
       <div class="card">
         <h2>景区 / 子景点实时满意度</h2>
-        <div class="muted">只统计游客端主动提交的 1–5 分评价</div>
+        <div class="muted" id="attractionSatisfactionNote">只统计游客端主动提交的 1–5 分评价</div>
         <div style="overflow:auto;margin-top:14px"><table><thead><tr><th>景区</th><th>景点</th><th>评价数</th><th>平均分</th><th>低分数</th></tr></thead><tbody id="attractionSatisfaction"></tbody></table></div>
       </div>
       <div class="card">
@@ -520,7 +527,18 @@
   let avatarCatalog = [];
 
   function notify(message, error=false){ const el=$("notice"); el.textContent=message; el.style.background=error?"#a94c45":"#173e35"; el.style.display="block"; clearTimeout(notify.timer); notify.timer=setTimeout(()=>el.style.display="none",3200); }
-  async function api(path, options={}) { const response=await fetch(path, options); let data={}; try{data=await response.json()}catch(_){data={detail:await response.text()}} if(response.status===401){location.replace("/login");throw new Error("登录状态已失效");} if(!response.ok) throw new Error(data.detail||"请求失败"); return data; }
+  async function api(path, options={}) {
+    const response=await fetch(path, options);
+    let data={};
+    try{data=await response.json()}catch(_){data={detail:await response.text()}}
+    if(response.status===401){location.replace("/login");throw new Error("登录状态已失效");}
+    if(!response.ok) throw new Error(data.detail||"请求失败");
+    if(data.index_update?.ok===false){
+      const warning=data.index_update.reason||"参考图已保存，但视觉召回索引未更新";
+      setTimeout(()=>notify(warning,true),800);
+    }
+    return data;
+  }
   function escapeHtml(value){ return String(value??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
   function bytes(value){ if(value<1024)return value+" B"; if(value<1048576)return (value/1024).toFixed(1)+" KB"; return (value/1048576).toFixed(1)+" MB"; }
   function shortDate(value){ if(!value)return"—"; return new Date(value).toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}); }
@@ -534,6 +552,14 @@
   function renderStats(data){
     stats=data;
     $("todayVisitors").textContent=data.today_visitors??0;
+    const demo=data.demo_data||{}, demoActive=Boolean(demo.active);
+    $("demoDataPanel").classList.toggle("active",demoActive);
+    $("demoDataBadge").hidden=!demoActive;
+    $("clearDemoData").hidden=!demoActive;
+    $("seedDemoData").textContent=demoActive?"重置演示数据":"生成演示数据";
+    $("demoDataStatus").textContent=demoActive
+      ? `已计入 ${demo.session_count||0} 个演示会话、${demo.question_count||0} 轮问答、${demo.feedback_count||0} 条评分和 ${demo.emotion_count||0} 条情绪样本；均为合成数据。`
+      : "生成后会填充近 7 日趋势、满意度和情绪报告；合成数据会明确标注，并可一键清除。";
     $("weekVisitors").textContent=data.week_visitors??0;
     $("serviceTurns").textContent=data.service_turns??0;
     $("satisfaction").textContent=data.avg_satisfaction==null?"暂无":data.avg_satisfaction.toFixed(1)+" / 5";
@@ -550,23 +576,27 @@
     const evidence=data.service_suggestion_evidence||[];
     const quality=data.data_quality||{};
     $("suggestionQuality").textContent=quality.satisfaction_trend_ready
-      ? `基于 ${quality.feedback_count||0} 条真实评分与 ${quality.emotion_completed_count||0} 条已完成情绪分析生成`
+      ? `基于 ${quality.feedback_count||0} 条评分与 ${quality.emotion_completed_count||0} 条已完成情绪分析生成${demoActive?"（含演示数据）":""}`
       : `评分样本 ${quality.feedback_count||0}/${quality.minimum_feedback_for_trend||5}，满意度趋势暂不宜作运营结论`;
     $("suggestions").innerHTML=suggestions.map((x,i)=>{const e=evidence[i]; const proof=e?.evidence?.length?`<small class="muted">依据：${escapeHtml(e.evidence.join(" · "))}</small>`:""; const range=e?.time_range?`<small class="muted">时间范围：${escapeHtml(e.time_range)}</small>`:""; return `<div class="suggestion"><strong>${escapeHtml(e?.title||`建议 ${i+1}`)}</strong><br>${escapeHtml(x)}<br>${proof}<br>${range}</div>`;}).join("");
     $("reportSuggestions").innerHTML=suggestions.map((x,i)=>{const e=evidence[i]; const proof=e?.evidence?.length?`<small class="muted">依据：${escapeHtml(e.evidence.join(" · "))}</small>`:""; const range=e?.time_range?`<small class="muted">时间范围：${escapeHtml(e.time_range)}</small>`:""; return `<div class="suggestion"><strong>${escapeHtml(e?.title||`建议 ${i+1}`)}</strong><br>${escapeHtml(x)}<br>${proof}<br>${range}</div>`;}).join("");
     renderSatisfactionTrend(data.satisfaction_trend||[], quality);
     $("recentQuestions").innerHTML=(data.recent_questions||[]).map((x,i)=>`<li><span class="tag">${String(i+1).padStart(2,"0")}</span>　${escapeHtml(x)}</li>`).join("")||'<li class="empty">暂无问答记录</li>';
-    $("recentFeedback").innerHTML=(data.recent_feedback||[]).map(x=>`<li><strong>${"★".repeat(x.rating)}${"☆".repeat(5-x.rating)}</strong> · ${escapeHtml(x.attraction_name||x.scenic_area||"未标注景点")}<br>${escapeHtml(x.comment||"游客未填写文字评价")}<br><small class="muted">${shortDate(x.created_at)}</small></li>`).join("")||'<li class="empty">暂无满意度反馈</li>';
+    $("recentFeedback").innerHTML=(data.recent_feedback||[]).map(x=>`<li><strong>${"★".repeat(x.rating)}${"☆".repeat(5-x.rating)}</strong> · ${escapeHtml(x.attraction_name||x.scenic_area||"未标注景点")} ${x.source==="demo"?'<span class="tag official">演示</span>':""}<br>${escapeHtml(x.comment||"游客未填写文字评价")}<br><small class="muted">${shortDate(x.created_at)}</small></li>`).join("")||'<li class="empty">暂无满意度反馈</li>';
+    $("emotionDistributionNote").textContent=demoActive?"当前包含明确标注的合成情绪样本；真实样本仅来自授权语音分析。":"仅统计授权语音且模型成功分析的样本（audio-text），不含纯文字对话";
+    $("attractionSatisfactionNote").textContent=demoActive?"当前评分汇总含答辩演示数据；清除后仅保留游客主动评分。":"只统计游客端主动提交的 1–5 分评价";
     const emotion=data.emotion_distribution||{}, emotionLabels={happy:"愉悦",neutral:"平静",surprise:"惊讶",sad:"悲伤",fear:"恐惧",angry:"愤怒",disgust:"厌恶"};
     const emotionRows=Object.keys(emotionLabels).map(name=>[name,Number(emotion[name]||0)]), emotionMax=Math.max(1,...emotionRows.map(([,count])=>count));
     $("emotionDistribution").innerHTML=emotionRows.map(([name,count])=>`<div class="compact-meter"><div class="compact-meter-head"><span>${emotionLabels[name]}</span><strong>${count}</strong></div><div class="track"><div class="fill" style="width:${count/emotionMax*100}%"></div></div></div>`).join("")||'<div class="empty">暂无七分类结果</div>';
     const jobs=data.emotion_job_status||{}, modes=data.analysis_modes||{};
     $("emotionJobs").innerHTML=[...Object.entries(jobs).map(([name,count])=>[`任务 · ${name}`,count]),...Object.entries(modes).map(([name,count])=>[`方式 · ${name}`,count])].map(([name,count])=>`<div class="status-item"><span title="${escapeHtml(name)}">${escapeHtml(name)}</span><strong>${count}</strong></div>`).join("")||'<div class="empty">暂无情绪任务</div>';
-    $("recentEmotionEvents").innerHTML=(data.recent_emotion_events||[]).map(x=>`<tr><td>${shortDate(x.created_at)}</td><td>${escapeHtml(x.media_kind||"text")}</td><td>${escapeHtml(x.emotion||"—")}</td><td>${escapeHtml(x.sentiment||"—")}</td><td>${escapeHtml(x.analysis_mode||"—")} / ${escapeHtml(x.status||"—")}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无带有效情绪信号的游客对话</td></tr>';
+    $("recentEmotionEvents").innerHTML=(data.recent_emotion_events||[]).map(x=>`<tr><td>${shortDate(x.created_at)}</td><td>${escapeHtml(x.media_kind||"text")}${x.source==="dialogue-demo"?' <span class="tag official">演示</span>':""}</td><td>${escapeHtml(x.emotion||"—")}</td><td>${escapeHtml(x.sentiment||"—")}</td><td>${escapeHtml(x.analysis_mode||"—")} / ${escapeHtml(x.status||"—")}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无带有效情绪信号的游客对话</td></tr>';
     $("attractionSatisfaction").innerHTML=(data.attraction_satisfaction||[]).map(x=>`<tr><td>${escapeHtml(x.scenic_area)}</td><td><strong>${escapeHtml(x.attraction_name)}</strong></td><td>${x.count}</td><td>${Number(x.avg_satisfaction).toFixed(2)} / 5</td><td>${x.low_rating_count}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无游客主动提交的景点评分</td></tr>';
   }
 
   async function loadStats(){ try{ renderStats(await api("/v1/admin/analytics/overview")); }catch(error){notify(error.message,true);} }
+  async function seedDemoData(){const button=$("seedDemoData");button.disabled=true;button.textContent="生成中…";try{const data=await api("/v1/admin/demo-data",{method:"POST"});await loadStats();notify(`演示数据已生成：${data.question_count} 轮问答、${data.feedback_count} 条评分、${data.emotion_count} 条情绪样本`);}catch(error){notify(error.message,true);}finally{button.disabled=false;}}
+  async function clearDemoData(){if(!confirm("确认清除全部答辩演示数据？真实游客数据不会受影响。"))return;const button=$("clearDemoData");button.disabled=true;try{await api("/v1/admin/demo-data",{method:"DELETE"});await loadStats();notify("演示数据已清除，真实游客数据已保留");}catch(error){notify(error.message,true);}finally{button.disabled=false;}}
   async function loadEmotionStatus(){ try{const data=await api("/v1/admin/emotion/status");$("emotionModelStatus").textContent=data.ready?"模型可用":"文本降级";$("emotionModelStatus").className=`tag ${data.ready?"official":""}`;$("emotionStatusDetail").textContent=`${data.model||"emotion_v5_stage2"} · ${data.detail||data.mode||"状态未知"} · 原始媒体${data.media_retained?"保留":"分析后删除"}`;}catch(error){$("emotionModelStatus").textContent="检测失败";$("emotionStatusDetail").textContent=error.message;}}
   function renderMonthlyChart(rows){
     const target=$("historicalMonthlyChart");
@@ -589,7 +619,7 @@
     const totalSamples=rows.reduce((sum,row)=>sum+(Number(row.count)||0),0);
     const minForTrend=quality?.minimum_feedback_for_trend||5;
     if(!rows.length||totalSamples===0){
-      note.textContent=`评分样本 0/${minForTrend}，样本不足，趋势暂不宜作运营结论`;
+      note.textContent=`评分样本 0/${minForTrend}，样本不足，趋势暂不宜作运营结论${quality?.contains_demo_data?"（含演示数据）":""}`;
       target.innerHTML='<div class="empty">暂无游客主动评分，趋势待样本充足后展示</div>';
       return;
     }
@@ -601,7 +631,7 @@
     const dots=points.map(point=>`<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.5" fill="#fffef9" stroke="#b68335" stroke-width="2"><title>${escapeHtml(point.date)}：${point.score.toFixed(2)} / 5（${point.count} 条）</title></circle>`).join("");
     const labels=rows.map((row,index)=>`<text x="${(left+step*(index+.5)).toFixed(1)}" y="${height-17}" text-anchor="middle" fill="#718078" font-size="10">${escapeHtml(String(row.date).slice(5))}</text>`).join("");
     const watermark=ready?'':`<text x="${width/2}" y="${height/2-6}" text-anchor="middle" fill="#c8a96a" font-size="26" font-weight="700" opacity=".32" transform="rotate(-8 ${width/2} ${height/2})">样本不足</text><text x="${width/2}" y="${height/2+22}" text-anchor="middle" fill="#9a742f" font-size="11" opacity=".7">评分样本 ${totalSamples}/${minForTrend}，趋势仅供参考</text>`;
-    note.textContent=`评分样本 ${totalSamples} 条${ready?"":"（样本不足，趋势仅供参考）"} · 近 7 天`;
+    note.textContent=`评分样本 ${totalSamples} 条${ready?"":"（样本不足，趋势仅供参考）"} · 近 7 天${quality?.contains_demo_data?" · 含演示数据":""}`;
     target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="近 7 日实时满意度趋势"><text x="${left}" y="14" fill="#718078" font-size="10">满意度 / 5</text>${grid}${watermark}<path d="${line}" fill="none" stroke="#b68335" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labels}</svg>`;
   }
   function renderHistorical(data){
@@ -638,14 +668,16 @@
     document.querySelectorAll(".avatar-choice").forEach(button=>button.onclick=()=>selectAvatar(button.dataset.avatar));
     selectAvatar(avatarCatalog.some(item=>item.id===selectedId)?selectedId:avatarCatalog[0]?.id||selectedId);
   }
-  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; renderAvatarChoices(s.avatar_id); $("voiceName").innerHTML=data.available_voices.map(x=>`<option ${x===s.voice?"selected":""}>${escapeHtml(x)}</option>`).join(""); $("costume").value=s.costume; $("expression").value=s.expression;}catch(error){notify(error.message,true);} }
+  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; renderAvatarChoices(s.avatar_id); $("voiceName").innerHTML=data.available_voices.map(x=>`<option ${x===s.voice?"selected":""}>${escapeHtml(x)}</option>`).join("");}catch(error){notify(error.message,true);} }
 
   $("uploadKb").onclick=async()=>{const file=$("kbFile").files[0]; if(!file)return notify("请先选择 DOCX、TXT 或 Markdown 文件",true); const fd=new FormData();fd.append("file",file); $("uploadKb").disabled=true;$("uploadKb").textContent="构建中…";try{const data=await api("/v1/admin/kb/documents",{method:"POST",body:fd});notify(`知识库更新完成：${data.chunks} 个片段`);$("kbFile").value="";await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);}finally{$("uploadKb").disabled=false;$("uploadKb").textContent="上传并构建";}};
-  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value,costume:$("costume").value,expression:$("expression").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
+  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
   $("displayName").oninput=()=>$("avatarPreviewName").textContent=$("displayName").value||"灵山小向导";
   $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
   $("logout").onclick=async()=>{try{await fetch("/v1/admin/auth/logout",{method:"POST"});}finally{location.replace("/login");}};
   Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]);
+  $("seedDemoData").onclick=seedDemoData;
+  $("clearDemoData").onclick=clearDemoData;
 </script>
 </body>
 </html>

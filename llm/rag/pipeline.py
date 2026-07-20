@@ -21,6 +21,11 @@ from rag.config import (
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_TEMPERATURE,
+    LOCAL_LITE_LLM_API_KEY,
+    LOCAL_LITE_LLM_BASE_URL,
+    LOCAL_LITE_LLM_LAST_USED_FILE,
+    LOCAL_LITE_LLM_MODEL,
+    LOCAL_LITE_LLM_START_SCRIPT,
     LOCAL_LLM_API_KEY,
     LOCAL_LLM_BASE_URL,
     LOCAL_LLM_LAST_USED_FILE,
@@ -116,6 +121,8 @@ class RAGPipeline:
         async_client=None,
         local_client=None,
         local_async_client=None,
+        local_lite_client=None,
+        local_lite_async_client=None,
         sessions: Optional[ConversationStore] = None,
     ) -> None:
         self._retriever = retriever or Retriever()
@@ -123,7 +130,12 @@ class RAGPipeline:
         self._async_client = async_client
         self._local_client = local_client
         self._local_async_client = local_async_client
+        self._local_lite_client = local_lite_client
+        self._local_lite_async_client = local_lite_async_client
         self._manage_local_service = local_client is None and local_async_client is None
+        self._manage_local_lite_service = (
+            local_lite_client is None and local_lite_async_client is None
+        )
         self.sessions = sessions or ConversationStore()
         self._retriever_lock = threading.RLock()
 
@@ -360,6 +372,10 @@ class RAGPipeline:
             await self._local_async_client.close()
         if self._local_client is not None:
             self._local_client.close()
+        if self._local_lite_async_client is not None:
+            await self._local_lite_async_client.close()
+        if self._local_lite_client is not None:
+            self._local_lite_client.close()
         with self._retriever_lock:
             embedder = getattr(self._retriever, "embedder", None)
         if embedder is not None and hasattr(embedder, "close"):
@@ -386,6 +402,10 @@ class RAGPipeline:
             "model_routes": {
                 "cloud": {"model": LLM_MODEL, "uses_gpu": False},
                 "local": {"model": LOCAL_LLM_MODEL, "uses_gpu": True},
+                "local_lite": {
+                    "model": LOCAL_LITE_LLM_MODEL,
+                    "uses_gpu": True,
+                },
             },
             "embedding_model": EMBED_MODEL,
             **self.sessions.stats(),
@@ -494,6 +514,13 @@ class RAGPipeline:
                     base_url=LOCAL_LLM_BASE_URL,
                 )
             return self._local_client
+        if model_route == "local_lite":
+            if self._local_lite_client is None:
+                self._local_lite_client = OpenAI(
+                    api_key=LOCAL_LITE_LLM_API_KEY,
+                    base_url=LOCAL_LITE_LLM_BASE_URL,
+                )
+            return self._local_lite_client
         if model_route != "cloud":
             raise ValueError(f"unsupported model route: {model_route}")
         if self._client is None:
@@ -511,6 +538,13 @@ class RAGPipeline:
                     base_url=LOCAL_LLM_BASE_URL,
                 )
             return self._local_async_client
+        if model_route == "local_lite":
+            if self._local_lite_async_client is None:
+                self._local_lite_async_client = AsyncOpenAI(
+                    api_key=LOCAL_LITE_LLM_API_KEY,
+                    base_url=LOCAL_LITE_LLM_BASE_URL,
+                )
+            return self._local_lite_async_client
         if model_route != "cloud":
             raise ValueError(f"unsupported model route: {model_route}")
         if self._async_client is None:
@@ -523,36 +557,58 @@ class RAGPipeline:
     def _prepare_model_route(self, model_route: str) -> None:
         self._model_for_route(model_route)
         if model_route == "local" and self._manage_local_service:
-            self._ensure_local_service()
+            self._ensure_local_service(model_route)
+        elif model_route == "local_lite" and self._manage_local_lite_service:
+            self._ensure_local_service(model_route)
 
     async def _prepare_model_route_async(self, model_route: str) -> None:
         self._model_for_route(model_route)
         if model_route == "local" and self._manage_local_service:
-            await asyncio.to_thread(self._ensure_local_service)
+            await asyncio.to_thread(self._ensure_local_service, model_route)
+        elif model_route == "local_lite" and self._manage_local_lite_service:
+            await asyncio.to_thread(self._ensure_local_service, model_route)
 
     @staticmethod
-    def _ensure_local_service() -> None:
-        health_url = f"{LOCAL_LLM_BASE_URL.removesuffix('/v1')}/health"
+    def _ensure_local_service(model_route: str) -> None:
+        if model_route == "local":
+            base_url = LOCAL_LLM_BASE_URL
+            start_script = LOCAL_LLM_START_SCRIPT
+            last_used_file = LOCAL_LLM_LAST_USED_FILE
+            route_label = "full local Qwen2-7B"
+        elif model_route == "local_lite":
+            base_url = LOCAL_LITE_LLM_BASE_URL
+            start_script = LOCAL_LITE_LLM_START_SCRIPT
+            last_used_file = LOCAL_LITE_LLM_LAST_USED_FILE
+            route_label = "lightweight local Qwen3-1.7B"
+        else:
+            raise ValueError(f"unsupported local model route: {model_route}")
+        health_url = f"{base_url.removesuffix('/v1')}/health"
         try:
             response = httpx.get(health_url, timeout=1.0, trust_env=False)
             response.raise_for_status()
         except httpx.HTTPError:
             completed = subprocess.run(
-                ["bash", str(LOCAL_LLM_START_SCRIPT)],
-                cwd=str(LOCAL_LLM_START_SCRIPT.parent.parent),
+                ["bash", str(start_script)],
+                cwd=str(start_script.parent.parent),
                 capture_output=True,
                 text=True,
                 timeout=90,
             )
             if completed.returncode != 0:
-                detail = (completed.stderr or completed.stdout).strip()
-                raise RuntimeError(f"local LLM failed to start: {detail}")
-        LOCAL_LLM_LAST_USED_FILE.parent.mkdir(parents=True, exist_ok=True)
-        LOCAL_LLM_LAST_USED_FILE.touch()
+                detail = "\n".join(
+                    part.strip()
+                    for part in (completed.stderr, completed.stdout)
+                    if part and part.strip()
+                )
+                raise RuntimeError(f"{route_label} failed to start: {detail}")
+        last_used_file.parent.mkdir(parents=True, exist_ok=True)
+        last_used_file.touch()
 
     def _mark_local_used(self, model_route: str) -> None:
         if model_route == "local" and self._manage_local_service:
             LOCAL_LLM_LAST_USED_FILE.touch()
+        elif model_route == "local_lite" and self._manage_local_lite_service:
+            LOCAL_LITE_LLM_LAST_USED_FILE.touch()
 
     @staticmethod
     def _model_for_route(model_route: str) -> str:
@@ -560,6 +616,8 @@ class RAGPipeline:
             return LLM_MODEL
         if model_route == "local":
             return LOCAL_LLM_MODEL
+        if model_route == "local_lite":
+            return LOCAL_LITE_LLM_MODEL
         raise ValueError(f"unsupported model route: {model_route}")
 
     @staticmethod

@@ -8,6 +8,7 @@ from io import BytesIO
 
 from app.tts_audio import (
     GlmTtsWatermarkFilter,
+    fade_in_pcm16,
     strip_glm_tts_watermark_pcm16,
     strip_glm_tts_watermark_wav,
 )
@@ -38,6 +39,30 @@ def _watermarked_pcm() -> tuple[bytes, bytes]:
 
 
 class TtsAudioTests(unittest.TestCase):
+    def test_fades_nonzero_start_without_changing_length(self):
+        speech = _tone(220, 0.5, 9_000).tobytes()
+        faded = fade_in_pcm16(speech, SAMPLE_RATE)
+        original_samples = array("h")
+        original_samples.frombytes(speech)
+        faded_samples = array("h")
+        faded_samples.frombytes(faded)
+
+        self.assertEqual(len(faded), len(speech))
+        self.assertEqual(faded_samples[0], 0)
+        self.assertEqual(faded_samples[-1], original_samples[-1])
+        self.assertGreater(abs(faded_samples[SAMPLE_RATE // 100]), 1_000)
+
+    def test_stream_filter_fades_first_clean_pcm_chunk(self):
+        speech = _tone(220, 0.5, 9_000).tobytes()
+        audio_filter = GlmTtsWatermarkFilter(SAMPLE_RATE)
+
+        cleaned = audio_filter.feed(speech)
+        cleaned_samples = array("h")
+        cleaned_samples.frombytes(cleaned)
+
+        self.assertEqual(len(cleaned), len(speech))
+        self.assertEqual(cleaned_samples[0], 0)
+
     def test_strips_leading_glm_watermark_tones(self):
         watermarked, speech = _watermarked_pcm()
         cleaned = strip_glm_tts_watermark_pcm16(watermarked, SAMPLE_RATE)

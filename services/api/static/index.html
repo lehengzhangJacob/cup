@@ -748,10 +748,20 @@
       .quick-prompts { justify-content: flex-start; }
       .quick-prompt { padding: 5px 7px; }
       .panel-heading h2 { font-size: 24px; }
+      .tool-tabs {
+        margin: 0 -20px 14px;
+        padding: 0 20px;
+      }
+      .tool-tab {
+        min-height: 36px;
+        padding: 6px 2px;
+        font-size: 13px;
+      }
       .btns { grid-template-columns: 1fr 1fr; }
+      .btns.chat-actions { grid-template-columns: 1fr; }
+      .btns #ask { grid-column: auto; }
       .feature-actions { grid-template-columns: 1fr; }
       .feature-actions #locate { grid-column: auto; }
-      .btns #ask { grid-column: 1 / -1; }
       .location-method { grid-template-columns: 1fr; }
       .location-method button { width: 100%; }
       .feedback-row { grid-template-columns: 1fr; }
@@ -896,8 +906,9 @@
           <div>
             <label>问答模型</label>
             <select id="modelRoute">
-              <option value="cloud">默认模式</option>
-              <option value="local">本地模式</option>
+              <option value="cloud">云端 GLM（默认）</option>
+              <option value="local_lite">轻量本地 Qwen3-1.7B</option>
+              <option value="local">完整本地 Qwen2-7B</option>
             </select>
           </div>
           <div>
@@ -1011,15 +1022,18 @@
     let liveTalkingServiceStartPromise = null;
 
     const savedModelRoute = localStorage.getItem("lingshan-model-route");
-    if (savedModelRoute === "cloud" || savedModelRoute === "local") {
+    if (["cloud", "local_lite", "local"].includes(savedModelRoute)) {
       $("modelRoute").value = savedModelRoute;
     }
     $("modelRoute").addEventListener("change", () => {
-      localStorage.setItem("lingshan-model-route", $("modelRoute").value);
+      const route = $("modelRoute").value;
+      localStorage.setItem("lingshan-model-route", route);
       sessionId = null;
-      $("status").textContent = $("modelRoute").value === "local"
-        ? "已切换本地模型；首次加载权重会较慢，空闲后自动释放显存"
-        : "已切换 GLM API；不会占用本机大模型显存";
+      $("status").textContent = route === "local"
+        ? "已切换完整本地 Qwen2-7B；约需 18 GiB 空闲显存，首次加载较慢"
+        : route === "local_lite"
+          ? "已切换轻量本地 Qwen3-1.7B；约需 6 GiB 空闲显存，空闲后自动释放"
+          : "已切换云端 GLM；不会占用本机大模型显存";
     });
 
     async function refreshModelRoutes() {
@@ -1027,13 +1041,13 @@
         const response = await fetch(base() + "/v1/model-routes", { cache: "no-store" });
         if (!response.ok) return;
         const data = await response.json();
-        const localRoute = data.routes && data.routes.local;
-        const localOption = $("modelRoute").querySelector('option[value="local"]');
-        if (localRoute && localOption) {
-          localOption.textContent = localRoute.ready
-            ? "本地 Qwen2-7B（服务就绪）"
-            : "本地 Qwen2-7B（按需启动）";
-        }
+        const routes = data.routes || {};
+        ["local_lite", "local"].forEach((routeName) => {
+          const route = routes[routeName];
+          const option = $("modelRoute").querySelector(`option[value="${routeName}"]`);
+          if (!route || !option) return;
+          option.textContent = `${route.label}${route.ready ? "（服务就绪）" : "（按需启动）"}`;
+        });
       } catch (_) {}
     }
 
@@ -1120,7 +1134,7 @@
           await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
           live2DReady = true;
           $("modelLoading").classList.add("is-hidden");
-          $("avatarHint").textContent = "灵曦已就绪";
+          $("avatarHint").textContent = `${activeGuideName}已就绪`;
           $("status").textContent = "已准备好";
           return true;
         } catch (err) {
@@ -1145,13 +1159,13 @@
       document.getElementById("liveTalkingVideo").classList.add("is-active");
       document.getElementById("xmovMount").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.add("is-hidden");
-      document.getElementById("avatarHint").textContent = "灵曦已连接";
+      document.getElementById("avatarHint").textContent = `${activeGuideName}已连接`;
     }
 
     function fallbackToLive2D(message) {
       document.getElementById("liveTalkingVideo").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.remove("is-hidden");
-      document.getElementById("avatarHint").textContent = message || "灵曦已准备好";
+      document.getElementById("avatarHint").textContent = message || `${activeGuideName}已准备好`;
       void bootLive2D();
     }
 
@@ -1196,12 +1210,12 @@
         const status = await statusResponse.json();
         liveTalkingState.avatarId = status.avatar_id || null;
         if (!status.enabled || !status.ready) {
-          fallbackToLive2D("灵曦正在准备，您可以先开始提问");
+          fallbackToLive2D(`${activeGuideName}正在准备，您可以先开始提问`);
           await bootLive2D();
           return false;
         }
 
-        document.getElementById("avatarHint").textContent = "正在连接灵曦…";
+        document.getElementById("avatarHint").textContent = `正在连接${activeGuideName}…`;
         const iceServers = Array.isArray(status.ice_servers)
           ? status.ice_servers
           : (status.turn ? [status.turn] : []);
@@ -1240,7 +1254,7 @@
             liveTalkingState.ready = true;
             activateLiveTalkingView();
             if (!document.getElementById("ask").disabled) {
-              document.getElementById("status").textContent = "灵曦已准备好";
+              document.getElementById("status").textContent = `${activeGuideName}已准备好`;
             }
             resolveConnected(true);
           } else if (state === "failed") {
@@ -1303,7 +1317,7 @@
             body: JSON.stringify({ session_id: failedSessionId }),
           }).catch(() => {});
         }
-        fallbackToLive2D("灵曦暂时无法连接，已切换到轻量模式");
+        fallbackToLive2D(`${activeGuideName}暂时无法连接，已切换到轻量模式`);
         await bootLive2D();
         return false;
       } finally {
@@ -1332,7 +1346,7 @@
       }
       if (!liveTalkingStartPromise) {
         liveTalkingStartPromise = (async () => {
-          $("avatarHint").textContent = "灵曦正在准备…";
+          $("avatarHint").textContent = `${activeGuideName}正在准备…`;
           const result = await warmLiveTalkingService();
           if (result.started && liveTalkingState.pc) {
             try { liveTalkingState.pc.close(); } catch (_) {}
@@ -1704,7 +1718,7 @@
           LingxiLive2D.startSpeaking();
           startLipSync();
           const openMs = Math.round(performance.now() - interactionStartedAt + 80);
-          $("status").textContent = "灵曦播报中 · 总开口 " + openMs + "ms";
+          $("status").textContent = `${activeGuideName}播报中 · 总开口 ${openMs}ms`;
         }
 
         const startAt = Math.max(nextStartAt, ctxA.currentTime + 0.02);
@@ -2253,8 +2267,11 @@
         if (parsed.emotion) setEmotion(parsed.emotion);
       } catch (e) {
         stopSpeech();
-        $("log").textContent = String(e);
-        $("status").textContent = "失败";
+        const message = e instanceof Error ? e.message : String(e);
+        $("log").textContent = message;
+        $("status").textContent = message.includes("显存") || message.includes("OOM")
+          ? "模型显存不足"
+          : "模型调用失败";
       } finally {
         btn.disabled = false;
       }
@@ -2551,16 +2568,23 @@
           method: "POST",
           body: form,
         });
-        if (!response.ok) throw new Error(await response.text());
+        if (!response.ok) {
+          let message = await response.text();
+          try { message = JSON.parse(message).detail || message; } catch (_) {}
+          if (/RAG service unavailable|All connection attempts failed/i.test(String(message))) {
+            message = "景区知识讲解服务正在恢复，请稍后重新拍照识景";
+          }
+          throw new Error(message);
+        }
         const data = await response.json();
         sessionId = data.session_id || sessionId;
         const parsed = stripMeta(data.answer || "");
         $("log").textContent = parsed.text;
-        renderVisionCandidates(data.observation, data);
+        await renderVisionCandidates(data.observation, data);
         const verification = data.reference_verification?.message || "尚未配置参考图";
         $("status").textContent = "识景完成 · " + verification + " · 引用：" + (data.citations || []).map(x => x.title).slice(0, 3).join(" / ");
         if (parsed.emotion) setEmotion(parsed.emotion);
-        void speak(parsed.text);
+        if (!data.observation?.requires_confirmation) void speak(parsed.text);
       } catch (error) {
         $("status").textContent = "识景失败";
         $("log").textContent = String(error.message || error);
@@ -2696,7 +2720,8 @@
     }
 
     async function handleLocationResult(data) {
-      locationCandidate = data.spot_name ? data : null;
+      const confirmable = Boolean(data.spot_name && data.requires_confirmation);
+      locationCandidate = confirmable ? data : null;
       $("useLocationCandidate").hidden = true;
       if (data.resolved && !data.requires_confirmation) {
         const detail = data.accuracy_m ? `，精度约 ${data.accuracy_m} 米` : "";
@@ -2704,16 +2729,26 @@
         await startLocatedGuide(data);
         return;
       }
-      if (data.spot_name) {
+      if (confirmable) {
         const distance = Number.isFinite(data.distance_m) ? `，距候选点约 ${data.distance_m} 米` : "";
         showLocationState(`候选位置：${data.spot_name}${distance}。${data.note || "请确认位置。"}`);
+        $("status").textContent = data.resolved
+          ? `已获得位置候选：${data.spot_name}，请确认后开始讲解`
+          : `GPS 信号不足，仅提供${data.spot_name}作为候选，请先确认`;
         $("useLocationCandidate").textContent = `确认我在${data.spot_name}附近并开始讲解`;
         $("useLocationCandidate").hidden = false;
         const option = Array.from($("manualSpot").options).find(item => item.value === data.spot_name);
         if (option) $("manualSpot").value = option.value;
         return;
       }
+      if (data.spot_name) {
+        const distance = Number.isFinite(data.distance_m) ? `，相距约 ${data.distance_m} 米` : "";
+        showLocationState(`当前位置未进入景区定位范围。最近的公开参考点为${data.spot_name}${distance}。${data.note || "请扫描附近二维码或手动选择。"}`, "warning");
+        $("status").textContent = "GPS 未进入景区范围，请使用二维码或手动选择位置";
+        return;
+      }
       showLocationState(data.note || "自动定位失败，请使用二维码、Wi-Fi 或手动选择。", "warning");
+      $("status").textContent = "自动定位未完成，请改用二维码、Wi-Fi 或手动选择";
     }
 
     function gpsErrorMessage(error) {
@@ -2730,6 +2765,7 @@
       $("locate").disabled = true;
       if (!navigator.geolocation) {
         showLocationState("当前浏览器不支持 GPS。请使用二维码、景区 Wi-Fi 或手动选择。", "warning");
+        $("status").textContent = "当前设备不支持 GPS，请选择其他定位方式";
         $("locate").disabled = false;
         return;
       }
@@ -2746,6 +2782,7 @@
             await handleLocationResult(data);
           } catch (error) {
             showLocationState("定位服务异常：" + String(error.message || error), "warning");
+            $("status").textContent = "定位服务异常，请选择二维码或手动定位";
           } finally {
             $("locate").disabled = false;
           }
@@ -2784,8 +2821,18 @@
 
     $("useLocationCandidate").addEventListener("click", async () => {
       if (!locationCandidate || !locationCandidate.spot_name) return;
-      const confirmed = await requestLocation({ mode: "manual", spot_name: locationCandidate.spot_name });
-      await handleLocationResult(confirmed);
+      const button = $("useLocationCandidate");
+      button.disabled = true;
+      $("status").textContent = `正在确认位置：${locationCandidate.spot_name}`;
+      try {
+        const confirmed = await requestLocation({ mode: "manual", spot_name: locationCandidate.spot_name });
+        await handleLocationResult(confirmed);
+      } catch (error) {
+        showLocationState("位置确认失败：" + String(error.message || error), "warning");
+        $("status").textContent = "位置确认失败，请重试或手动选择";
+      } finally {
+        button.disabled = false;
+      }
     });
 
     void loadLocationOptions();
@@ -2809,10 +2856,7 @@
     }
     async function loadFeedbackAttractions() {
       try {
-        const response = await fetch(base() + "/v1/attractions");
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
-        feedbackAreas = data.scenic_areas || [];
+        feedbackAreas = await ensureAttractionCatalog();
         $("feedbackArea").replaceChildren();
         for (const area of feedbackAreas) {
           const option = document.createElement("option");
@@ -2822,7 +2866,6 @@
         }
         renderFeedbackAttractions();
       } catch (error) {
-        $("visionResult").hidden = true;
         $("feedbackArea").innerHTML = '<option value="">景区加载失败</option>';
         $("status").textContent = "满意度景点目录加载失败：" + String(error.message || error);
       }
@@ -2911,7 +2954,8 @@
     void warmRagOnActivity();
 
     void refreshModelRoutes();
-    $("modelLoading").querySelector("span:last-child").textContent = "灵曦正在准备…";
+    void refreshAvatarProfile();
+    $("modelLoading").querySelector("span:last-child").textContent = `${activeGuideName}正在准备…`;
   </script>
 </body>
 </html>

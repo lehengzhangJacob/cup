@@ -1,6 +1,6 @@
 # 灵山胜境 AI 数字人导览 · 开放 API
 
-本机为服务器，对外提供 HTTP 接口；问答支持 GLM API 与本地 Qwen2-7B 双路径，视觉、ASR 和 TTS 保持智谱 GLM API。
+本机为服务器，对外提供 HTTP 接口；问答支持云端 GLM、轻量本地 Qwen3-1.7B 与完整本地 Qwen2-7B 三条路径，视觉、ASR 和 TTS 保持原有独立链路。
 
 ## 环境（Miniconda）
 
@@ -27,20 +27,22 @@ bash deploy/start_api.sh          # RAG 8020（内部）+ HTTP 8001 + HTTPS 8443
 - 景区管理后台：`https://<服务器IP>:8444/admin`（独立端口；默认账号 `admin`，默认密码 `123456abc`）
 
 LiveTalking 以 CPU/RAM 待机方式常驻；建立 WebRTC 会话时从物理 GPU 0–3 中选择利用率低且至少剩余 2GB 的卡，最后一个会话关闭 2 秒后将 Wav2Lip 权重移回 CPU。可用 `LIVETALKING_GPU_CANDIDATES`、`LIVETALKING_GPU_MIN_FREE_MB` 和 `LIVETALKING_GPU_OFFLOAD_DELAY_SECONDS` 调整；后台日志位于
-`deploy/livetalking/service.log`、`deploy/rag.log`、`deploy/local-llm.log` 和
+`deploy/livetalking/service.log`、`deploy/rag.log`、`deploy/local-llm.log`、`deploy/local-llm-lite.log` 和
 `deploy/api.log`；RAG 自动恢复记录位于 `deploy/rag-watchdog.log`。
 
-## 云端 / 本地问答双路径
+## 云端 / 轻量本地 / 完整本地问答三路径
 
 - 网页默认选择 `GLM API`，不会加载本地 7B 权重。
-- 选择 `本地 Qwen2-7B` 后，RAG 使用 `/home/huggingface/Qwen2-7B-Instruct`；冷加载实测约 15–60 秒，热请求生成很快。
-- `transformers serve` 在本机 `8021` 提供 OpenAI 兼容接口，本地路径空闲 120 秒后会停止该进程并释放显存；下次请求自动重启。
-- 手动启动或停止：`bash deploy/start_local_llm.sh`、`bash deploy/stop_local_llm.sh`。
-- 本机实测服务空载时 GPU 2 保持 `781MiB`，模型加载后约 `15.7GiB`。本地路径适合离线或 API 故障备份；要求稳定 4–5 秒首答时优先使用云端路径。
+- 选择 `轻量本地 Qwen3-1.7B` 后使用 `/home/datasets/EMO_GEN/EMO_GEN_model/Qwen/Qwen3-1.7B`，服务端口为 `8022`；实测加载后约占 5.6 GiB，默认要求候选 GPU 至少有 6 GiB 空闲显存。
+- 选择 `本地 Qwen2-7B` 后，RAG 使用纯文本模型 `/home/huggingface/Qwen2-7B-Instruct`；冷加载实测约 15–60 秒，热请求生成很快。识景、语音和情绪分析仍由各自的多模态模型负责。
+- 两个 `transformers serve` 分别在本机 `8021`、`8022` 提供 OpenAI 兼容接口；两条本地路径均在空闲 120 秒后停止独立进程并释放显存。
+- 完整模型手动启停：`bash deploy/start_local_llm.sh`、`bash deploy/stop_local_llm.sh`；轻量模型手动启停：`bash deploy/start_local_lite_llm.sh`、`bash deploy/stop_local_lite_llm.sh`。
+- 本地服务默认在首次使用时扫描物理 GPU 0–3，要求至少 18GB 空闲显存，并优先选择剩余显存最多、利用率更低的卡；可通过 `LOCAL_LLM_GPU_CANDIDATES`、`LOCAL_LLM_GPU_MIN_FREE_MB` 调整，或用 `LOCAL_LLM_GPU` 显式覆盖。Qwen2-7B 加载后约占 `15.7GiB`。本地路径适合离线或 API 故障备份；要求稳定 4–5 秒首答时优先使用云端路径。
+- 轻量路径用对应的 `LOCAL_LITE_LLM_GPU_*` 变量独立选卡。没有满足门槛的 GPU 或发生真实 CUDA OOM 时，接口和游客页面会明确显示所需显存、失败模型及切换建议，不会返回假回答。
 
-`POST /v1/chat` 的 `model_route` 可设为 `cloud` 或 `local`；语音识别、语音合成和数字人口型链路不随该选项改变。
+`POST /v1/chat` 的 `model_route` 可设为 `cloud`、`local_lite` 或 `local`；语音识别、语音合成和数字人口型链路不随该选项改变。
 
-两种生成路径之前都使用同一套本地 BGE-M3 + FAISS 检索。`stream=true` 时接口按
+三种生成路径之前都使用同一套本地 BGE-M3 + FAISS 检索。`stream=true` 时接口按
 `meta`（会话与引用）→ `delta`（增量文本）→ `done`（耗时）的顺序返回 SSE。首次
 请求可不传 `session_id`，服务会创建并返回；后续请求回传它即可进行多轮追问。
 会话默认空闲 1 小时过期、最多保留最近 6 轮，RAG 服务重启后清空。详细协议见
