@@ -42,7 +42,7 @@ import registry
 import torch.multiprocessing as mp
 from dataclasses import dataclass, field
 
-from av import AudioFrame, VideoFrame
+from av import AudioFrame, AudioResampler, VideoFrame
 from fractions import Fraction
 
 from utils.logger import logger
@@ -84,6 +84,11 @@ class BaseAvatar:
         self.batch_size = opt.batch_size
         self.res_frame_queue = Queue(self.batch_size*2)
         self.render_event = Event()
+        self._pcm_resampler = None
+        self._pcm_input_rate = None
+        self._pcm_pending = np.empty(0, dtype=np.float32)
+        self._pcm_chunks_sent = 0
+        self._pcm_fade_applied = False
 
         _tts_modules = {
             'edgetts': 'tts.edge',
@@ -163,6 +168,100 @@ class BaseAvatar:
             eventpoint.update(**datainfo)
             self.put_audio_frame(audio_chunk, eventpoint)
 
+    def put_audio_pcm16(
+        self,
+        pcm: bytes,
+        sample_rate: int,
+        final: bool = False,
+        datainfo: dict | None = None,
+    ):
+        if len(pcm) % 2:
+            raise ValueError("PCM16 audio must contain complete samples")
+        if not 8_000 <= sample_rate <= 96_000:
+            raise ValueError(f"unsupported PCM sample rate: {sample_rate}")
+
+        if self._pcm_resampler is None:
+            self._pcm_resampler = AudioResampler(
+                format="flt",
+                layout="mono",
+                rate=self.sample_rate,
+            )
+            self._pcm_input_rate = sample_rate
+            self._pcm_pending = np.empty(0, dtype=np.float32)
+            self._pcm_chunks_sent = 0
+            self._pcm_fade_applied = False
+        elif sample_rate != self._pcm_input_rate:
+            raise ValueError(
+                f"PCM sample rate changed from {self._pcm_input_rate} to {sample_rate}"
+            )
+
+        output_frames = []
+        if pcm:
+            samples = np.frombuffer(pcm, dtype="<i2").reshape(1, -1)
+            frame = AudioFrame.from_ndarray(samples, format="s16", layout="mono")
+            frame.sample_rate = sample_rate
+            output_frames.extend(self._pcm_resampler.resample(frame))
+        if final:
+            output_frames.extend(self._pcm_resampler.resample(None))
+
+        for frame in output_frames:
+            samples = frame.to_ndarray().reshape(-1).astype(np.float32, copy=False)
+            if samples.size:
+                self._pcm_pending = np.concatenate((self._pcm_pending, samples))
+
+        fade_samples = self.sample_rate // 200
+        if not self._pcm_fade_applied and self._pcm_pending.size:
+            fade_count = min(fade_samples, self._pcm_pending.size)
+            self._pcm_pending[:fade_count] *= np.linspace(
+                0.0,
+                1.0,
+                fade_count,
+                dtype=np.float32,
+            )
+            self._pcm_fade_applied = True
+
+        if final and self._pcm_pending.size:
+            fade_count = min(fade_samples, self._pcm_pending.size)
+            self._pcm_pending[-fade_count:] *= np.linspace(
+                1.0,
+                0.0,
+                fade_count,
+                dtype=np.float32,
+            )
+
+        reserve = 0 if final else fade_samples
+        available_chunks = max(
+            0,
+            (self._pcm_pending.size - reserve) // self.chunk,
+        )
+        if final and self._pcm_pending.size % self.chunk:
+            available_chunks += 1
+
+        for chunk_index in range(int(available_chunks)):
+            audio_chunk = self._pcm_pending[: self.chunk]
+            self._pcm_pending = self._pcm_pending[self.chunk :]
+            if audio_chunk.size < self.chunk:
+                audio_chunk = np.pad(audio_chunk, (0, self.chunk - audio_chunk.size))
+            eventpoint = {}
+            if self._pcm_chunks_sent == 0:
+                eventpoint["status"] = "start"
+            if final and chunk_index == available_chunks - 1:
+                eventpoint["status"] = "end"
+            if datainfo:
+                eventpoint.update(**datainfo)
+            self.put_audio_frame(audio_chunk.astype(np.float32, copy=False), eventpoint)
+            self._pcm_chunks_sent += 1
+
+        if final:
+            self._reset_pcm_stream()
+
+    def _reset_pcm_stream(self):
+        self._pcm_resampler = None
+        self._pcm_input_rate = None
+        self._pcm_pending = np.empty(0, dtype=np.float32)
+        self._pcm_chunks_sent = 0
+        self._pcm_fade_applied = False
+
     def put_audio_filepath(self, filepath, datainfo:dict={}): 
         stream = self.__create_bytes_stream(filepath)
         streamlen = stream.shape[0]
@@ -200,6 +299,7 @@ class BaseAvatar:
             self.tts.flush_talk()
         if hasattr(self, 'asr') and hasattr(self.asr, 'flush_talk'):
             self.asr.flush_talk()
+        self._reset_pcm_stream()
         self.custom_audiotype = 0  
 
     # def flush(self):
@@ -504,4 +604,3 @@ class BaseAvatar:
 
         process_quit_event.set()
         process_thread.join()
-

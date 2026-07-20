@@ -404,9 +404,13 @@
         <div class="card"><div class="card-head"><h2>近 7 日服务趋势</h2><span class="muted">游客 / 天</span></div><div class="bars" id="serviceBars"></div></div>
         <div class="card"><h2>游客情感趋势</h2><div class="sentiment"><div class="donut" id="donut"></div><div class="legend" id="sentimentLegend"></div></div></div>
       </div>
+      <div class="card">
+        <div class="card-head"><h2>近 7 日实时满意度趋势</h2><span class="muted" id="satisfactionTrendNote">仅游客端主动评分</span></div>
+        <div class="monthly-chart" id="satisfactionTrendChart"></div>
+      </div>
       <div class="grid">
         <div class="card"><h2>热门咨询主题</h2><div id="hotTopics"></div></div>
-        <div class="card"><h2>智能服务建议</h2><div id="suggestions"></div></div>
+        <div class="card"><h2>智能服务建议</h2><div class="muted" id="suggestionQuality"></div><div id="suggestions"></div></div>
       </div>
     </section>
 
@@ -416,6 +420,33 @@
           <div class="upload"><input id="kbFile" type="file" accept=".docx,.txt,.md" /><button class="btn primary" id="uploadKb">上传并构建</button></div>
         </div>
         <table><thead><tr><th>文档</th><th>来源</th><th>大小</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="documents"></tbody></table>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <div class="toolbar"><div><h2 style="margin-bottom:3px">识景参考图库</h2><span class="muted" id="visionGalleryStatus">上传经授权的景点截图，用于二次视觉复核；不会自动抓取第三方 VR 素材。</span></div></div>
+        <div class="metrics" style="margin-top:16px">
+          <div class="metric"><div class="label">参考图总数</div><div class="value" id="visionTotalCount">—</div></div>
+          <div class="metric"><div class="label">覆盖景点</div><div class="value" id="visionCoverageRate">—</div></div>
+          <div class="metric"><div class="label">质量充分</div><div class="value" id="visionAdequateCount">—</div></div>
+          <div class="metric"><div class="label">需补充</div><div class="value" id="visionInadequateCount">—</div></div>
+        </div>
+        <div class="form-grid" style="margin-top:18px">
+          <label>对应子景点<select id="visionAttraction"></select></label>
+          <label>参考图片<input id="visionReferenceFile" type="file" accept="image/jpeg,image/png,image/webp" /></label>
+          <label>来源链接（可选）<input id="visionReferenceSource" placeholder="例如：720 云对应场景链接" maxlength="500" /></label>
+          <label>画面说明（可选）<input id="visionReferenceNote" placeholder="如：大佛正面、晴天、入口角度" maxlength="300" /></label>
+        </div>
+        <button class="btn primary" style="margin-top:14px" id="uploadVisionReference">上传参考图</button>
+        <div style="overflow:auto;margin-top:16px"><table><thead><tr><th>景点</th><th>来源</th><th>画面说明</th><th>尺寸</th><th>操作</th></tr></thead><tbody id="visionReferences"></tbody></table></div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="card-head"><div><h2>识景质量评估</h2><div class="muted">近期游客纠正视觉识别的案例，用于模型优化与参考图补充规划</div></div><button class="btn" id="refreshVisionCorrections">刷新纠错数据</button></div>
+        <div class="metrics">
+          <div class="metric"><div class="label">总纠错数</div><div class="value" id="correctionTotalCount">—</div></div>
+          <div class="metric"><div class="label">遗漏景点</div><div class="value" id="correctionMissedCount">—</div></div>
+          <div class="metric"><div class="label">混淆识别</div><div class="value" id="correctionConfusedCount">—</div></div>
+        </div>
+        <div style="overflow:auto;margin-top:16px"><table><thead><tr><th>时间</th><th>模型候选</th><th>游客确认</th><th>图片哈希</th></tr></thead><tbody id="visionCorrections"></tbody></table></div>
       </div>
     </section>
 
@@ -449,7 +480,7 @@
         <div class="card-head"><div><h2>游客对话多模态情绪</h2><div class="muted">来自游客与数字人的文字/授权语音对话</div></div><span class="tag" id="emotionModelStatus">检测中</span></div>
         <div class="muted" id="emotionStatusDetail">正在检查 emotion_v5_stage2 运行环境</div>
         <div class="report-subgrid">
-          <section class="report-subpanel"><h3>七分类分布</h3><div class="compact-meter-list" id="emotionDistribution"></div></section>
+          <section class="report-subpanel"><h3>七分类分布</h3><div class="muted" id="emotionDistributionNote" style="margin-bottom:8px;font-size:12px">仅统计授权语音且模型成功分析的样本（audio-text），不含纯文字对话</div><div class="compact-meter-list" id="emotionDistribution"></div></section>
           <section class="report-subpanel"><h3>任务与分析方式</h3><div class="status-list" id="emotionJobs"></div></section>
         </div>
         <h3 style="margin-top:22px">最近对话情绪事件</h3>
@@ -457,7 +488,7 @@
       </div>
       <div class="card">
         <h2>景区 / 子景点实时满意度</h2>
-        <div class="muted">只统计游客端主动提交的 1–5 分评价；暂无数据时不使用历史样本或模拟值填充</div>
+        <div class="muted">只统计游客端主动提交的 1–5 分评价</div>
         <div style="overflow:auto;margin-top:14px"><table><thead><tr><th>景区</th><th>景点</th><th>评价数</th><th>平均分</th><th>低分数</th></tr></thead><tbody id="attractionSatisfaction"></tbody></table></div>
       </div>
       <div class="card">
@@ -466,13 +497,14 @@
           <div class="metric"><div class="label">访问记录</div><div class="value" id="historicalRows">—</div></div>
           <div class="metric"><div class="label">游客数</div><div class="value" id="historicalTourists">—</div></div>
           <div class="metric"><div class="label">景点数</div><div class="value" id="historicalAttractions">—</div></div>
-          <div class="metric"><div class="label">平均满意度</div><div class="value" id="historicalAverage">—</div></div>
+          <div class="metric"><div class="label">景区平均满意度</div><div class="value" id="historicalAverage">—</div></div>
         </div>
+        <div class="muted" style="margin:10px 0 4px">满意度分布、月度趋势与平均满意度仅统计灵山 / 拈花湾景区相关样本；访问记录 / 游客数 / 景点数为公开数据集整体规模。</div>
         <div class="report-subgrid">
-          <section class="report-subpanel"><h3>满意度分布</h3><div class="satisfaction-list" id="historicalSatisfaction"></div></section>
-          <section class="report-subpanel sample-panel"><h3>赛题景区相关样本</h3><div class="sample-list" id="scenicSamples"></div></section>
+          <section class="report-subpanel"><h3>满意度分布 <span class="muted" style="font-weight:normal">（灵山 / 拈花湾）</span></h3><div class="satisfaction-list" id="historicalSatisfaction"></div></section>
+          <section class="report-subpanel sample-panel"><h3>灵山 / 拈花湾 景点明细</h3><div class="sample-list" id="scenicSamples"></div></section>
         </div>
-        <h3 style="margin-top:22px">月度趋势</h3>
+        <h3 style="margin-top:22px">月度趋势 <span class="muted" style="font-weight:normal;font-size:.85em">（灵山 / 拈花湾）</span></h3>
         <div class="chart-legend"><span class="chart-key"><i></i>访问记录</span><span class="chart-key"><i class="line"></i>平均满意度（/5）</span></div>
         <div class="monthly-chart" id="historicalMonthlyChart"></div>
         <details class="chart-details"><summary>查看月度数据明细</summary><div><table><thead><tr><th>月份</th><th>访问记录</th><th>平均满意度</th></tr></thead><tbody id="historicalMonthly"></tbody></table></div></details>
@@ -515,8 +547,14 @@
     const topics=data.hot_topics||[], topicMax=Math.max(1,...topics.map(x=>x.count));
     $("hotTopics").innerHTML=topics.map(x=>`<div class="topic"><span>${escapeHtml(x.name)}</span><div class="track"><div class="fill" style="width:${x.count/topicMax*100}%"></div></div><strong>${x.count}</strong></div>`).join("")||'<div class="empty">暂无咨询数据</div>';
     const suggestions=data.service_suggestions||[];
-    $("suggestions").innerHTML=suggestions.map(x=>`<div class="suggestion">${escapeHtml(x)}</div>`).join("");
-    $("reportSuggestions").innerHTML=suggestions.map((x,i)=>`<div class="suggestion"><strong>建议 ${i+1}</strong><br>${escapeHtml(x)}</div>`).join("");
+    const evidence=data.service_suggestion_evidence||[];
+    const quality=data.data_quality||{};
+    $("suggestionQuality").textContent=quality.satisfaction_trend_ready
+      ? `基于 ${quality.feedback_count||0} 条真实评分与 ${quality.emotion_completed_count||0} 条已完成情绪分析生成`
+      : `评分样本 ${quality.feedback_count||0}/${quality.minimum_feedback_for_trend||5}，满意度趋势暂不宜作运营结论`;
+    $("suggestions").innerHTML=suggestions.map((x,i)=>{const e=evidence[i]; const proof=e?.evidence?.length?`<small class="muted">依据：${escapeHtml(e.evidence.join(" · "))}</small>`:""; const range=e?.time_range?`<small class="muted">时间范围：${escapeHtml(e.time_range)}</small>`:""; return `<div class="suggestion"><strong>${escapeHtml(e?.title||`建议 ${i+1}`)}</strong><br>${escapeHtml(x)}<br>${proof}<br>${range}</div>`;}).join("");
+    $("reportSuggestions").innerHTML=suggestions.map((x,i)=>{const e=evidence[i]; const proof=e?.evidence?.length?`<small class="muted">依据：${escapeHtml(e.evidence.join(" · "))}</small>`:""; const range=e?.time_range?`<small class="muted">时间范围：${escapeHtml(e.time_range)}</small>`:""; return `<div class="suggestion"><strong>${escapeHtml(e?.title||`建议 ${i+1}`)}</strong><br>${escapeHtml(x)}<br>${proof}<br>${range}</div>`;}).join("");
+    renderSatisfactionTrend(data.satisfaction_trend||[], quality);
     $("recentQuestions").innerHTML=(data.recent_questions||[]).map((x,i)=>`<li><span class="tag">${String(i+1).padStart(2,"0")}</span>　${escapeHtml(x)}</li>`).join("")||'<li class="empty">暂无问答记录</li>';
     $("recentFeedback").innerHTML=(data.recent_feedback||[]).map(x=>`<li><strong>${"★".repeat(x.rating)}${"☆".repeat(5-x.rating)}</strong> · ${escapeHtml(x.attraction_name||x.scenic_area||"未标注景点")}<br>${escapeHtml(x.comment||"游客未填写文字评价")}<br><small class="muted">${shortDate(x.created_at)}</small></li>`).join("")||'<li class="empty">暂无满意度反馈</li>';
     const emotion=data.emotion_distribution||{}, emotionLabels={happy:"愉悦",neutral:"平静",surprise:"惊讶",sad:"悲伤",fear:"恐惧",angry:"愤怒",disgust:"厌恶"};
@@ -544,6 +582,28 @@
     const labels=rows.map((item,index)=>`<text x="${(left+step*(index+.5)).toFixed(1)}" y="${height-17}" text-anchor="middle" fill="#718078" font-size="10">${escapeHtml(String(item.month).slice(5))}</text>`).join("");
     target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="月度访问记录与平均满意度趋势"><text x="${left}" y="14" fill="#718078" font-size="10">访问记录</text><text x="${width-right}" y="14" text-anchor="end" fill="#9a742f" font-size="10">满意度 / 5</text>${grid}${bars}<path d="${line}" fill="none" stroke="#b68335" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labels}</svg>`;
   }
+  function renderSatisfactionTrend(rows, quality){
+    const target=$("satisfactionTrendChart");
+    const note=$("satisfactionTrendNote");
+    const ready=quality?.satisfaction_trend_ready;
+    const totalSamples=rows.reduce((sum,row)=>sum+(Number(row.count)||0),0);
+    const minForTrend=quality?.minimum_feedback_for_trend||5;
+    if(!rows.length||totalSamples===0){
+      note.textContent=`评分样本 0/${minForTrend}，样本不足，趋势暂不宜作运营结论`;
+      target.innerHTML='<div class="empty">暂无游客主动评分，趋势待样本充足后展示</div>';
+      return;
+    }
+    const width=760,height=220,left=42,right=44,top=28,bottom=42,plotW=width-left-right,plotH=height-top-bottom;
+    const step=plotW/rows.length;
+    const points=rows.map((row,index)=>{if(row.score==null)return null;const x=left+step*(index+.5),score=Math.max(0,Math.min(5,Number(row.score))),y=top+plotH-score/5*plotH;return {x,y,score,date:row.date,count:row.count};}).filter(Boolean);
+    const grid=[0,1,2,3,4,5].map(level=>{const y=top+plotH*(1-level/5);return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" stroke="#e7e4da" stroke-width="1"/><text x="${left-7}" y="${y+4}" text-anchor="end" fill="#7d8983" font-size="10">${level}</text>`;}).join("");
+    const line=points.map((point,index)=>`${index?"L":"M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const dots=points.map(point=>`<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.5" fill="#fffef9" stroke="#b68335" stroke-width="2"><title>${escapeHtml(point.date)}：${point.score.toFixed(2)} / 5（${point.count} 条）</title></circle>`).join("");
+    const labels=rows.map((row,index)=>`<text x="${(left+step*(index+.5)).toFixed(1)}" y="${height-17}" text-anchor="middle" fill="#718078" font-size="10">${escapeHtml(String(row.date).slice(5))}</text>`).join("");
+    const watermark=ready?'':`<text x="${width/2}" y="${height/2-6}" text-anchor="middle" fill="#c8a96a" font-size="26" font-weight="700" opacity=".32" transform="rotate(-8 ${width/2} ${height/2})">样本不足</text><text x="${width/2}" y="${height/2+22}" text-anchor="middle" fill="#9a742f" font-size="11" opacity=".7">评分样本 ${totalSamples}/${minForTrend}，趋势仅供参考</text>`;
+    note.textContent=`评分样本 ${totalSamples} 条${ready?"":"（样本不足，趋势仅供参考）"} · 近 7 天`;
+    target.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="近 7 日实时满意度趋势"><text x="${left}" y="14" fill="#718078" font-size="10">满意度 / 5</text>${grid}${watermark}<path d="${line}" fill="none" stroke="#b68335" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labels}</svg>`;
+  }
   function renderHistorical(data){
     if(!data.available){$("historicalScope").textContent=data.reason||"历史数据不可用";$("historicalDbStatus").textContent="未导入";return;}
     $("historicalScope").textContent=`${data.scope_note||""} · ${(data.date_range||[]).join(" 至 ")}`;
@@ -563,6 +623,10 @@
   async function loadHealth(){ try{const h=await api("/health"); $("healthText").textContent=`运行正常 · ${h.chunks} 个知识片段`; }catch(_){$("healthText").textContent="服务异常";} }
   async function loadDocuments(){ try{const data=await api("/v1/admin/kb/documents"); $("chunkCount").textContent=data.chunk_count; $("documents").innerHTML=data.documents.map(doc=>`<tr><td><strong>${escapeHtml(doc.name)}</strong></td><td><span class="tag ${doc.editable?"":"official"}">${doc.category}</span></td><td>${bytes(doc.size)}</td><td>${shortDate(doc.updated_at)}</td><td>${doc.editable?`<button class="btn danger" data-delete="${encodeURIComponent(doc.name)}">删除</button>`:"只读"}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无知识文档</td></tr>'; document.querySelectorAll("[data-delete]").forEach(btn=>btn.onclick=()=>deleteDocument(decodeURIComponent(btn.dataset.delete)));}catch(error){notify(error.message,true);} }
   async function deleteDocument(name){ if(!confirm(`确认删除管理员上传的「${name}」并重建知识库？`))return; try{await api(`/v1/admin/kb/documents/${encodeURIComponent(name)}`,{method:"DELETE"}); notify("文档已删除，知识库已重建"); await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);} }
+  async function loadVisionReferences(){try{const [gallery,catalog]=await Promise.all([api("/v1/admin/vision/references"),api("/v1/attractions")]);const areas=catalog.scenic_areas||catalog||[];const options=areas.flatMap(area=>(area.children||[]).filter(item=>!item.is_overall).map(item=>({...item,scenic_area:area.name})));const select=$("visionAttraction");if(!select.options.length)select.innerHTML=options.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.scenic_area)} · ${escapeHtml(item.name)}</option>`).join("");const count=gallery.gallery?.total||0;const cov=gallery.gallery?.coverage||{};const qual=gallery.gallery?.quality||{};$("visionGalleryStatus").textContent=`当前已配置 ${count} 张授权参考图；覆盖 ${cov.covered_count||0}/${cov.total_count||0} 个景点。建议每个子景点至少上传 5 张不同角度、天气或昼夜画面。`;$("visionTotalCount").textContent=count;$("visionCoverageRate").textContent=`${cov.covered_count||0}/${cov.total_count||0} (${cov.rate_percent||0}%)`;$("visionAdequateCount").textContent=qual.adequate_count||0;$("visionInadequateCount").textContent=qual.inadequate_count||0;$("visionReferences").innerHTML=(gallery.references||[]).map(item=>`<tr><td><strong>${escapeHtml(item.attraction_name||item.attraction_id)}</strong></td><td>${item.source_url?`<a href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">查看来源</a>`:"未标注"}</td><td>${escapeHtml(item.note||"—")}</td><td>${item.width||"—"} × ${item.height||"—"}</td><td><button class="btn danger" data-delete-vision="${encodeURIComponent(item.file)}">删除</button></td></tr>`).join("")||'<tr><td colspan="5" class="empty">暂无参考图。可从经授权的 720 云 VR 场景截取清晰画面后上传。</td></tr>';document.querySelectorAll("[data-delete-vision]").forEach(btn=>btn.onclick=async()=>{if(!confirm("确认删除此参考图？"))return;try{await api(`/v1/admin/vision/references/${btn.dataset.deleteVision}`,{method:"DELETE"});await loadVisionReferences();notify("参考图已删除");}catch(error){notify(error.message,true);}});}catch(error){$("visionGalleryStatus").textContent=error.message;}}
+  async function loadVisionCorrections(){try{const data=await api("/v1/admin/vision/corrections");$("correctionTotalCount").textContent=data.stats?.total_corrections||0;$("correctionMissedCount").textContent=data.stats?.missed_correct_count||0;$("correctionConfusedCount").textContent=data.stats?.confused_count||0;$("visionCorrections").innerHTML=(data.corrections||[]).map(x=>`<tr><td><small>${shortDate(x.timestamp)}</small></td><td>${(x.model_candidates||[]).map(c=>escapeHtml(c)).join("、")||"（无候选）"}</td><td><strong>${escapeHtml(x.user_confirmed)}</strong></td><td><code>${escapeHtml(x.image_sha256||"—")}</code></td></tr>`).join("")||'<tr><td colspan="4" class="empty">暂无纠错记录</td></tr>';}catch(error){$("correctionTotalCount").textContent="—";notify(`纠错数据加载失败：${error.message}`,false);}}
+  $("uploadVisionReference").onclick=async()=>{const file=$("visionReferenceFile").files[0];if(!file)return notify("请选择 JPG、PNG 或 WebP 景点参考图",true);const fd=new FormData();fd.append("file",file);fd.append("attraction_id",$("visionAttraction").value);fd.append("source_url",$("visionReferenceSource").value);fd.append("note",$("visionReferenceNote").value);try{await api("/v1/admin/vision/references",{method:"POST",body:fd});$("visionReferenceFile").value="";$("visionReferenceSource").value="";$("visionReferenceNote").value="";await loadVisionReferences();notify("参考图已入库，将在下一次识景时参与复核");}catch(error){notify(error.message,true);}};
+  $("refreshVisionCorrections").onclick=async()=>{await loadVisionCorrections();notify("纠错数据已刷新");};
   function selectAvatar(avatarId){
     $("avatarId").value=avatarId;
     document.querySelectorAll(".avatar-choice").forEach(button=>{const selected=button.dataset.avatar===avatarId;button.classList.toggle("selected",selected);button.setAttribute("aria-checked",String(selected));});
@@ -579,9 +643,9 @@
   $("uploadKb").onclick=async()=>{const file=$("kbFile").files[0]; if(!file)return notify("请先选择 DOCX、TXT 或 Markdown 文件",true); const fd=new FormData();fd.append("file",file); $("uploadKb").disabled=true;$("uploadKb").textContent="构建中…";try{const data=await api("/v1/admin/kb/documents",{method:"POST",body:fd});notify(`知识库更新完成：${data.chunks} 个片段`);$("kbFile").value="";await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);}finally{$("uploadKb").disabled=false;$("uploadKb").textContent="上传并构建";}};
   $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value,costume:$("costume").value,expression:$("expression").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
   $("displayName").oninput=()=>$("avatarPreviewName").textContent=$("displayName").value||"灵山小向导";
-  $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
+  $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
   $("logout").onclick=async()=>{try{await fetch("/v1/admin/auth/logout",{method:"POST"});}finally{location.replace("/login");}};
-  Promise.all([loadStats(),loadHealth(),loadDocuments(),loadAvatar(),loadEmotionStatus(),loadHistorical()]);
+  Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]);
 </script>
 </body>
 </html>

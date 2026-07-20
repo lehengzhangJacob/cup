@@ -263,35 +263,75 @@ def build_overview(
         ).fetchall()
     ]
 
-    suggestions = []
+    suggestion_entries: list[dict[str, Any]] = []
+
+    def add_suggestion(
+        title: str, text: str, *, sample_count: int, severity: str, evidence: list[str]
+    ) -> None:
+        suggestion_entries.append(
+            {
+                "title": title,
+                "text": text,
+                "sample_count": sample_count,
+                "severity": severity,
+                "evidence": evidence,
+                "time_range": "近 7 天",
+            }
+        )
+
     if aspect_insights and aspect_insights[0]["negative"]:
         top = aspect_insights[0]
-        suggestions.append(
-            f"“{top['name']}”出现 {top['negative']} 条负向反馈"
-            f"（负向率 {top['negative_rate']}%），建议优先复核对应服务流程。"
+        add_suggestion(
+            "优先复核负向服务方面",
+            f"“{top['name']}”出现 {top['negative']} 条负向反馈（负向率 {top['negative_rate']}%），建议优先复核对应服务流程。",
+            sample_count=top["count"],
+            severity="high" if top["negative_rate"] >= 35 else "medium",
+            evidence=[f"负向 {top['negative']} 条", f"总样本 {top['count']} 条"],
         )
     if avg_response_ms is not None and avg_response_ms > 5000:
-        suggestions.append(
-            f"近期平均回答耗时 {avg_response_ms}ms，已超过 5 秒体验目标，"
-            "建议检查模型首句延迟和语音合成队列。"
+        add_suggestion(
+            "检查响应链路",
+            f"近期平均回答耗时 {avg_response_ms}ms，已超过 5 秒体验目标，建议检查模型首句延迟和语音合成队列。",
+            sample_count=len(latencies),
+            severity="high",
+            evidence=[f"平均耗时 {avg_response_ms}ms", f"延迟样本 {len(latencies)} 条"],
         )
     if avg_satisfaction is not None and avg_satisfaction < 3.5:
-        suggestions.append(
-            f"累计明确满意度为 {avg_satisfaction:.2f}/5，建议回看低分会话及证据文本。"
+        add_suggestion(
+            "回看低分会话",
+            f"累计明确满意度为 {avg_satisfaction:.2f}/5，建议回看低分会话及证据文本。",
+            sample_count=int(feedback_count or 0),
+            severity="medium",
+            evidence=[f"评分样本 {int(feedback_count or 0)} 条"],
         )
-    route_topic = next(
-        (item for item in hot_topics if item["name"] == "路线与定位"),
-        None,
-    )
+    route_topic = next((item for item in hot_topics if item["name"] == "路线与定位"), None)
     if route_topic and route_topic["count"]:
-        suggestions.append(
-            f"最近 {route_topic['count']} 次咨询涉及路线或定位，"
-            "可在入口强化分众路线和二维码定位提示。"
+        add_suggestion(
+            "强化定位引导",
+            f"最近 {route_topic['count']} 次咨询涉及路线或定位，可在入口强化分众路线和二维码定位提示。",
+            sample_count=route_topic["count"],
+            severity="low",
+            evidence=[f"路线/定位咨询 {route_topic['count']} 次"],
         )
-    if not suggestions:
-        suggestions.append(
-            "当前未发现集中负面问题；建议继续收集景点明确评分和游客对话情绪信号。"
+    if not suggestion_entries:
+        add_suggestion(
+            "持续采集有效反馈",
+            "当前未发现集中负面问题；建议继续收集景点明确评分和游客对话情绪信号。",
+            sample_count=int(feedback_count or 0),
+            severity="low",
+            evidence=["暂无满足触发阈值的问题"],
         )
+    suggestions = [entry["text"] for entry in suggestion_entries]
+    completed_emotion_count = sum(
+        count for status, count in status_counts.items() if status == "completed"
+    )
+    data_quality = {
+        "feedback_count": int(feedback_count or 0),
+        "emotion_completed_count": int(completed_emotion_count),
+        "satisfaction_trend_ready": int(feedback_count or 0) >= 5,
+        "minimum_feedback_for_trend": 5,
+        "note": "实时指标只统计游客端真实对话、情绪和主动评分；赛题 XLSX 历史样本在历史分析页单独展示。",
+    }
 
     recent_events = []
     for row in emotion_rows[:20]:
@@ -359,5 +399,7 @@ def build_overview(
         ],
         "recent_emotion_events": recent_events,
         "service_suggestions": suggestions,
+        "service_suggestion_evidence": suggestion_entries,
+        "data_quality": data_quality,
         "routes": routes,
     }

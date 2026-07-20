@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IDENTITY_FILE="${HUAWEI_SSH_IDENTITY:-${HOME}/.ssh/cup_huawei_ed25519}"
 LOCK_FILE="${SCRIPT_DIR}/huawei-tunnel.lock"
 
+unset ALL_PROXY all_proxy HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+
 exec 9>"${LOCK_FILE}"
 if ! flock -n 9; then
   exit 0

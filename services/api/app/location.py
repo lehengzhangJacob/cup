@@ -1,28 +1,166 @@
 from __future__ import annotations
 
 from math import asin, cos, radians, sin, sqrt
+import json
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from .attractions import attraction_catalog
+from .config import DATA_DIR
 
 
-# Demo anchors in WGS-84. Before production deployment these points should be
-# replaced by coordinates surveyed and approved by the scenic-area operator.
-SPOT_ANCHORS: dict[str, dict[str, Any]] = {
-    "LS-001": {"name": "灵山大照壁", "lat": 31.4148, "lng": 120.9975},
-    "LS-006": {"name": "九龙灌浴", "lat": 31.4172, "lng": 120.9984},
-    "LS-FO": {"name": "灵山大佛", "lat": 31.4221, "lng": 120.9986},
-    "LS-FG": {"name": "灵山梵宫", "lat": 31.4192, "lng": 121.0026},
-    "LS-WY": {"name": "五印坛城", "lat": 31.4203, "lng": 121.0046},
+# Public WGS-84 anchors used as an initial, non-surveyed location catalogue.
+# Every public anchor must still be confirmed by the visitor.  Exact source
+# URLs and expected landmark-scale accuracy are kept with each point so the
+# admin side can distinguish public evidence from field-surveyed coordinates.
+DEFAULT_SPOT_ANCHORS: dict[str, dict[str, Any]] = {
+    "LS-006": {
+        "name": "九龙灌浴", "lat": 31.42662, "lng": 120.09524,
+        "coordinate_system": "WGS-84", "survey_status": "public-map",
+        "source": "OpenStreetMap way 1359777214",
+        "source_url": "https://www.openstreetmap.org/way/1359777214",
+        "estimated_accuracy_m": 50,
+    },
+    "LS-010": {
+        "name": "祥符禅寺", "lat": 31.42986, "lng": 120.09309,
+        "coordinate_system": "WGS-84", "survey_status": "public-map",
+        "source": "OpenStreetMap way 303420710",
+        "source_url": "https://www.openstreetmap.org/way/303420710",
+        "estimated_accuracy_m": 60,
+    },
+    "LS-011": {
+        "name": "灵山大佛", "lat": 31.43205, "lng": 120.09151,
+        "coordinate_system": "WGS-84", "survey_status": "public-map",
+        "source": "OpenStreetMap node 606957371",
+        "source_url": "https://www.openstreetmap.org/node/606957371",
+        "estimated_accuracy_m": 35,
+    },
+    "LS-013": {
+        "name": "灵山梵宫", "lat": 31.43065, "lng": 120.09756,
+        "coordinate_system": "WGS-84", "survey_status": "public-map",
+        "source": "OpenStreetMap way 215163091",
+        "source_url": "https://www.openstreetmap.org/way/215163091",
+        "estimated_accuracy_m": 70,
+    },
+    "LS-014": {
+        "name": "五印坛城", "lat": 31.42664, "lng": 120.09813,
+        "coordinate_system": "WGS-84", "survey_status": "public-map",
+        "source": "OpenStreetMap way 303420711",
+        "source_url": "https://www.openstreetmap.org/way/303420711",
+        "estimated_accuracy_m": 60,
+    },
+    "NH-002": {
+        "name": "梵天花海", "lat": 31.416326, "lng": 120.068877,
+        "coordinate_system": "WGS-84", "survey_status": "public-geotagged-photo",
+        "source": "Wikimedia Commons geotagged photo 20200913 35",
+        "source_url": "https://commons.wikimedia.org/wiki/File:灵山小镇拈花湾20200913_35.jpg",
+        "estimated_accuracy_m": 100,
+    },
+    "NH-003": {
+        "name": "香月花街", "lat": 31.41948, "lng": 120.06911,
+        "coordinate_system": "WGS-84", "survey_status": "public-geotagged-photo",
+        "source": "Wikimedia Commons geotagged photo 20200912 04",
+        "source_url": "https://commons.wikimedia.org/wiki/File:灵山小镇拈花湾20200912_04.jpg",
+        "estimated_accuracy_m": 100,
+    },
+    "NH-005": {
+        "name": "五灯湖", "lat": 31.420621, "lng": 120.071103,
+        "coordinate_system": "WGS-84", "survey_status": "public-geotagged-photo",
+        "source": "Wikimedia Commons geotagged photo 20200912 03",
+        "source_url": "https://commons.wikimedia.org/wiki/File:灵山小镇拈花湾20200912_03.jpg",
+        "estimated_accuracy_m": 90,
+    },
+    "NH-006": {
+        "name": "鹿鸣谷", "lat": 31.428342, "lng": 120.074948,
+        "coordinate_system": "WGS-84", "survey_status": "public-geotagged-photo",
+        "source": "Wikimedia Commons geotagged photo 20200913 05",
+        "source_url": "https://commons.wikimedia.org/wiki/File:灵山小镇拈花湾20200913_05.jpg",
+        "estimated_accuracy_m": 120,
+    },
 }
 
-WIFI_ANCHORS: dict[str, dict[str, str]] = {
+DEFAULT_WIFI_ANCHORS: dict[str, dict[str, str]] = {
     "LS-WIFI-SOUTH": {"spot_id": "LS-001", "name": "南门/入口区"},
     "LS-WIFI-NINE": {"spot_id": "LS-006", "name": "九龙灌浴区域"},
-    "LS-WIFI-BUDDHA": {"spot_id": "LS-FO", "name": "灵山大佛区域"},
-    "LS-WIFI-BRAHMA": {"spot_id": "LS-FG", "name": "灵山梵宫区域"},
+    "LS-WIFI-BUDDHA": {"spot_id": "LS-011", "name": "灵山大佛区域"},
+    "LS-WIFI-BRAHMA": {"spot_id": "LS-013", "name": "灵山梵宫区域"},
 }
+
+LOCATION_CONFIG_PATH = DATA_DIR / "location_points.json"
+
+
+def _validate_location_config(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, str]]]:
+    raw_gps = payload.get("gps_anchors")
+    raw_wifi = payload.get("wifi_anchors")
+    if not isinstance(raw_gps, dict) or not isinstance(raw_wifi, dict):
+        raise ValueError("定位配置必须包含 gps_anchors 和 wifi_anchors 对象")
+    gps: dict[str, dict[str, Any]] = {}
+    for code, value in raw_gps.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"GPS 点位 {code} 格式无效")
+        name = str(value.get("name") or "").strip()
+        lat, lng = value.get("lat"), value.get("lng")
+        if not name or not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)) or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError(f"GPS 点位 {code} 缺少有效名称或经纬度")
+        anchor: dict[str, Any] = {"name": name, "lat": float(lat), "lng": float(lng)}
+        for field in (
+            "coordinate_system", "survey_status", "source", "source_url",
+            "estimated_accuracy_m",
+        ):
+            if value.get(field) not in (None, ""):
+                anchor[field] = value[field]
+        gps[str(code).strip().upper()] = anchor
+    wifi: dict[str, dict[str, str]] = {}
+    for code, value in raw_wifi.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"Wi-Fi 点位 {code} 格式无效")
+        spot_id = str(value.get("spot_id") or "").strip().upper()
+        name = str(value.get("name") or "").strip()
+        if not spot_id or not name:
+            raise ValueError(f"Wi-Fi 点位 {code} 缺少 spot_id 或名称")
+        wifi[str(code).strip().upper()] = {"spot_id": spot_id, "name": name}
+    if not gps:
+        raise ValueError("至少需要一个 GPS 锚点")
+    return gps, wifi
+
+
+def _load_location_config() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, str]], str]:
+    if not LOCATION_CONFIG_PATH.exists():
+        return dict(DEFAULT_SPOT_ANCHORS), dict(DEFAULT_WIFI_ANCHORS), "public-map"
+    try:
+        payload = json.loads(LOCATION_CONFIG_PATH.read_text(encoding="utf-8"))
+        gps, wifi = _validate_location_config(payload)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return dict(DEFAULT_SPOT_ANCHORS), dict(DEFAULT_WIFI_ANCHORS), "public-map-invalid-config"
+    return gps, wifi, "operator-configured"
+
+
+SPOT_ANCHORS, WIFI_ANCHORS, LOCATION_CONFIG_MODE = _load_location_config()
+
+
+def location_configuration() -> dict[str, Any]:
+    return {
+        "mode": LOCATION_CONFIG_MODE,
+        "gps_anchors": SPOT_ANCHORS,
+        "wifi_anchors": WIFI_ANCHORS,
+        "path": str(LOCATION_CONFIG_PATH),
+    }
+
+
+def update_location_configuration(payload: dict[str, Any]) -> dict[str, Any]:
+    global SPOT_ANCHORS, WIFI_ANCHORS, LOCATION_CONFIG_MODE
+    gps, wifi = _validate_location_config(payload)
+    LOCATION_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = LOCATION_CONFIG_PATH.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps({"gps_anchors": gps, "wifi_anchors": wifi}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(LOCATION_CONFIG_PATH)
+    SPOT_ANCHORS, WIFI_ANCHORS = gps, wifi
+    LOCATION_CONFIG_MODE = "operator-configured"
+    return location_configuration()
 
 
 def _qr_points() -> dict[str, dict[str, str]]:
@@ -30,7 +168,7 @@ def _qr_points() -> dict[str, dict[str, str]]:
 
     A QR code identifies the point where it is installed, so it remains useful
     in indoor/blocked-GPS areas even before that point has a surveyed GPS
-    coordinate.  Only five GPS anchors are currently configured below.
+    coordinate. Public GPS anchors cover only landmarks with traceable sources.
     """
     points: dict[str, dict[str, str]] = {}
     for area in attraction_catalog():
@@ -75,7 +213,13 @@ def location_options() -> dict[str, Any]:
             for code, node in WIFI_ANCHORS.items()
         ],
         "gps_anchor_count": len(SPOT_ANCHORS),
-        "gps_coverage_note": "GPS 仅对已标定锚点自动匹配；其他景点请使用景点二维码或手动确认。",
+        "location_config_mode": LOCATION_CONFIG_MODE,
+        "gps_coverage_note": (
+            "定位结果为候选，需要确认。当前 GPS 配置了"
+            f" {len(SPOT_ANCHORS)} 个带来源的公开 WGS-84 近似点位，非景区实测数据；"
+            "Wi-Fi 为手动选区域节点，未读真实 BSSID。其他景点请使用景点二维码或手动确认。"
+        ),
+        "wifi_note": "当前 Wi-Fi 为手动选择静态区域节点，未读取真实 BSSID；上线前需替换为实测 BSSID/蓝牙信标方案。",
         "strategy": "GPS → 摄像头扫描景点二维码 → 景区 Wi-Fi 区域 → 手动选择",
     }
 
@@ -169,6 +313,11 @@ def resolve_location(
         gps_meta = {
             "accuracy_m": round(accuracy) if accuracy is not None else None,
             "age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+            "anchor_survey_status": spot.get("survey_status", "operator-configured"),
+            "anchor_source": spot.get("source"),
+            "anchor_source_url": spot.get("source_url"),
+            "anchor_estimated_accuracy_m": spot.get("estimated_accuracy_m"),
+            "coordinate_system": spot.get("coordinate_system", "WGS-84"),
             **candidate,
         }
 
@@ -195,6 +344,17 @@ def resolve_location(
                 "reason": "outside_coverage",
                 "requires_confirmation": distance_m <= GPS_CANDIDATE_RADIUS_M,
                 "note": "坐标未落入已标定景点范围，请扫描附近二维码或手动选择。",
+            }
+
+        if spot.get("survey_status") != "field-verified":
+            return {
+                **result,
+                **gps_meta,
+                "resolved": True,
+                "confidence": "medium",
+                "source_label": "GPS + 公开资料近似点位",
+                "requires_confirmation": True,
+                "note": "手机 GPS 已取得，但景点锚点来自公开资料而非现场实测，请确认候选景点后再讲解。",
             }
 
         confidence = "high" if accuracy <= GPS_GOOD_ACCURACY_M and distance_m <= 160 else "medium"
@@ -261,7 +421,7 @@ def resolve_location(
             "spot_name": node["name"],
             "code": normalized_code,
             "requires_confirmation": True,
-            "note": "Wi-Fi 只能判断所在区域，导览前建议游客确认附近标志物。",
+            "note": "Wi-Fi 为手动选择静态区域节点（未读真实 BSSID），只能判断所在区域，导览前请确认附近标志物。",
         }
 
     if normalized_mode == "manual":

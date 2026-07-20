@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Lingshan vision recognition test set manifest",
+  "description": "Labelled test images for Top-K recall evaluation of the CLIP pipeline. Put images under data/lingshan/vision_eval/{attraction_id}/*.jpg and list them here.",
+  "type": "object",
+  "required": ["version", "items"],
+  "properties": {
+    "version": {"type": "integer", "const": 1},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "attraction_id"],
+        "properties": {
+          "file": {"type": "string", "description": "relative path, e.g. LS-011/sunny_front_01.jpg"},
+          "attraction_id": {"type": "string", "description": "ground-truth attraction id, e.g. LS-011"},
+          "attraction_name": {"type": "string"},
+          "weather": {"type": "string", "enum": ["sunny", "cloudy", "rainy", "foggy", "night", "unknown"]},
+          "angle": {"type": "string", "enum": ["front", "side", "back", "aerial", "closeup", "unknown"]},
+          "season": {"type": "string", "enum": ["spring", "summer", "autumn", "winter", "unknown"]},
+          "device": {"type": "string", "description": "capture device or 'unknown'"},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

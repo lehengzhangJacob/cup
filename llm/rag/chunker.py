@@ -91,6 +91,26 @@ _GUIDELINE_HEADER_RE = re.compile(r"[。，！？；]")
 _GENERIC_SUBLABELS = {"讲解重点：", "讲解重点:", "特色体验：", "特色体验:", "餐饮：", "餐饮:", "住宿：", "住宿:"}
 
 
+def _normalize_route_line(text):
+    for prefix in ("路线规划：", "路线规划:", "途经：", "途经:"):
+        if text.startswith(prefix) and "→" in text:
+            stops = [stop.strip() for stop in text[len(prefix):].split("→") if stop.strip()]
+            if len(stops) < 2:
+                return text
+            start = stops[0]
+            if start.endswith("入园"):
+                start = start[:-2]
+            destination = stops[-1]
+            waypoints = stops[1:-1]
+            if waypoints:
+                return (
+                    f"路线：从{start}出发，依次经过{'、'.join(waypoints)}，"
+                    f"最后到达{destination}。"
+                )
+            return f"路线：从{start}出发，最后到达{destination}。"
+    return text
+
+
 def _is_guideline_header(t):
     return len(t) <= 30 and not _GUIDELINE_HEADER_RE.search(t)
 
@@ -124,7 +144,7 @@ def chunk_guideline():
             })
 
     for para in doc.paragraphs:
-        t = para.text.strip()
+        t = _normalize_route_line(para.text.strip())
         if not t:
             continue
         if _is_guideline_header(t):

@@ -23,7 +23,21 @@ def test_whitelist_has_aliases():
     assert "大佛" in data["aliases"]
     assert data["aliases"]["大佛"] == "灵山大佛"
 
-from rag.chunker import chunk_guideline, chunk_dataset, chunk_xlsx
+from rag.chunker import (
+    _normalize_route_line,
+    chunk_dataset,
+    chunk_guideline,
+    chunk_xlsx,
+)
+
+
+def test_normalize_route_line_for_tts():
+    source = "路线规划：南门入园→九龙灌浴（观赏表演）→灵山大佛→出口"
+
+    assert _normalize_route_line(source) == (
+        "路线：从南门出发，依次经过九龙灌浴（观赏表演）、灵山大佛，"
+        "最后到达出口。"
+    )
 
 def test_chunk_guideline_returns_list():
     chunks = chunk_guideline()

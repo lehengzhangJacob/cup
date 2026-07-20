@@ -107,6 +107,27 @@ async def humanaudio(request):
         return json_error(str(e))
 
 
+async def humanpcm(request):
+    """Stream one continuous PCM16 semantic segment without chunk-edge fades."""
+    try:
+        sessionid = str(request.query.get("sessionid", ""))
+        sample_rate = int(request.query.get("sample_rate", "24000"))
+        final = str(request.query.get("final", "false")).lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        pcm = await request.read()
+        avatar_session = get_session(request, sessionid)
+        if avatar_session is None:
+            return json_error("session not found")
+        avatar_session.put_audio_pcm16(pcm, sample_rate, final=final)
+        return json_ok(data={"bytes": len(pcm), "final": final})
+    except Exception as e:
+        logger.exception('humanpcm exception:')
+        return json_error(str(e))
+
+
 async def set_audiotype(request):
     """设置自定义状态（动作编排）"""
     try:
@@ -200,6 +221,7 @@ def setup_routes(app):
     app.router.add_get("/", lambda request: web.FileResponse("web/index.html"))
     app.router.add_post("/human", human)
     app.router.add_post("/humanaudio", humanaudio)
+    app.router.add_post("/humanpcm", humanpcm)
     app.router.add_post("/set_audiotype", set_audiotype)
     app.router.add_post("/record", record)
     app.router.add_post("/interrupt_talk", interrupt_talk)

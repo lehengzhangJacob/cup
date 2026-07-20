@@ -44,6 +44,28 @@ def _text_paragraphs(path: Path) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
+def _route_sentence(stops: list[str]) -> str:
+    cleaned = [stop.strip() for stop in stops if stop.strip()]
+    if len(cleaned) < 2:
+        return "、".join(cleaned)
+    start = cleaned[0]
+    if start.endswith("入园"):
+        start = start[:-2]
+    destination = cleaned[-1]
+    waypoints = cleaned[1:-1]
+    if not waypoints:
+        return f"从{start}出发，最后到达{destination}。"
+    return f"从{start}出发，依次经过{'、'.join(waypoints)}，最后到达{destination}。"
+
+
+def _normalize_route_line(text: str) -> str:
+    for prefix in ("路线规划：", "路线规划:", "途经：", "途经:"):
+        if text.startswith(prefix) and "→" in text:
+            stops = text[len(prefix):].split("→")
+            return f"路线：{_route_sentence(stops)}"
+    return text
+
+
 def _split_chunks(paras: list[str], source: str, max_len: int = 450) -> list[Chunk]:
     chunks: list[Chunk] = []
     buf: list[str] = []
@@ -72,6 +94,7 @@ def _split_chunks(paras: list[str], source: str, max_len: int = 450) -> list[Chu
         buf = []
 
     for p in paras:
+        p = _normalize_route_line(p)
         if len(p) < 40 and not p.endswith(("。", "！", "？", ".", ":", "：")):
             # likely a heading
             flush()
@@ -214,7 +237,7 @@ class KnowledgeBase:
                 f"{r['name']}（约{r['duration_hours']}小时）\n"
                 f"适合兴趣：{r['interest']}\n"
                 f"{r['summary']}\n"
-                f"途经：{' → '.join(r['stops'])}"
+                f"路线：{_route_sentence(r['stops'])}"
             )
             all_chunks.append(
                 Chunk(

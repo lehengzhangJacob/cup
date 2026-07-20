@@ -4,11 +4,18 @@ import re
 
 
 class SpeechSegmenter:
-    def __init__(self, clause_limit: int = 24, hard_limit: int = 120) -> None:
+    def __init__(
+        self,
+        first_clause_limit: int = 8,
+        clause_limit: int = 24,
+        hard_limit: int = 120,
+    ) -> None:
         self.pending = ""
+        self.first_clause_limit = first_clause_limit
         self.clause_limit = clause_limit
         self.hard_limit = hard_limit
         self.metadata_started = False
+        self.segments_emitted = 0
 
     def feed(self, text: str, *, flush: bool = False) -> list[str]:
         if not self.metadata_started:
@@ -27,19 +34,31 @@ class SpeechSegmenter:
             self.pending = self.pending[end:]
             if segment:
                 segments.append(segment)
+                self.segments_emitted += 1
         return segments
 
     def finish(self) -> list[str]:
         return self.feed("", flush=True)
 
     def _next_end(self, flush: bool) -> int:
+        candidate_ends: list[int] = []
         for match in re.finditer(r"[。！？!?；;\n]", self.pending):
             if len(self.pending[: match.end()].strip()) >= 4:
-                return match.end()
+                candidate_ends.append(match.end())
+                break
 
-        for match in re.finditer(r"[，,：:]", self.pending):
-            if len(self.pending[: match.start()].strip()) >= self.clause_limit:
-                return match.end()
+        clause_limit = (
+            self.first_clause_limit
+            if self.segments_emitted == 0
+            else self.clause_limit
+        )
+        for match in re.finditer(r"[，,]", self.pending):
+            if len(self.pending[: match.start()].strip()) >= clause_limit:
+                candidate_ends.append(match.end())
+                break
+
+        if candidate_ends:
+            return min(candidate_ends)
 
         # Do not split ordinary text at a fixed character count. A TTS request
         # needs the complete sentence to infer prosody and pronounce word

@@ -13,7 +13,6 @@ fi
 PYTHON="${CCC_PYTHON:-/home/gmn/.conda/envs/ccc/bin/python}"
 GPU="${LIVETALKING_GPU:-2}"
 CPU_STANDBY="${LIVETALKING_CPU_STANDBY:-true}"
-PROXY="${LIVETALKING_PROXY:-http://127.0.0.1:7890}"
 IDLE_SECONDS="${LIVETALKING_IDLE_SECONDS:-120}"
 READY_INTERVAL_SECONDS="${LIVETALKING_READY_INTERVAL_SECONDS:-0.2}"
 PID_FILE="$ROOT/deploy/livetalking/service.pid"
@@ -88,8 +87,7 @@ if [[ "$CPU_STANDBY" =~ ^(1|true|yes)$ ]]; then
 else
   export CUDA_VISIBLE_DEVICES="$GPU"
 fi
-export HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY"
-export http_proxy="$PROXY" https_proxy="$PROXY"
+unset ALL_PROXY all_proxy HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
 export NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com"
 export no_proxy="$NO_PROXY"
 

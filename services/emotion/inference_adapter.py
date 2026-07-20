@@ -179,7 +179,8 @@ def make_prompt(modal: str, text: str, context_turns: list[dict[str, str]]) -> s
             "Instruction:",
             "As an emotion recognition expert, analyze the emotion of the Current Turn's "
             "speaker. Your analysis MUST be based on:",
-            "1. The speaker's own textual, visual, and audio cues in the Current Turn.",
+            "1. The speaker's own textual and audio cues in the Current Turn (no facial "
+            "video is available; do not infer from visual/face cues).",
             "2. The historical context of the conversation provided.",
             "3. The speaker's identity and their interaction with others in the Context.",
             "Please output the results of emotion three classification and emotion seven "

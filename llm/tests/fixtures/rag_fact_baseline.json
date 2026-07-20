@@ -1,0 +1,197 @@
+{
+  "name": "lingshan_fact_baseline_v1",
+  "purpose": "smoke baseline only; add expert-reviewed cases before claiming competition accuracy",
+  "minimum_competition_cases": 80,
+  "cases": [
+    {
+      "id": "F01",
+      "question": "灵山大佛是用什么材料建造的？",
+      "must_match_any_groups": [
+        [
+          "青铜",
+          "铜"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F02",
+      "question": "灵山大佛有多高？",
+      "must_match_any_groups": [
+        [
+          "88"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F03",
+      "question": "九龙灌浴代表什么含义？",
+      "must_match_any_groups": [
+        [
+          "释迦牟尼",
+          "诞生"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F04",
+      "question": "灵山梵宫被称为什么？",
+      "must_match_any_groups": [
+        [
+          "卢浮宫"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F05",
+      "question": "五印坛城是什么风格的建筑？",
+      "must_match_any_groups": [
+        [
+          "藏传",
+          "藏式"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F06",
+      "question": "祥符禅寺有多少年历史？",
+      "must_match_any_groups": [
+        [
+          "千年",
+          "1008",
+          "宋"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F07",
+      "question": "亲子家庭游览路线怎么走？",
+      "must_match_any_groups": [
+        [
+          "九龙灌浴",
+          "百子戏弥勒",
+          "佛手"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F08",
+      "question": "历史文化爱好者推荐什么路线？",
+      "must_match_any_groups": [
+        [
+          "祥符禅寺",
+          "灵山大佛",
+          "梵宫"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F09",
+      "question": "景区最佳游览季节是什么时候？",
+      "must_match_any_groups": [
+        [
+          "春",
+          "秋"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F10",
+      "question": "九龙灌浴每天有几场表演？",
+      "must_match_any_groups": [
+        [
+          "4",
+          "5",
+          "场"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F11",
+      "question": "灵山精舍提供什么体验？",
+      "must_match_any_groups": [
+        [
+          "素斋",
+          "早课",
+          "禅"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F12",
+      "question": "菩提大道有什么特色？",
+      "must_match_any_groups": [
+        [
+          "太湖",
+          "菩提"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F13",
+      "question": "灵山梵宫的穹顶有什么？",
+      "must_match_any_groups": [
+        [
+          "天象",
+          "飞天",
+          "壁画",
+          "星空",
+          "星辰",
+          "苍穹",
+          "LED",
+          "日月"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F14",
+      "question": "如何抱佛脚？",
+      "must_match_any_groups": [
+        [
+          "灵山大佛",
+          "台阶",
+          "祈福",
+          "佛脚"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    },
+    {
+      "id": "F15",
+      "question": "曼飞龙塔是什么风格？",
+      "must_match_any_groups": [
+        [
+          "傣族"
+        ]
+      ],
+      "source": "赛题公开资料包",
+      "category": "fact_or_route"
+    }
+  ]
+}

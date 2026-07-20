@@ -3,16 +3,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-import io
 import json
 import re
 import secrets
 import sqlite3
 import subprocess
 import uuid
-import wave
+import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+
+log = logging.getLogger(__name__)
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import quote, urlparse
@@ -27,13 +28,18 @@ from pydantic import BaseModel, Field
 from .config import (
     ADMIN_PASSWORD,
     ADMIN_PORT,
+    CHAT_RETENTION_DAYS,
+    CLIP_TOP_K,
+    EMOTION_TRANSCRIPT_RETENTION_DAYS,
     ADMIN_SESSION_SECRET,
     ADMIN_SESSION_TTL_SECONDS,
     ADMIN_USERNAME,
+    ADMIN_ALLOWED_ORIGINS,
     CORS_ORIGINS,
     DATA_DIR,
     DOCS_DIR,
     EMOTION_KEEP_MEDIA,
+    EMOTION_TIMEOUT_SECONDS,
     LOG_DB,
     PUBLIC_ADMIN_URL,
     PUBLIC_APP_URL,
@@ -50,6 +56,7 @@ from .config import (
     TURN_USERNAME,
     ROOT,
     UPLOADS_DIR,
+    VISION_REFERENCES_DIR,
     XMOV_APP_ID,
     XMOV_APP_SECRET,
     XMOV_AUTH_HEADER,
@@ -66,11 +73,34 @@ from .avatar_reaction import avatar_reaction
 from .avatar_catalog import find_avatar_preview, list_avatar_ids
 from .emotion_analysis import analyze_text, emotion_analyzer
 from .kb import ROUTES
-from .location import location_options, resolve_location
+from .location import (
+    location_configuration,
+    location_options,
+    resolve_location,
+    update_location_configuration,
+)
 from .rag_client import RAGClientError, rag
 from .speech_segments import SpeechSegmenter
-from .tourism_analytics import ensure_tourism_schema, tourism_analytics
-from .vision_analysis import parse_vision_observation, vision_prompt
+from .tourism_analytics import compact_tourism_database, ensure_tourism_schema, tourism_analytics
+from .vision_analysis import (
+    decide_confidence,
+    demote_after_error,
+    demote_after_refutation,
+    merge_candidates,
+    parse_vision_observation,
+    vision_prompt,
+)
+from .vision_gallery import (
+    add_reference,
+    gallery_summary,
+    list_references,
+    list_vision_corrections,
+    record_vision_correction,
+    references_for,
+    remove_reference,
+)
+from . import vision_clip_client, vision_index, vision_quality
+from .image_processing import ImageValidationError, normalize_scenic_image
 from .zhipu import zhipu
 
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
@@ -146,6 +176,33 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=200)
 
 
+class VisionReferenceUpload(BaseModel):
+    attraction_id: str = Field(..., min_length=1, max_length=30)
+    source_url: str = Field("", max_length=500)
+    note: str = Field("", max_length=300)
+
+
+class LocationConfigurationRequest(BaseModel):
+    gps_anchors: dict[str, dict[str, Any]]
+    wifi_anchors: dict[str, dict[str, str]]
+
+
+class VisionConfirmRequest(BaseModel):
+    """游客确认识景结果并启动讲解的请求。"""
+    attraction_id: str = Field(..., min_length=1, max_length=30, description="确认的景点 ID")
+    session_id: str = Field(..., min_length=1, max_length=128, description="视觉识别会话 ID")
+    question: str = Field("请为我讲解这个景点", max_length=2000, description="后续讲解问题")
+    model_candidates: list[str] = Field(default_factory=list, description="首轮视觉模型的候选景点名")
+    image_sha256: str = Field("", max_length=100, description="用于纠错记录的图片 SHA256")
+
+
+class VisionCorrectionRequest(BaseModel):
+    """记录视觉识别的纠错案例，用于质量评估。"""
+    model_candidates: list[str] = Field(..., description="视觉模型给出的候选景点")
+    user_confirmed: str = Field(..., min_length=1, max_length=100, description="游客最终确认的景点")
+    image_sha256: str = Field("", max_length=100, description="对应的图片哈希值（前20位）")
+
+
 def _ensure_column(
     conn: sqlite3.Connection,
     table: str,
@@ -161,7 +218,9 @@ def _ensure_column(
 
 def _db() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(LOG_DB)
+    conn = sqlite3.connect(LOG_DB, timeout=15)
+    conn.execute("PRAGMA busy_timeout=15000")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_logs (
@@ -248,6 +307,8 @@ def _db() -> sqlite3.Connection:
         "CREATE INDEX IF NOT EXISTS idx_feedback_attraction_created "
         "ON feedback(attraction_id, created_at)"
     )
+    _ensure_column(conn, "emotion_events", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "emotion_events", "processing_started_at", "TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_emotion_events_created "
         "ON emotion_events(created_at)"
@@ -284,6 +345,13 @@ def _avatar_settings() -> dict[str, str]:
         "expression": "亲切自然",
         "updated_at": "",
     }
+
+
+def _guide_context(extra: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """Attach the admin-configured guide name to every RAG request."""
+    context = {"数字人称呼": _avatar_settings()["display_name"]}
+    context.update(extra or {})
+    return context
 
 
 def _available_avatars() -> list[str]:
@@ -425,8 +493,55 @@ async def _record_text_emotion(
     return event_id
 
 
+def _spoken_integer(value: int) -> str:
+    digits = "零一二三四五六七八九"
+    if value < 10:
+        return digits[value]
+    tens, ones = divmod(value, 10)
+    prefix = "十" if tens == 1 else f"{digits[tens]}十"
+    return prefix if ones == 0 else f"{prefix}{digits[ones]}"
+
+
+def _spoken_clock(hour: str, minute: str) -> str:
+    spoken_hour = _spoken_integer(int(hour))
+    minute_value = int(minute)
+    if minute_value == 0:
+        return f"{spoken_hour}点"
+    if minute_value == 30:
+        return f"{spoken_hour}点半"
+    if minute_value < 10:
+        spoken_minute = f"零{_spoken_integer(minute_value)}"
+    else:
+        spoken_minute = _spoken_integer(minute_value)
+    return f"{spoken_hour}点{spoken_minute}分"
+
+
+_CLOCK_PATTERN = re.compile(
+    r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)(?!\d)"
+)
+_CLOCK_RANGE_PATTERN = re.compile(
+    r"(?<!\d)([01]?\d|2[0-3])[:：]([0-5]\d)"
+    r"\s*(?:-|–|—|~|～|至)\s*"
+    r"([01]?\d|2[0-3])[:：]([0-5]\d)(?!\d)"
+)
+
+
+def _normalize_spoken_clocks(text: str) -> str:
+    text = _CLOCK_RANGE_PATTERN.sub(
+        lambda match: (
+            f"{_spoken_clock(match.group(1), match.group(2))}到"
+            f"{_spoken_clock(match.group(3), match.group(4))}"
+        ),
+        text,
+    )
+    return _CLOCK_PATTERN.sub(
+        lambda match: _spoken_clock(match.group(1), match.group(2)),
+        text,
+    )
+
+
 def _speech_text(text: str) -> str:
-    """Remove model metadata and make route separators natural for TTS."""
+    """Remove metadata and normalize symbols that Chinese TTS mispronounces."""
     spoken_lines: list[str] = []
     for line in text.strip().splitlines():
         stripped = line.strip()
@@ -434,41 +549,95 @@ def _speech_text(text: str) -> str:
             break
         spoken_lines.append(line)
     spoken = "\n".join(spoken_lines)
-    # Most Chinese voices pronounce U+2192 as "边". In route answers it is a
-    # navigation separator, so render it as a natural spoken transition.
+    spoken = _normalize_spoken_clocks(spoken)
+    # Route arrows are visual separators, not words. Render them as natural
+    # navigation transitions before sending text to any TTS provider.
     spoken = re.sub(r"\s*(?:→|⇒|⟶|➜|➡|--?>)\s*", "，接着前往", spoken)
+    spoken = re.sub(r"\s*(?:←|⇐|⬅)\s*", "，返回", spoken)
+    spoken = re.sub(r"\s*(?:↔|⇄|⇆)\s*", "，往返于", spoken)
     return spoken.lstrip("，、 \t\n").strip()
 
 
-def _pcm16_mono_wav(pcm: bytes, sample_rate: int) -> bytes:
-    """Wrap one continuous little-endian PCM16 stream in a WAV container."""
-    if not pcm:
-        raise ValueError("empty PCM audio")
-    if len(pcm) % 2:
-        raise ValueError("PCM16 audio must contain complete samples")
-    if not 8_000 <= sample_rate <= 96_000:
-        raise ValueError(f"unsupported PCM sample rate: {sample_rate}")
+def _purge_expired_visitor_data() -> dict[str, int]:
+    """Remove stale raw dialogue while retaining anonymised aggregates."""
+    now = datetime.now(timezone.utc)
+    chat_cutoff = (now - timedelta(days=CHAT_RETENTION_DAYS)).isoformat()
+    emotion_cutoff = (now - timedelta(days=EMOTION_TRANSCRIPT_RETENTION_DAYS)).isoformat()
+    conn = _db()
+    try:
+        chat_deleted = conn.execute(
+            "DELETE FROM chat_logs WHERE created_at < ?", (chat_cutoff,)
+        ).rowcount
+        # Text-only dialogue events carry no 7-class signal and accumulate one
+        # per turn, so delete their rows once they age out of retention instead
+        # of keeping them redacted. Voice (dialogue-voice) events are kept with
+        # redacted transcripts because their 7-class label feeds long-term
+        # aggregate emotion statistics.
+        text_events_deleted = conn.execute(
+            """DELETE FROM emotion_events
+               WHERE created_at < ?
+                 AND media_kind = 'text'
+                 AND source LIKE 'dialogue-%'""",
+            (emotion_cutoff,),
+        ).rowcount
+        transcript_redacted = conn.execute(
+            """UPDATE emotion_events SET transcript='[已按保留策略删除]'
+               WHERE created_at < ? AND transcript IS NOT NULL
+                 AND transcript != '[已按保留策略删除]'""",
+            (emotion_cutoff,),
+        ).rowcount
+        conn.commit()
+        return {
+            "chat_deleted": int(chat_deleted or 0),
+            "text_events_deleted": int(text_events_deleted or 0),
+            "transcript_redacted": int(transcript_redacted or 0),
+        }
+    finally:
+        conn.close()
 
-    wav_file = io.BytesIO()
-    with wave.open(wav_file, "wb") as output:
-        output.setnchannels(1)
-        output.setsampwidth(2)
-        output.setframerate(sample_rate)
-        output.writeframes(pcm)
-    return wav_file.getvalue()
+
+async def _resume_pending_emotion_jobs() -> int:
+    """Requeue interrupted audio jobs when their temporary media still exists."""
+    conn = _db()
+    rows = conn.execute(
+        """SELECT id, transcript, rating FROM emotion_events
+             WHERE source='dialogue-voice' AND status IN ('queued','processing')"""
+    ).fetchall()
+    conn.execute(
+        """UPDATE emotion_events SET status='queued', error=NULL
+             WHERE source='dialogue-voice' AND status='processing'"""
+    )
+    conn.commit()
+    conn.close()
+    resumed = 0
+    for job_id, transcript, rating in rows:
+        media_path = DATA_DIR / "emotion_media" / f"{job_id}.wav"
+        if not media_path.exists():
+            conn = _db()
+            conn.execute(
+                "UPDATE emotion_events SET status='failed', error='服务重启后原音频已不存在，无法恢复分析' WHERE id=?",
+                (job_id,),
+            )
+            conn.commit()
+            conn.close()
+            continue
+        asyncio.create_task(_process_emotion_job(str(job_id), media_path, str(transcript or ""), rating))
+        resumed += 1
+    return resumed
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_api_key()
     conn = _db()
-    conn.execute(
-        "UPDATE emotion_events SET status='failed', "
-        "error='服务重启，未完成的分析任务已终止' "
-        "WHERE status IN ('queued','processing')"
-    )
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.commit()
     conn.close()
+    await asyncio.to_thread(_purge_expired_visitor_data)
+    # A restart no longer discards queued audio analysis; jobs whose temporary
+    # audio survived are safely resumed, while missing media is explicit.
+    await _resume_pending_emotion_jobs()
     turn_config_error = cloudflare_turn_config_error()
     if turn_config_error:
         raise RuntimeError(turn_config_error)
@@ -476,7 +645,10 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("公网管理后台密码至少需要 12 个字符")
     if PUBLIC_ADMIN_URL and ADMIN_SESSION_SECRET and len(ADMIN_SESSION_SECRET) < 32:
         raise RuntimeError("ADMIN_SESSION_SECRET 至少需要 32 个字符")
-    yield
+    try:
+        yield
+    finally:
+        await zhipu.aclose()
 
 
 app = FastAPI(
@@ -514,12 +686,7 @@ def _admin_origin_allowed(request: Request) -> bool:
     origin = (request.headers.get("origin") or "").rstrip("/")
     if not origin:
         return True
-    if PUBLIC_ADMIN_URL:
-        return origin == PUBLIC_ADMIN_URL
-    hostname = request.url.hostname or "localhost"
-    if ":" in hostname and not hostname.startswith("["):
-        hostname = f"[{hostname}]"
-    return origin == f"https://{hostname}:{ADMIN_PORT}"
+    return origin in ADMIN_ALLOWED_ORIGINS
 
 
 @app.middleware("http")
@@ -539,7 +706,7 @@ async def separate_admin_boundary(request: Request, call_next):
         return await call_next(request)
 
     allowed = (
-        path in {"/", "/login", "/health", "/favicon.ico"}
+        path in {"/", "/login", "/health", "/favicon.ico", "/v1/attractions"}
         or admin_page
         or admin_api
     )
@@ -830,7 +997,8 @@ async def _stream_tts_to_livetalking(
     *,
     interrupt: bool,
     speed: float = 1.0,
-) -> None:
+    finalize: bool = True,
+) -> Optional[int]:
     if interrupt:
         await _livetalking_post(
             "/interrupt_talk",
@@ -839,11 +1007,12 @@ async def _stream_tts_to_livetalking(
 
     speech_text = _speech_text(text)
     if not speech_text:
-        return
+        return None
 
-    pcm_audio = bytearray()
     sample_rate: Optional[int] = None
     chunk_count = 0
+    sample_count = 0
+    first_chunk_ms: Optional[int] = None
     tts_started_at = asyncio.get_running_loop().time()
     async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
         async for event in zhipu.tts_stream(
@@ -872,35 +1041,64 @@ async def _stream_tts_to_livetalking(
             if not pcm_chunk:
                 continue
             chunk_count += 1
-            pcm_audio.extend(pcm_chunk)
-            if len(pcm_audio) > 32 * 1024 * 1024:
+            sample_count += len(pcm_chunk) // 2
+            if sample_count * 2 > 32 * 1024 * 1024:
                 raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
+            response = await client.post(
+                f"{LIVETALKING_URL}/humanpcm",
+                params={
+                    "sessionid": session_id,
+                    "sample_rate": sample_rate,
+                    "final": "false",
+                },
+                content=pcm_chunk,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict) and data.get("code") not in (None, 0):
+                raise RuntimeError(data.get("msg") or "LiveTalking PCM stream failed")
+            if first_chunk_ms is None:
+                first_chunk_ms = round(
+                    (asyncio.get_running_loop().time() - tts_started_at) * 1000
+                )
+                _mark_livetalking_used()
 
-        if not pcm_audio or sample_rate is None:
+        if not chunk_count or sample_rate is None:
             raise RuntimeError("GLM-TTS returned no PCM audio")
-
-        # Upload one complete semantic segment. LiveTalking resamples and fades
-        # every uploaded WAV independently, so forwarding each provider chunk as
-        # its own WAV creates artificial micro-pauses and can clip syllables at
-        # chunk boundaries.
-        wav_audio = _pcm16_mono_wav(bytes(pcm_audio), sample_rate)
-        response = await client.post(
-            f"{LIVETALKING_URL}/humanaudio",
-            data={"sessionid": session_id},
-            files={"file": ("speech.wav", wav_audio, "audio/wav")},
-        )
-        response.raise_for_status()
-        data = response.json()
-        if isinstance(data, dict) and data.get("code") not in (None, 0):
-            raise RuntimeError(data.get("msg") or "LiveTalking audio upload failed")
-        _mark_livetalking_used()
+        if finalize:
+            await _finish_livetalking_pcm_stream(session_id, sample_rate)
 
         print(
-            "[livetalking] queued semantic TTS audio: "
+            "[livetalking] streamed semantic TTS audio: "
             f"session={session_id} chunks={chunk_count} "
-            f"samples={len(pcm_audio) // 2} sample_rate={sample_rate} "
+            f"samples={sample_count} sample_rate={sample_rate} "
+            f"first_chunk_ms={first_chunk_ms} "
+            f"finalized={str(finalize).lower()} "
             f"total_ms={round((asyncio.get_running_loop().time() - tts_started_at) * 1000)}"
         )
+    return sample_rate
+
+
+async def _finish_livetalking_pcm_stream(
+    session_id: str,
+    sample_rate: int,
+) -> None:
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+        response = await client.post(
+            f"{LIVETALKING_URL}/humanpcm",
+            params={
+                "sessionid": session_id,
+                "sample_rate": sample_rate,
+                "final": "true",
+            },
+            content=b"",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+    response.raise_for_status()
+    data = response.json()
+    if isinstance(data, dict) and data.get("code") not in (None, 0):
+        raise RuntimeError(data.get("msg") or "LiveTalking PCM stream failed")
 
 
 _livetalking_speech_workers: dict[str, asyncio.Task[None]] = {}
@@ -927,16 +1125,30 @@ def _start_livetalking_speech_worker(
 
     async def run() -> None:
         first = True
+        answer_sample_rate: Optional[int] = None
         while True:
             segment = await queue.get()
             if segment is None:
+                if answer_sample_rate is not None:
+                    await _finish_livetalking_pcm_stream(
+                        session_id,
+                        answer_sample_rate,
+                    )
                 return
-            await _stream_tts_to_livetalking(
+            segment_sample_rate = await _stream_tts_to_livetalking(
                 session_id,
                 segment,
                 interrupt=first,
                 speed=speed,
+                finalize=False,
             )
+            if segment_sample_rate is not None:
+                if answer_sample_rate is None:
+                    answer_sample_rate = segment_sample_rate
+                elif segment_sample_rate != answer_sample_rate:
+                    raise RuntimeError(
+                        "GLM-TTS sample rate changed between semantic segments"
+                    )
             first = False
 
     worker = asyncio.create_task(run())
@@ -1140,6 +1352,53 @@ async def admin_kb_upload(file: UploadFile = File(...)):
     }
 
 
+@app.get("/v1/admin/vision/references")
+async def admin_vision_references():
+    return {"references": list_references(), "gallery": gallery_summary()}
+
+
+@app.post("/v1/admin/vision/references")
+async def admin_vision_reference_upload(
+    file: UploadFile = File(...),
+    attraction_id: str = Form(...),
+    source_url: str = Form(""),
+    note: str = Form(""),
+):
+    raw = await file.read()
+    try:
+        return add_reference(
+            attraction_id.strip(), raw, source_url=source_url, note=note
+        )
+    except (ImageValidationError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/v1/admin/vision/references/{file_name:path}")
+async def admin_vision_reference_delete(file_name: str):
+    if not remove_reference(file_name):
+        raise HTTPException(404, "参考图不存在或文件名无效")
+    return {"ok": True, "gallery": gallery_summary()}
+
+
+@app.get("/v1/admin/vision/index")
+async def admin_vision_index_status():
+    """Report CLIP vector index health (vectors / model / dimension)."""
+    return {
+        "index": vision_index.status(),
+        "clip_service": vision_clip_client.health(),
+        "config": {"mode": vision_clip_client.is_available()},
+    }
+
+
+@app.post("/v1/admin/vision/index/rebuild")
+async def admin_vision_index_rebuild(force: bool = False, attraction_id: str = ""):
+    """Rebuild the CLIP reference index from manifest.json."""
+    try:
+        return vision_index.build(force=force, attraction_id=attraction_id or None)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"索引重建失败：{exc}") from exc
+
+
 @app.delete("/v1/admin/kb/documents/{filename}")
 async def admin_kb_delete(filename: str):
     safe_name = Path(filename).name
@@ -1218,6 +1477,19 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
     return {"ok": True, "settings": _avatar_settings()}
 
 
+@app.get("/v1/admin/location/config")
+async def admin_location_config():
+    return location_configuration()
+
+
+@app.put("/v1/admin/location/config")
+async def admin_location_config_update(req: LocationConfigurationRequest):
+    try:
+        return {"ok": True, "config": update_location_configuration(req.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/v1/feedback")
 async def feedback(req: FeedbackRequest):
     attraction = attraction_by_id(req.attraction_id.strip())
@@ -1256,6 +1528,13 @@ async def feedback(req: FeedbackRequest):
     }
 
 
+@app.get("/v1/avatar")
+async def public_avatar():
+    """Return only the visitor-safe part of the active avatar configuration."""
+    settings = _avatar_settings()
+    return {"display_name": settings["display_name"]}
+
+
 @app.get("/v1/attractions")
 async def attractions():
     return {"scenic_areas": attraction_catalog(), "source": "dataset.docx"}
@@ -1290,6 +1569,7 @@ async def chat(req: ChatRequest):
                 session_id=session_id,
                 interest=req.interest,
                 spot_id=req.spot_id,
+                context=_guide_context(),
                 model_route=req.model_route,
             )
         except RAGClientError as exc:
@@ -1345,6 +1625,7 @@ async def chat(req: ChatRequest):
                 session_id=session_id,
                 interest=req.interest,
                 spot_id=req.spot_id,
+                context=_guide_context(),
                 model_route=req.model_route,
             ):
                 event_type = event.get("type")
@@ -1596,32 +1877,134 @@ async def asr(
         "emotion_event_id": event_id,
         "emotion_analysis": analysis_status,
         "audio_retained": bool(emotion_consent and EMOTION_KEEP_MEDIA),
+        "emotion_timeout_seconds": EMOTION_TIMEOUT_SECONDS if emotion_consent else 0,
     }
 
 
 @app.post("/v1/vision/guide")
-async def vision_guide(file: UploadFile = File(...), question: str = "这是灵山胜境的哪个景点？请结合景区知识讲解。"):
+async def vision_guide(
+    file: UploadFile = File(...),
+    question: str = "",
+    session_id: str = Form(""),
+    spot_id: str = Form(""),
+):
+    """Recognise a visitor photo via a multi-stage pipeline.
+
+    Stages: quality check → CLIP reference recall (Top-K) → VLM first pass →
+    prior-weighted merge → VLM reference verification (real refutation) →
+    config-driven confidence threshold → RAG explanation for the confirmed
+    candidate. Every stage degrades gracefully so an empty gallery or an
+    unavailable CLIP service never breaks recognition.
+    """
     raw = await file.read()
-    if len(raw) > 8 * 1024 * 1024:
-        raise HTTPException(400, "image too large")
-    b64 = base64.b64encode(raw).decode("ascii")
-    # first let vision describe, then ground with RAG
-    vision_text = await zhipu.vision_describe(
-        b64,
-        vision_prompt(),
-    )
-    observation = parse_vision_observation(vision_text)
-    candidate_names = "、".join(item["name"] for item in observation["candidates"]) or "未匹配到资料库景点"
     try:
-        result = await rag.chat(
-            question,
-            session_id=str(uuid.uuid4()),
-            context={
-                "视觉识别结果": observation["summary"],
-                "资料库候选景点": candidate_names,
-                "确认要求": "候选不确定时应提示游客确认，不得把候选说成确定事实。",
-            },
+        prepared = normalize_scenic_image(raw)
+    except ImageValidationError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    # Stage 0: image quality assessment (reject only severely degraded photos).
+    quality = vision_quality.assess_scenic_quality(prepared.data)
+    if quality.flag == "reject":
+        raise HTTPException(400, f"图片质量不足：{quality.advice}")
+
+    location = attraction_by_id(spot_id.strip()) if spot_id else None
+    location_id = location["id"] if location and not location["id"].endswith("-ALL") else None
+    image_b64 = base64.b64encode(prepared.data).decode("ascii")
+
+    # Stage 1: CLIP reference recall (empty gallery → [] → skip).
+    clip_hits: list[dict] = []
+    try:
+        if vision_clip_client.is_available():
+            qvec = vision_clip_client.encode_image(prepared.data)
+            if qvec is not None:
+                clip_hits = vision_index.search(qvec, CLIP_TOP_K)
+    except Exception as exc:  # noqa: BLE001 - CLIP is advisory only
+        log.warning("vision CLIP recall failed, degrading: %s", exc)
+
+    # Stage 2: VLM first pass. Narrow the allow-list when CLIP returned candidates.
+    try:
+        narrow = [h["name"] for h in clip_hits[:3]] if clip_hits else None
+        first_pass = await zhipu.vision_describe(
+            image_b64, vision_prompt(narrow_names=narrow), mime_type=prepared.mime_type
         )
+    except Exception as exc:
+        raise HTTPException(502, f"视觉模型调用失败：{exc}") from exc
+    vlm_obs = parse_vision_observation(first_pass, location_attraction_id=location_id)
+
+    # Stage 3: merge CLIP recall + VLM candidates with location prior + quality penalty.
+    merged = merge_candidates(
+        clip_hits, vlm_obs, location_id=location_id, quality_flag=quality.flag
+    )
+
+    # Stage 4: VLM reference verification — real refutation, not silent pass.
+    reference_items = references_for(
+        [item["id"] for item in merged[:3]] + ([location_id] if location_id else []),
+        per_attraction=2,
+    )
+    verification_used = 0
+    verification_verdict = "skipped"
+    if reference_items:
+        refs_for_model = [
+            {
+                "attraction_name": item["attraction_name"],
+                "data_url": "data:image/jpeg;base64," + base64.b64encode(item["data"]).decode("ascii"),
+            }
+            for item in reference_items
+        ]
+        try:
+            verified_raw = await zhipu.vision_compare(
+                image_b64, refs_for_model, mime_type=prepared.mime_type
+            )
+            verified = parse_vision_observation(verified_raw, location_attraction_id=location_id)
+            verification_used = len(reference_items)
+            if verified["candidates"]:
+                # Re-merge verification candidates on top of the prior merge so
+                # CLIP side-evidence is preserved rather than overwritten.
+                merged = merge_candidates(
+                    clip_hits, verified, location_id=location_id,
+                    quality_flag=quality.flag, prior_merge=merged,
+                )
+                verification_verdict = "confirmed"
+            else:
+                # Legally-empty verification = the VLM looked at the reference
+                # images and could not match any. That is a negative signal:
+                # demote and force confirmation instead of keeping the first pass.
+                merged = demote_after_refutation(merged)
+                verification_verdict = "refuted"
+        except Exception as exc:
+            # Verification errored (provider rejected multi-image, timeout, ...).
+            # Treat as uncertain, not refuted: apply a softer penalty and log it.
+            log.warning("vision_compare verification failed: %s", exc)
+            merged = demote_after_error(merged)
+            verification_verdict = "error"
+
+    # Stage 5: config-driven confidence threshold.
+    decision = decide_confidence(merged)
+    observation = {
+        "summary": vlm_obs["summary"],
+        "candidates": merged,
+        "confidence": decision["confidence"],
+        "requires_confirmation": decision["requires_confirmation"],
+    }
+
+    candidate_names = "、".join(item["name"] for item in observation["candidates"]) or "未匹配到资料库景点"
+    safe_session = (session_id or str(uuid.uuid4())).strip()[:128]
+    prompt = question.strip() or "这是哪个景点？请结合景区知识讲解。"
+    context = _guide_context({
+        "视觉识别结果": observation["summary"],
+        "资料库候选景点": candidate_names,
+        "确认要求": "候选不确定时应提示游客确认，不得把候选说成确定事实。",
+        "参考图复核": (
+            f"已使用 {verification_used} 张管理员参考图（{verification_verdict}）"
+            if verification_used else "尚无对应参考图，仅作首轮视觉候选"
+        ),
+    })
+    if location:
+        context["当前位置先验"] = f"{location['scenic_area']}·{location['name']}（仅作候选辅助）"
+    # RAG explains the confirmed candidate with grounded citations; it does not
+    # "calibrate" the recognition result.
+    try:
+        result = await rag.chat(prompt, session_id=safe_session, context=context)
     except RAGClientError as exc:
         raise HTTPException(503, str(exc)) from exc
     answer = result.get("answer", "")
@@ -1629,10 +2012,103 @@ async def vision_guide(file: UploadFile = File(...), question: str = "这是灵�
         names = candidate_names if observation["candidates"] else "暂未匹配到资料库景点"
         answer = f"我初步识别到：{names}。请您确认候选景点后，我再为您做准确讲解。\n{answer}"
     return {
-        "vision": vision_text,
+        "vision": first_pass,
         "observation": observation,
         "answer": answer,
         "citations": result.get("citations", []),
+        "session_id": safe_session,
+        "image": {
+            "width": prepared.width,
+            "sha256": prepared.sha256,
+            "height": prepared.height,
+            "normalized": True,
+            "quality": quality.to_dict(),
+        },
+        "stages": {
+            "clip_hits": [
+                {"attraction_id": h["attraction_id"], "name": h["name"], "sim": h["sim"]}
+                for h in clip_hits[:5]
+            ],
+            "verification": {"used": verification_used, "verdict": verification_verdict},
+            "quality": quality.flag,
+        },
+        "reference_verification": {
+            "used": verification_used,
+            "verdict": verification_verdict,
+            "gallery": gallery_summary(),
+            "message": "已用本地参考图二次复核" if verification_used else "尚未配置该候选的参考图",
+        },
+    }
+
+
+@app.post("/v1/vision/confirm")
+async def vision_confirm(req: VisionConfirmRequest):
+    """游客确认识景结果后，启动指定景点的讲解流程。"""
+    attraction = attraction_by_id(req.attraction_id)
+    if not attraction or attraction["id"].endswith("-ALL"):
+        raise HTTPException(400, "景点不存在或不支持")
+
+    safe_session = (req.session_id or str(uuid.uuid4())).strip()[:128]
+    prompt = req.question.strip() or f"请为我讲解{attraction['name']}。"
+    context = _guide_context({
+        "确认景点": f"{attraction['scenic_area']}·{attraction['name']}",
+        "确认来源": "游客确认（识景候选已验证）",
+    })
+
+    try:
+        result = await rag.chat(prompt, session_id=safe_session, context=context)
+    except RAGClientError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    answer = result.get("answer", "")
+
+    # 如果游客确认的景点与模型首轮候选不符，记录纠错样本
+    if attraction["name"] not in req.model_candidates:
+        record_vision_correction(
+            model_candidates=[{"name": c} for c in req.model_candidates],
+            user_confirmed_id=req.attraction_id,
+            image_sha256=req.image_sha256,
+        )
+
+    return {
+        "ok": True,
+        "attraction_id": req.attraction_id,
+        "attraction_name": attraction["name"],
+        "answer": answer,
+        "citations": result.get("citations", []),
+        "session_id": safe_session,
+    }
+
+
+@app.post("/v1/vision/correction")
+async def record_vision_error(req: VisionCorrectionRequest):
+    """记录视觉识别的纠错案例。"""
+    record_vision_correction(
+        model_candidates=[{"name": c} for c in req.model_candidates],
+        user_confirmed_id=req.user_confirmed,
+        image_sha256=req.image_sha256,
+    )
+    return {"ok": True, "message": "纠错样本已记录"}
+
+
+@app.get("/v1/admin/vision/corrections")
+async def admin_list_vision_corrections():
+    """管理员查看近期的纠错样本，用于质量评估。"""
+    corrections = list_vision_corrections(limit=200)
+
+    # 统计纠错类型
+    total = len(corrections)
+    missed = sum(1 for r in corrections if not r.get("model_candidates"))
+    confused = total - missed
+
+    return {
+        "corrections": corrections,
+        "stats": {
+            "total_corrections": total,
+            "missed_correct_count": missed,  # 模型没给出正确答案
+            "confused_count": confused,       # 模型给出候选但与实际不符
+        },
+        "gallery": gallery_summary(),
     }
 
 
@@ -1643,13 +2119,8 @@ async def _process_emotion_job(
     rating: Optional[int],
     context_turns: Optional[list[dict[str, str]]] = None,
 ) -> None:
-    conn = _db()
-    conn.execute(
-        "UPDATE emotion_events SET status='processing' WHERE id=?",
-        (job_id,),
-    )
-    conn.commit()
-    conn.close()
+    if not _claim_emotion_job(job_id):
+        return
     try:
         result = await emotion_analyzer.analyze(
             media_path,
@@ -1782,6 +2253,106 @@ async def visitor_emotion_reaction(job_id: str, session_id: str = ""):
     }
 
 
+# ---- 游客隐私：导出 / 删除本人数据 ----
+# 原始音频默认在分析后删除（EMOTION_KEEP_MEDIA=false），对话文本与情绪标签按
+# CHAT_RETENTION_DAYS / EMOTION_TRANSCRIPT_RETENTION_DAYS（默认 30 天）自动清理；
+# 聚合数据长期保留。这里提供按 session_id 的主动导出/删除，供隐私告知落地。
+
+@app.get("/v1/visitor/data/export")
+async def visitor_data_export(session_id: str):
+    """Export a visitor's own dialogue, emotion labels and feedback by session_id."""
+    safe_session = (session_id or "").strip()[:128]
+    if not safe_session:
+        raise HTTPException(400, "缺少会话标识")
+    conn = _db()
+    try:
+        chats = conn.execute(
+            "SELECT role, content, created_at FROM chat_logs WHERE session_id=? ORDER BY created_at",
+            (safe_session,),
+        ).fetchall()
+        emotions = conn.execute(
+            """SELECT id, source, emotion_label, sentiment, confidence, aspects, status, created_at
+                 FROM emotion_events WHERE session_id=? ORDER BY created_at""",
+            (safe_session,),
+        ).fetchall()
+        feedbacks = conn.execute(
+            """SELECT attraction_id, attraction_name, rating, comment, sentiment, created_at
+                 FROM feedback WHERE session_id=? ORDER BY created_at""",
+            (safe_session,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "session_id": safe_session,
+        "retention_days": {
+            "chat": CHAT_RETENTION_DAYS,
+            "emotion_transcript": EMOTION_TRANSCRIPT_RETENTION_DAYS,
+        },
+        "dialogue": [
+            {"role": r[0], "content": r[1], "created_at": r[2]} for r in chats
+        ],
+        "emotion_events": [
+            {
+                "id": r[0], "source": r[1], "emotion": r[2], "sentiment": r[3],
+                "confidence": r[4], "aspects": json.loads(r[5] or "[]"),
+                "status": r[6], "created_at": r[7],
+            }
+            for r in emotions
+        ],
+        "feedback": [
+            {
+                "attraction_id": r[0], "attraction_name": r[1], "rating": r[2],
+                "comment": r[3], "sentiment": r[4], "created_at": r[5],
+            }
+            for r in feedbacks
+        ],
+        "note": "原始音频默认在分析后删除；本接口导出对话文本、情绪标签与评分。聚合统计长期保留。",
+    }
+
+
+@app.delete("/v1/visitor/data")
+async def visitor_data_delete(session_id: str):
+    """Delete a visitor's raw dialogue/transcript/feedback by session_id.
+
+    Aggregated analytics (counts, averages) are derived and retained; only the
+    visitor-identifiable raw rows are removed.
+    """
+    safe_session = (session_id or "").strip()[:128]
+    if not safe_session:
+        raise HTTPException(400, "缺少会话标识")
+    conn = _db()
+    try:
+        chat_n = conn.execute(
+            "DELETE FROM chat_logs WHERE session_id=?", (safe_session,)
+        ).rowcount
+        emo_n = conn.execute(
+            """UPDATE emotion_events SET transcript='[应游客要求删除]'
+                 WHERE session_id=? AND transcript IS NOT NULL
+                   AND transcript != '[应游客要求删除]'""",
+            (safe_session,),
+        ).rowcount
+        emo_del = conn.execute(
+            "DELETE FROM emotion_events WHERE session_id=? AND source NOT LIKE 'dialogue-%'",
+            (safe_session,),
+        ).rowcount
+        fb_n = conn.execute(
+            "DELETE FROM feedback WHERE session_id=?", (safe_session,)
+        ).rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    return {
+        "session_id": safe_session,
+        "deleted": {
+            "dialogue_rows": int(chat_n or 0),
+            "emotion_transcripts_redacted": int(emo_n or 0),
+            "non_dialogue_emotion_rows": int(emo_del or 0),
+            "feedback_rows": int(fb_n or 0),
+        },
+        "note": "已删除该会话的可识别原始数据；聚合统计长期保留。",
+    }
+
+
 @app.get("/v1/admin/analytics/historical")
 async def admin_historical_analytics():
     return await asyncio.to_thread(tourism_analytics.load)
@@ -1790,6 +2361,11 @@ async def admin_historical_analytics():
 @app.post("/v1/admin/analytics/historical/rebuild")
 async def admin_historical_analytics_rebuild():
     return await asyncio.to_thread(tourism_analytics.load, True)
+
+
+@app.post("/v1/admin/analytics/historical/compact")
+async def admin_historical_analytics_compact():
+    return await asyncio.to_thread(compact_tourism_database)
 
 
 @app.get("/v1/admin/analytics/overview")

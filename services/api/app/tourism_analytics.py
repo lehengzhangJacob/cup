@@ -6,6 +6,7 @@ import re
 import sqlite3
 import threading
 import zipfile
+from hashlib import sha256
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from .config import DATA_DIR, LOG_DB, TOURISM_DATASET_PATH
 
 _XML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _CELL_RE = re.compile(r"([A-Z]+)")
-_CACHE_VERSION = 2
+_CACHE_VERSION = 4
 TOURISM_COLUMNS = (
     "tourist_id",
     "user_nickname",
@@ -36,6 +37,12 @@ TOURISM_COLUMNS = (
     "total_cost",
     "group_size",
     "satisfaction",
+)
+
+# The long attraction description is duplicated in many visitor rows. Store it
+# once in a document dimension; the original XLSX remains the source of record.
+TOURISM_VISIT_COLUMNS = tuple(
+    column for column in TOURISM_COLUMNS if column != "attraction_content"
 )
 
 
@@ -80,6 +87,18 @@ def ensure_tourism_schema(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tourism_attraction_contents (
+            source_file TEXT NOT NULL,
+            content_key TEXT NOT NULL,
+            attraction_name TEXT,
+            attraction_type TEXT,
+            attraction_content TEXT NOT NULL,
+            PRIMARY KEY (source_file, content_key)
+        )
+        """
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tourism_visits_attraction "
         "ON tourism_visits(attraction_name)"
     )
@@ -91,7 +110,21 @@ def ensure_tourism_schema(conn: sqlite3.Connection) -> None:
 
 def _database_signature(source: Path) -> str:
     stat = source.stat()
-    return f"{stat.st_mtime_ns}:{stat.st_size}"
+    return f"{stat.st_mtime_ns}:{stat.st_size}:storage-v{_CACHE_VERSION}"
+
+
+def _content_key(row: dict[str, Any]) -> str | None:
+    content = str(row.get("attraction_content") or "").strip()
+    if not content:
+        return None
+    stable = "\x1f".join(
+        (
+            str(row.get("attraction_name") or "").strip(),
+            str(row.get("attraction_type") or "").strip(),
+            content,
+        )
+    )
+    return sha256(stable.encode("utf-8")).hexdigest()
 
 
 def import_tourism_dataset(
@@ -122,19 +155,21 @@ def import_tourism_dataset(
             }
 
         now = datetime.now(timezone.utc).isoformat()
-        placeholders = ",".join("?" for _ in range(len(TOURISM_COLUMNS) + 3))
+        placeholders = ",".join("?" for _ in range(len(TOURISM_VISIT_COLUMNS) + 3))
         insert_sql = (
             "INSERT INTO tourism_visits "
-            "(source_file,dataset_row," + ",".join(TOURISM_COLUMNS) + ",imported_at) "
+            "(source_file,dataset_row," + ",".join(TOURISM_VISIT_COLUMNS) + ",imported_at) "
             f"VALUES ({placeholders})"
         )
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("DELETE FROM tourism_visits WHERE source_file=?", (source_file,))
+        conn.execute("DELETE FROM tourism_attraction_contents WHERE source_file=?", (source_file,))
         batch: list[tuple[Any, ...]] = []
+        content_rows: dict[str, tuple[str, str, str, str, str]] = {}
         count = 0
         for count, row in enumerate(iter_xlsx_rows(source), start=1):
             values: list[Any] = []
-            for column in TOURISM_COLUMNS:
+            for column in TOURISM_VISIT_COLUMNS:
                 value = row.get(column)
                 if column == "visit_date":
                     value = _excel_date(value)
@@ -142,11 +177,29 @@ def import_tourism_dataset(
                     value = None
                 values.append(value)
             batch.append((source_file, count, *values, now))
+            content_key = _content_key(row)
+            if content_key and content_key not in content_rows:
+                content_rows[content_key] = (
+                    source_file,
+                    content_key,
+                    str(row.get("attraction_name") or "").strip(),
+                    str(row.get("attraction_type") or "").strip(),
+                    str(row.get("attraction_content") or "").strip(),
+                )
             if len(batch) >= 1000:
                 conn.executemany(insert_sql, batch)
                 batch.clear()
         if batch:
             conn.executemany(insert_sql, batch)
+        if content_rows:
+            conn.executemany(
+                """
+                INSERT INTO tourism_attraction_contents
+                    (source_file, content_key, attraction_name, attraction_type, attraction_content)
+                VALUES (?,?,?,?,?)
+                """,
+                content_rows.values(),
+            )
         conn.execute(
             """
             INSERT INTO dataset_imports
@@ -188,6 +241,10 @@ def tourism_import_status(
             "SELECT row_count, imported_at, source_path FROM dataset_imports WHERE source_file=?",
             (source.name,),
         ).fetchone()
+        content_rows = conn.execute(
+            "SELECT COUNT(*) FROM tourism_attraction_contents WHERE source_file=?",
+            (source.name,),
+        ).fetchone()[0]
         conn.commit()
     finally:
         conn.close()
@@ -198,7 +255,23 @@ def tourism_import_status(
         "rows": int(row[0]),
         "imported_at": row[1],
         "source_path": row[2],
+        "storage_version": _CACHE_VERSION,
+        "attraction_content_rows": int(content_rows or 0),
     }
+
+
+def compact_tourism_database(db_path: Path = LOG_DB) -> dict[str, Any]:
+    """Reclaim pages after a storage-v3 import; run only in a maintenance window."""
+    if not db_path.exists():
+        return {"ok": True, "before_bytes": 0, "after_bytes": 0}
+    before = db_path.stat().st_size
+    conn = sqlite3.connect(db_path, timeout=60)
+    try:
+        conn.execute("PRAGMA busy_timeout=60000")
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+    return {"ok": True, "before_bytes": before, "after_bytes": db_path.stat().st_size}
 
 
 def _column_index(reference: str) -> int:
@@ -340,6 +413,15 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     spend_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     attraction_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     scenic_samples: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    # Satisfaction distribution, monthly trend and the headline average are
+    # scoped to the competition destinations (灵山 / 拈花湾) only. The public
+    # XLSX covers 100+ generic attractions whose mix would dilute the signal
+    # that actually matters for this project.
+    scenic_count = 0
+    scenic_satisfaction = Counter()
+    scenic_satisfaction_sum = 0.0
+    scenic_month_stats: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    scenic_dates: list[str] = []
     correlations = {
         "总消费": _Correlation(),
         "停留时长": _Correlation(),
@@ -382,9 +464,17 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         attraction_stats[attraction][1] += score
         # The public dataset includes records for both competition destinations.
         # Keep this scoped card separate from the overall 100+ scenic attractions.
-        if any(keyword in attraction for keyword in ("灵山", "拈花湾")):
+        is_scenic = any(keyword in attraction for keyword in ("灵山", "拈花湾"))
+        if is_scenic:
             scenic_samples[attraction][0] += 1
             scenic_samples[attraction][1] += score
+            scenic_count += 1
+            scenic_satisfaction[score] += 1
+            scenic_satisfaction_sum += score
+            if date:
+                scenic_dates.append(date)
+                scenic_month_stats[date[:7]][0] += 1
+                scenic_month_stats[date[:7]][1] += score
 
         correlations["总消费"].add(total_cost, score)
         correlations["停留时长"].add(float(row.get("stay_duration") or 0), score)
@@ -406,9 +496,9 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     satisfaction_rows = [
         {
             "score": score,
-            "count": satisfaction.get(score, 0),
-            "percentage": round(satisfaction.get(score, 0) / count * 100, 2)
-            if count
+            "count": scenic_satisfaction.get(score, 0),
+            "percentage": round(scenic_satisfaction.get(score, 0) / scenic_count * 100, 2)
+            if scenic_count
             else 0,
         }
         for score in range(1, 6)
@@ -421,12 +511,17 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return {
         "available": bool(count),
         "source": TOURISM_DATASET_PATH.name,
-        "scope_note": "2025 年公开样例历史数据，与实时游客交互数据分开展示",
+        "scope_note": "2025 年公开样例历史数据，与实时游客交互数据分开展示；满意度分布、月度趋势与平均满意度仅统计灵山 / 拈花湾景区相关样本",
         "rows": count,
         "tourists": len(tourists),
         "attractions": len(attractions),
         "date_range": [min(dates), max(dates)] if dates else [],
-        "avg_satisfaction": round(satisfaction_sum / count, 3) if count else None,
+        "scenic_count": scenic_count,
+        "scenic_date_range": [min(scenic_dates), max(scenic_dates)] if scenic_dates else [],
+        "avg_satisfaction": round(scenic_satisfaction_sum / scenic_count, 3)
+        if scenic_count
+        else None,
+        "overall_avg_satisfaction": round(satisfaction_sum / count, 3) if count else None,
         "satisfaction_distribution": satisfaction_rows,
         "monthly_trend": [
             {
@@ -434,7 +529,7 @@ def summarize_rows(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
                 "visits": item["count"],
                 "avg_satisfaction": item["avg_satisfaction"],
             }
-            for item in series(month_stats)
+            for item in series(scenic_month_stats)
         ],
         "attraction_types": sorted(
             series(type_stats),

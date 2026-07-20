@@ -320,10 +320,11 @@ def fuse_analysis(
 class EmotionAnalyzer:
     model_name = EMOTION_MODEL_PATH.name
     prompt = (
-        "As an emotion recognition expert, analyze the person's facial "
-        "expression and voice throughout this tourist interaction. Return "
-        "exactly one label from angry, disgust, fear, happy, neutral, sad, "
-        "surprise inside <answer></answer> tags."
+        "As an emotion recognition expert, analyze the visitor's voice and "
+        "spoken content (the ASR transcript) throughout this tourist "
+        "interaction. No facial video is provided. Return exactly one label "
+        "from angry, disgust, fear, happy, neutral, sad, surprise inside "
+        "<answer></answer> tags."
     )
 
     def __init__(self) -> None:

@@ -373,7 +373,7 @@
     .stage {
       position: relative;
       isolation: isolate;
-      min-height: 720px;
+      min-height: 480px;
       padding: 0;
       overflow: hidden;
       border: 1px solid rgba(31, 90, 79, .29);
@@ -541,7 +541,11 @@
     .quick-prompt:hover { color: #fffaf1; background: var(--pine); }
     .control-panel {
       min-width: 0;
+      min-height: 480px;
+      max-height: calc(100vh - 160px);
       padding: 24px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       border: 1px solid var(--line-soft);
       border-radius: 5px;
       background: var(--surface);
@@ -551,9 +555,14 @@
     .panel-heading { margin-bottom: 18px; }
     .panel-heading h2 { margin: 0; color: var(--ink); font-family: "STKaiti", "Kaiti SC", serif; font-size: 27px; letter-spacing: .08em; }
     .tool-tabs {
+      position: sticky;
+      top: -24px;
+      z-index: 4;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      margin-bottom: 16px;
+      margin: 0 -24px 16px;
+      padding: 0 24px;
+      background: rgb(255, 252, 245);
       border-bottom: 1px solid var(--line-soft);
     }
     .tool-tab {
@@ -665,7 +674,7 @@
       font-size: 16px;
       line-height: 1.8;
     }
-    #log:empty::before { content: "灵曦已在此等候。可以问景点故事、路线与游览建议。"; color: rgba(93, 107, 98, .67); }
+    #log:empty::before { content: "小向导已在此等候。可以问景点故事、路线与游览建议。"; color: rgba(93, 107, 98, .67); }
     .feedback {
       margin-top: 16px;
       padding: 15px 0 0;
@@ -694,6 +703,13 @@
     }
     .vision-result strong { color: var(--pine-deep); }
     .vision-candidates { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .vision-correction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-top: 9px; }
+    .vision-correction select { min-width: 0; min-height: 36px; }
+    .vision-correction button {
+      padding: 7px 10px; border: 1px solid rgba(38, 88, 75, .3);
+      background: var(--pine); color: #fff; cursor: pointer;
+    }
+    .vision-correction button:disabled { opacity: .48; cursor: not-allowed; }
     .vision-candidate {
       padding: 7px 9px;
       border: 1px solid rgba(38, 88, 75, .3);
@@ -719,15 +735,15 @@
       header, main { width: min(100% - 28px, 680px); }
       header { min-height: 84px; padding: 18px 0 15px; }
       main { grid-template-columns: 1fr; padding-top: 14px; }
-      .stage { min-height: 670px; }
-      .control-panel { padding: 20px; }
+      .stage { min-height: 540px; }
+      .control-panel { padding: 20px; max-height: none; overflow: visible; }
     }
     @media (max-width: 600px) {
       body::before { width: 310px; height: 310px; top: -150px; right: -160px; }
       header { align-items: flex-start; gap: 12px; }
       header h1 { font-size: 23px; line-height: 1.15; }
       header p { max-width: 205px; line-height: 1.5; }
-      .stage { min-height: 600px; }
+      .stage { min-height: 480px; }
       .stage-footer { grid-template-columns: 1fr; gap: 8px; }
       .quick-prompts { justify-content: flex-start; }
       .quick-prompt { padding: 5px 7px; }
@@ -747,42 +763,18 @@
 <body>
   <header>
     <div>
-      <h1>灵山小向导 · 灵曦</h1>
+      <h1 id="guideTitle">灵山小向导 · 灵曦</h1>
     </div>
   </header>
   <main>
     <section class="card stage">
       <div class="stage-top">
-        <div class="badge" id="avatarBadge">灵曦 · 正在准备</div>
-        <div class="style-control" id="styleControl">
-          <button class="style-trigger" id="styleButton" type="button" aria-expanded="false" disabled>造型</button>
-          <div class="style-panel" id="stylePanel" hidden>
-            <div class="style-group">
-              <span class="style-label">神态</span>
-              <div class="style-options" id="expressionOptions">
-                <button type="button" data-expression="natural" aria-pressed="true">自然</button>
-                <button type="button" data-expression="gentle" aria-pressed="false">温柔</button>
-                <button type="button" data-expression="smile" aria-pressed="false">笑意</button>
-                <button type="button" data-expression="bright" aria-pressed="false">灵动</button>
-              </div>
-            </div>
-            <div class="style-group">
-              <span class="style-label">发色</span>
-              <div class="style-options" id="hairOptions">
-                <button type="button" data-hair="classic" aria-pressed="true">雾紫</button>
-                <button type="button" data-hair="chestnut" aria-pressed="false">茶棕</button>
-                <button type="button" data-hair="ink" aria-pressed="false">墨青</button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
       <div class="model-wrap" id="modelWrap">
         <video id="liveTalkingVideo" autoplay playsinline muted aria-label="灵曦数字人"></video>
         <audio id="liveTalkingAudio" autoplay></audio>
         <div id="xmovMount" aria-label="灵曦数字人"></div>
         <canvas id="live2dCanvas" aria-label="灵曦数字人"></canvas>
-        <div id="avatarReaction" class="avatar-reaction" aria-live="polite">灵曦 · 自然讲解</div>
         <div class="model-loading" id="modelLoading">
           <span class="loader-ring"></span>
           <span>灵曦正在准备…</span>
@@ -800,7 +792,7 @@
 
     <section class="card control-panel">
       <div class="panel-heading">
-        <h2>和灵曦聊聊</h2>
+        <h2 id="guideChatTitle">和灵曦聊聊</h2>
       </div>
       <div class="tool-tabs" role="toolbar" aria-label="导览功能">
         <button class="tool-tab" type="button" data-tool-tab="chat" aria-pressed="true">问答</button>
@@ -811,7 +803,7 @@
 
       <div class="tool-panel" data-tool-panel="chat">
         <div class="question-box">
-          <label>想问灵曦什么</label>
+          <label id="guideQuestionLabel">想问灵曦什么</label>
           <textarea id="q" rows="3">灵山大佛有多高？用了多少铜？</textarea>
         </div>
         <div class="btns chat-actions">
@@ -821,7 +813,7 @@
       </div>
 
       <div class="tool-panel" data-tool-panel="route" hidden>
-        <p class="tool-description">选一个游览偏好，灵曦会为你安排顺路、松弛的游览建议。</p>
+        <p class="tool-description" id="guideRouteDescription">选一个游览偏好，灵曦会为你安排顺路、松弛的游览建议。</p>
         <div class="row">
           <div>
             <label>想看什么</label>
@@ -836,7 +828,7 @@
       </div>
 
       <div class="tool-panel" data-tool-panel="photo" hidden>
-        <p class="tool-description">拍下眼前的建筑、雕塑或景色，灵曦会接着为你讲解。</p>
+        <p class="tool-description" id="guideVisionDescription">拍下眼前的建筑、雕塑或景色，灵曦会接着为你讲解。</p>
         <label class="file-action photo-action">拍照识景
           <input id="photoFile" type="file" accept="image/*" capture="environment" style="display:none" />
         </label>
@@ -845,6 +837,7 @@
 
       <div class="tool-panel" data-tool-panel="location" hidden>
         <p class="tool-description">可使用当前位置、摄像头扫码、景点码或手动选择，开始附近景点讲解。</p>
+        <p class="tool-note is-warning">定位结果为候选，需要确认。GPS 使用带来源的公开 WGS-84 近似点位；Wi-Fi 为手动区域节点，正式上线前应以景区实测坐标与真实 BSSID/蓝牙信标替换。</p>
         <button id="locate" class="route-action secondary" type="button">使用当前位置</button>
         <div class="location-panel" id="locationPanel">
           <div class="location-head">
@@ -918,7 +911,7 @@
               <option value="expressive">情感表情模式（Live2D）</option>
             </select>
           </div>
-          <label class="emotion-consent"><input id="emotionConsent" type="checkbox" /> 允许本次语音使用原声与 ASR 文本分析情绪；原音频默认在分析后删除</label>
+          <label class="emotion-consent"><input id="emotionConsent" type="checkbox" /> 允许本次语音使用原声与 ASR 文本进行情绪分析（音频—文本多模态，不采集人脸视频）；原音频分析后即删除，对话文本与情绪标签 30 天后清理，聚合统计长期保留；可随时导出或删除我的数据</label>
         </div>
       </details>
       <details class="feedback">
@@ -938,6 +931,53 @@
     const $ = (id) => document.getElementById(id);
     const base = () => ($("base").value.trim() || location.origin);
     let sessionId = null;
+    let activeGuideName = "灵曦";
+    let feedbackAreas = [];
+    let attractionCatalogPromise = null;
+
+    function applyGuideName(value) {
+      const name = String(value || "").trim() || "灵曦";
+      activeGuideName = name;
+      $("guideTitle").textContent = name === "灵山小向导" ? name : `灵山小向导 · ${name}`;
+      $("guideChatTitle").textContent = `和${name}聊聊`;
+      $("guideQuestionLabel").textContent = `想问${name}什么`;
+      $("guideRouteDescription").textContent = `选一个游览偏好，${name}会为你安排顺路、松弛的游览建议。`;
+      $("guideVisionDescription").textContent = `拍下眼前的建筑、雕塑或景色，${name}会接着为你讲解。`;
+      $("modelLoading").querySelector("span:last-child").textContent = `${name}正在准备…`;
+      ["liveTalkingVideo", "xmovMount", "live2dCanvas"].forEach((id) => {
+        $(id).setAttribute("aria-label", `${name}数字人`);
+      });
+      document.title = `${name} · AI数字人导览`;
+    }
+
+    async function refreshAvatarProfile() {
+      try {
+        const response = await fetch(base() + "/v1/avatar", { cache: "no-store" });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        applyGuideName(data.display_name);
+      } catch (error) {
+        console.warn("avatar profile unavailable; keeping the built-in display name", error);
+      }
+    }
+
+    async function ensureAttractionCatalog() {
+      if (feedbackAreas.length) return feedbackAreas;
+      if (!attractionCatalogPromise) {
+        attractionCatalogPromise = fetch(base() + "/v1/attractions", { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            feedbackAreas = data.scenic_areas || [];
+            return feedbackAreas;
+          })
+          .catch((error) => {
+            attractionCatalogPromise = null;
+            throw error;
+          });
+      }
+      return attractionCatalogPromise;
+    }
     let currentAudio = null;
     let currentAudioCtx = null;
     let currentObjectUrl = null;
@@ -1080,7 +1120,6 @@
           await LingxiLive2D.init($("live2dCanvas"), $("modelWrap"));
           live2DReady = true;
           $("modelLoading").classList.add("is-hidden");
-          $("styleButton").disabled = false;
           $("avatarHint").textContent = "灵曦已就绪";
           $("status").textContent = "已准备好";
           return true;
@@ -1106,18 +1145,13 @@
       document.getElementById("liveTalkingVideo").classList.add("is-active");
       document.getElementById("xmovMount").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.add("is-hidden");
-      document.getElementById("avatarBadge").textContent = "灵曦 · 正在讲解";
       document.getElementById("avatarHint").textContent = "灵曦已连接";
-      document.getElementById("styleButton").disabled = true;
-      document.getElementById("stylePanel").hidden = true;
     }
 
     function fallbackToLive2D(message) {
       document.getElementById("liveTalkingVideo").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.remove("is-hidden");
-      document.getElementById("avatarBadge").textContent = "灵曦 · 已准备";
       document.getElementById("avatarHint").textContent = message || "灵曦已准备好";
-      document.getElementById("styleButton").disabled = false;
       void bootLive2D();
     }
 
@@ -1337,9 +1371,6 @@
     function activateXmovView() {
       $("xmovMount").classList.add("is-active");
       $("live2dCanvas").classList.add("is-hidden");
-      $("avatarBadge").textContent = "XMOV 3D 真人 · 原生口型同步";
-      $("styleButton").disabled = true;
-      $("stylePanel").hidden = true;
     }
 
     async function bootXmov() {
@@ -1352,7 +1383,6 @@
         xmovState.configured = !!config.configured;
 
         if (!config.enabled) {
-          $("avatarBadge").textContent = "Haru Live2D · XMOV 未启用";
           $("avatarHint").textContent = config.requires_browser_secret_opt_in
             ? "XMOV 已配置，但浏览器密钥开关未开启；当前使用 Haru"
             : "当前使用 Haru；配置 XMOV 凭据后可切换 3D 真人";
@@ -1446,7 +1476,6 @@
         xmovState.avatar = null;
         $("xmovMount").classList.remove("is-active");
         $("live2dCanvas").classList.remove("is-hidden");
-        $("avatarBadge").textContent = "Haru Live2D · XMOV 回退";
         $("avatarHint").textContent = "XMOV 初始化失败，已自动回退 Haru：" + String(error.message || error);
         return false;
       } finally {
@@ -1454,57 +1483,31 @@
       }
     }
 
-    // style panel
-    const styleButton = $("styleButton");
-    const stylePanel = $("stylePanel");
-    styleButton.addEventListener("click", () => {
-      const open = stylePanel.hidden;
-      stylePanel.hidden = !open;
-      styleButton.setAttribute("aria-expanded", String(open));
-    });
-    document.addEventListener("click", (e) => {
-      if (!$("styleControl").contains(e.target)) {
-        stylePanel.hidden = true;
-        styleButton.setAttribute("aria-expanded", "false");
-      }
-    });
-
-    const expressionButtons = [...document.querySelectorAll("[data-expression]")];
-    const hairButtons = [...document.querySelectorAll("[data-hair]")];
-
-    expressionButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        stopSpeech("已切换神态 · 语音已停止");
-        LingxiLive2D.setExpression(btn.dataset.expression);
-        setPressed(expressionButtons, btn.dataset.expression, "expression");
-      });
-    });
-    hairButtons.forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        stopSpeech("已切换发色 · 语音已停止");
-        await LingxiLive2D.setHair(btn.dataset.hair);
-        setPressed(hairButtons, btn.dataset.hair, "hair");
-      });
-    });
     function setEmotion(e) {
       if (window.LingxiLive2D) LingxiLive2D.setEmotion(e || "calm");
-      const mapped = { smile: "smile", calm: "natural", solemn: "gentle", surprise: "bright" }[e] || "natural";
-      setPressed(expressionButtons, mapped, "expression");
     }
 
     function applyAvatarReaction(reaction) {
       currentAvatarReaction = { ...DEFAULT_AVATAR_REACTION, ...(reaction || {}) };
       setEmotion(currentAvatarReaction.expression || "natural");
       $("modelWrap").dataset.reaction = currentAvatarReaction.id || "calm";
-      $("avatarReaction").textContent = "灵曦 · " + (currentAvatarReaction.label || "自然讲解");
-      $("avatarReaction").title = "回应方式：" + (currentAvatarReaction.tone || "自然、清晰");
     }
 
-    async function watchCompletedEmotion(eventId, ownerSessionId, interactionToken) {
+    async function watchCompletedEmotion(eventId, ownerSessionId, interactionToken, timeoutSeconds = 180) {
       if (!eventId || !ownerSessionId) return;
-      for (let attempt = 0; attempt < 16; attempt += 1) {
+      // Poll until the multimodal job finishes. The server-side inference
+      // timeout (EMOTION_TIMEOUT_SECONDS, default 180s) bounds how long a cold
+      // GPU start can take, so keep polling across that whole window instead
+      // of giving up after ~24s and stranding the avatar on the text fallback.
+      const intervals = [900, 1200, 1500, 1500, 2000, 2000, 2500, 2500, 3000];
+      let elapsed = 0;
+      let attempt = 0;
+      while (elapsed < timeoutSeconds + 5000) {
         if (interactionToken !== speechToken) return;
-        await new Promise(resolve => setTimeout(resolve, attempt ? 1500 : 900));
+        const delay = attempt < intervals.length ? intervals[attempt] : 3000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        elapsed += delay;
+        attempt += 1;
         if (interactionToken !== speechToken) return;
         try {
           const response = await fetch(
@@ -1574,9 +1577,39 @@
       return samples;
     }
 
+    function spokenInteger(value) {
+      const digits = "零一二三四五六七八九";
+      if (value < 10) return digits[value];
+      const tens = Math.floor(value / 10);
+      const ones = value % 10;
+      const prefix = tens === 1 ? "十" : digits[tens] + "十";
+      return ones ? prefix + digits[ones] : prefix;
+    }
+
+    function spokenClock(hourText, minuteText) {
+      const hour = spokenInteger(Number(hourText));
+      const minute = Number(minuteText);
+      if (minute === 0) return hour + "点";
+      if (minute === 30) return hour + "点半";
+      const spokenMinute = minute < 10
+        ? "零" + spokenInteger(minute)
+        : spokenInteger(minute);
+      return hour + "点" + spokenMinute + "分";
+    }
+
     function normalizeSpeechText(text) {
       return String(text || "")
+        .replace(
+          /\b([01]?\d|2[0-3])[:：]([0-5]\d)\s*(?:-|–|—|~|～|至)\s*([01]?\d|2[0-3])[:：]([0-5]\d)\b/g,
+          (_, h1, m1, h2, m2) => spokenClock(h1, m1) + "到" + spokenClock(h2, m2),
+        )
+        .replace(
+          /\b([01]?\d|2[0-3])[:：]([0-5]\d)\b/g,
+          (_, hour, minute) => spokenClock(hour, minute),
+        )
         .replace(/\s*(?:→|⇒|⟶|➜|➡|--?>)\s*/g, "，接着前往")
+        .replace(/\s*(?:←|⇐|⬅)\s*/g, "，返回")
+        .replace(/\s*(?:↔|⇄|⇆)\s*/g, "，往返于")
         .replace(/^\s*[，、]\s*/, "")
         .trim();
     }
@@ -2088,7 +2121,7 @@
       return pipeline.done;
     }
 
-    async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null, spotId = null) {
+    async function askText(message, interactionStartedAt = performance.now(), inputMode = "text", emotionEventId = null, spotId = null, emotionTimeoutSeconds = 180) {
       if (!message) return;
       stopSpeech("正在连接数字人并思考…");
       const btn = $("ask");
@@ -2105,7 +2138,7 @@
 
       const interactionToken = speechToken;
       if (emotionEventId && sessionId) {
-        void watchCompletedEmotion(emotionEventId, sessionId, interactionToken);
+        void watchCompletedEmotion(emotionEventId, sessionId, interactionToken, emotionTimeoutSeconds);
       }
       const serverDrivenSpeech = !!(liveTalkingState.ready && liveTalkingState.sessionId);
       let pipeline = null;
@@ -2126,20 +2159,26 @@
         const rest = visibleText.slice(speechCursor);
         if (!rest) return 0;
 
+        const candidateEnds = [];
         const hardBoundary = /[。！？!?；;\n]/g;
         let match;
         while ((match = hardBoundary.exec(rest)) !== null) {
           if (rest.slice(0, match.index + 1).trim().length >= 4) {
-            return match.index + 1;
+            candidateEnds.push(match.index + 1);
+            break;
           }
         }
 
-        const clauseBoundary = /[，,：:]/g;
+        const clauseBoundary = /[，,]/g;
+        const clauseLimit = speechCursor === 0 ? 8 : 24;
         while ((match = clauseBoundary.exec(rest)) !== null) {
-          if (rest.slice(0, match.index).trim().length >= 24) {
-            return match.index + 1;
+          if (rest.slice(0, match.index).trim().length >= clauseLimit) {
+            candidateEnds.push(match.index + 1);
+            break;
           }
         }
+
+        if (candidateEnds.length) return Math.min(...candidateEnds);
 
         if (rest.length >= 120) return 120;
         return flush ? rest.length : 0;
@@ -2313,7 +2352,7 @@
       if (!text) throw new Error("未识别到内容");
       $("q").value = text;
       $("status").textContent = "识别：" + text;
-      await askText(text, interactionStartedAt, "voice", data.emotion_event_id || null);
+      await askText(text, interactionStartedAt, "voice", data.emotion_event_id || null, null, data.emotion_timeout_seconds || 180);
     }
 
     let mediaRecorder = null;
@@ -2378,7 +2417,46 @@
       });
     }
 
-    function renderVisionCandidates(observation) {
+    async function confirmVisionAttraction(attractionId, attractionName, observation, data) {
+      if (!attractionId || !attractionName) return;
+      const panel = $("visionResult");
+      panel.querySelectorAll("button, select").forEach((control) => { control.disabled = true; });
+      stopSpeech(`正在确认${attractionName}…`);
+      $("status").textContent = `已选择${attractionName}，正在按知识库生成准确讲解…`;
+      const prompt = `请为我准确讲解${attractionName}，并推荐接下来适合去哪里。`;
+      $("q").value = prompt;
+      try {
+        const response = await fetch(base() + "/v1/vision/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            attraction_id: attractionId,
+            session_id: data?.session_id || sessionId,
+            question: prompt,
+            model_candidates: (observation?.candidates || []).map((item) => item.name).filter(Boolean),
+            image_sha256: data?.image?.sha256 || "",
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const confirmed = await response.json();
+        sessionId = confirmed.session_id || sessionId;
+        const parsed = stripMeta(confirmed.answer || "");
+        $("log").textContent = parsed.text;
+        selectToolPanel("chat");
+        const citationNames = (confirmed.citations || []).map((item) => item.title).filter(Boolean).slice(0, 3);
+        $("status").textContent = `已确认：${confirmed.attraction_name || attractionName}`
+          + (citationNames.length ? ` · 引用：${citationNames.join(" / ")}` : "");
+        if (parsed.emotion) setEmotion(parsed.emotion);
+        void speak(parsed.text);
+      } catch (error) {
+        $("status").textContent = "景点确认失败，请重试";
+        $("log").textContent = String(error.message || error);
+      } finally {
+        panel.querySelectorAll("button, select").forEach((control) => { control.disabled = false; });
+      }
+    }
+
+    async function renderVisionCandidates(observation, data) {
       const panel = $("visionResult");
       const candidates = observation?.candidates || [];
       panel.replaceChildren();
@@ -2387,29 +2465,73 @@
       const level = { high: "高", medium: "中", low: "低" }[observation?.confidence] || "低";
       title.textContent = `视觉识别置信度：${level}`;
       panel.appendChild(title);
+      const quality = data?.image?.quality || data?.stages?.quality;
+      if (quality && (quality.flag === "warn" || quality.flag === "reject") && quality.advice) {
+        const warn = document.createElement("div");
+        warn.className = "is-warning";
+        warn.textContent = "⚠ " + quality.advice;
+        panel.appendChild(warn);
+      }
       const message = document.createElement("div");
       message.textContent = candidates.length
         ? (observation?.requires_confirmation ? "请选择眼前的景点，确认后将按资料库进行准确讲解。" : "已匹配资料库景点；也可点击候选进入深度讲解。")
-        : "未能可靠匹配资料库景点。建议换一个角度拍摄，或使用定位功能选择景点。";
+        : "未能可靠匹配资料库景点。请在下方选择实际景点，系统会记录本次漏识别。";
       panel.appendChild(message);
-      if (!candidates.length) return;
-      const buttons = document.createElement("div");
-      buttons.className = "vision-candidates";
-      for (const candidate of candidates) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "vision-candidate";
-        button.textContent = `确认是${candidate.name}（${Math.round(Number(candidate.confidence || 0) * 100)}%）`;
-        button.title = candidate.evidence || "";
-        button.addEventListener("click", async () => {
-          const prompt = `请为我准确讲解${candidate.name}，并推荐接下来适合去哪里。`;
-          $("q").value = prompt;
-          selectToolPanel("chat");
-          await askText(prompt, performance.now(), "text", null, candidate.id);
-        });
-        buttons.appendChild(button);
+
+      if (candidates.length) {
+        const buttons = document.createElement("div");
+        buttons.className = "vision-candidates";
+        const sourceLabel = { clip_recall: "参考图召回", vision_model: "视觉模型", vision_prose: "模型描述", location_prior: "位置先验" };
+        for (const candidate of candidates) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "vision-candidate";
+          const sources = Array.isArray(candidate.sources) && candidate.sources.length
+            ? candidate.sources.map((source) => sourceLabel[source] || source).join("+")
+            : (sourceLabel[candidate.source] || candidate.source || "");
+          button.textContent = `确认是${candidate.name}（${Math.round(Number(candidate.confidence || 0) * 100)}%）${sources ? " · " + sources : ""}`;
+          button.title = candidate.evidence || "";
+          button.addEventListener("click", () => {
+            void confirmVisionAttraction(candidate.id || candidate.attraction_id, candidate.name, observation, data);
+          });
+          buttons.appendChild(button);
+        }
+        panel.appendChild(buttons);
       }
-      panel.appendChild(buttons);
+
+      let areas = [];
+      try {
+        areas = await ensureAttractionCatalog();
+      } catch (error) {
+        console.warn("attraction catalog unavailable for vision correction", error);
+      }
+      const attractions = areas.flatMap((area) => (area.children || [])
+        .filter((item) => !item.is_overall)
+        .map((item) => ({ ...item, scenicArea: area.name })));
+      if (!attractions.length) return;
+      const correction = document.createElement("div");
+      correction.className = "vision-correction";
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "候选不正确时选择实际景点");
+      select.innerHTML = '<option value="">候选不对？选择实际景点…</option>';
+      for (const attraction of attractions) {
+        const option = document.createElement("option");
+        option.value = attraction.id;
+        option.textContent = `${attraction.scenicArea} · ${attraction.name}`;
+        option.dataset.name = attraction.name;
+        select.appendChild(option);
+      }
+      const confirmButton = document.createElement("button");
+      confirmButton.type = "button";
+      confirmButton.textContent = "确认并纠错";
+      confirmButton.disabled = true;
+      select.addEventListener("change", () => { confirmButton.disabled = !select.value; });
+      confirmButton.addEventListener("click", () => {
+        const selected = select.options[select.selectedIndex];
+        void confirmVisionAttraction(select.value, selected?.dataset.name || selected?.textContent, observation, data);
+      });
+      correction.append(select, confirmButton);
+      panel.appendChild(correction);
     }
 
     $("photoFile").addEventListener("change", async (event) => {
@@ -2419,6 +2541,10 @@
       $("status").textContent = "视觉大模型正在识别景点…";
       const form = new FormData();
       form.append("file", file);
+      if (sessionId) form.append("session_id", sessionId);
+      if (locationCandidate?.attraction_id || locationCandidate?.spot_id) {
+        form.append("spot_id", locationCandidate.attraction_id || locationCandidate.spot_id);
+      }
       const question = $("q").value.trim() || "这是哪个景点？请为我讲解。";
       try {
         const response = await fetch(base() + "/v1/vision/guide?question=" + encodeURIComponent(question), {
@@ -2427,10 +2553,12 @@
         });
         if (!response.ok) throw new Error(await response.text());
         const data = await response.json();
+        sessionId = data.session_id || sessionId;
         const parsed = stripMeta(data.answer || "");
         $("log").textContent = parsed.text;
-        renderVisionCandidates(data.observation);
-        $("status").textContent = "识景完成 · 引用：" + (data.citations || []).map(x => x.title).slice(0, 3).join(" / ");
+        renderVisionCandidates(data.observation, data);
+        const verification = data.reference_verification?.message || "尚未配置参考图";
+        $("status").textContent = "识景完成 · " + verification + " · 引用：" + (data.citations || []).map(x => x.title).slice(0, 3).join(" / ");
         if (parsed.emotion) setEmotion(parsed.emotion);
         void speak(parsed.text);
       } catch (error) {
@@ -2669,7 +2797,6 @@
         .catch(error => showLocationState("二维码定位失败：" + String(error.message || error)));
     }
 
-    let feedbackAreas = [];
     function renderFeedbackAttractions() {
       const area = feedbackAreas.find(item => item.id === $("feedbackArea").value);
       $("feedbackAttraction").replaceChildren();

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1450" height="1050" viewBox="0 0 1450 1050" role="img" aria-labelledby="title desc">
+<title id="title">灵山小向导系统总体架构图</title>
+<desc id="desc">灵山小向导项目软件工程图</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#173D34"/></marker>
+  <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B75538"/></marker>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#173D34" flood-opacity="0.12"/></filter>
+  <style>
+    text { font-family: "Noto Sans CJK SC", "Noto Sans CJK JP", "Droid Sans Fallback", sans-serif; fill: #173D34; }
+    .title { font-family: "Noto Serif CJK SC", "AR PL UMing CN", serif; font-size: 38px; font-weight: 700; }
+    .subtitle { font-size: 18px; fill: #52645E; }
+    .label { font-size: 22px; font-weight: 700; }
+    .body { font-size: 19px; }
+    .small { font-size: 16px; fill: #52645E; }
+    .tiny { font-size: 14px; fill: #52645E; }
+    .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 16px; }
+    .connector { stroke: #173D34; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    .association { stroke: #52645E; stroke-width: 2; fill: none; }
+    .dashed { stroke: #52645E; stroke-width: 2; stroke-dasharray: 9 8; fill: none; }
+  </style>
+</defs>
+<rect width="1450" height="1050" fill="#FBF8F0"/>
+<text x="65" y="62" class="title" text-anchor="start">系统总体架构图</text>
+<text x="65" y="94" class="subtitle" text-anchor="start">接入层、网关层、智能服务层与数据资产层分层解耦</text>
+<rect x="55" y="130" width="1340" height="155" rx="22" fill="#E7F0EA" fill-opacity="0.46" stroke="#B9C7C1" stroke-width="1.5"/>
+<text x="82" y="164" class="small" text-anchor="start">接入层</text>
+<rect x="55" y="320" width="1340" height="155" rx="22" fill="#F5EEDC" fill-opacity="0.46" stroke="#B9C7C1" stroke-width="1.5"/>
+<text x="82" y="354" class="small" text-anchor="start">网关与业务层</text>
+<rect x="55" y="525" width="1340" height="190" rx="22" fill="#F8E9E3" fill-opacity="0.46" stroke="#B9C7C1" stroke-width="1.5"/>
+<text x="82" y="559" class="small" text-anchor="start">智能服务层</text>
+<rect x="55" y="765" width="1340" height="210" rx="22" fill="#EDF1F3" fill-opacity="0.46" stroke="#B9C7C1" stroke-width="1.5"/>
+<text x="82" y="799" class="small" text-anchor="start">数据与资源层</text>
+<polyline points="365,250 365,350" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1085,250 1085,350" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="365,465 365,505 245,505 245,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="365,465 365,505 565,505 565,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="365,465 365,505 885,505 885,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1085,465 1085,505 885,505 885,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1085,465 1085,505 1205,505 1205,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="245,690 245,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="885,690 885,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1205,690 1205,740 885,740 885,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="365,465 400,465 400,750 565,750 565,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1085,465 1050,465 1050,750 565,750 565,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1205,810 1345,810 1345,505 1085,505" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="9 8" marker-end="url(#arrow)"/>
+<rect x="160" y="170" width="410" height="80" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="365.0" y="208" class="label" text-anchor="middle">游客浏览器 / Android App</text><text x="365.0" y="242" class="small" text-anchor="middle"><tspan x="365.0" dy="0">文字 · 麦克风 · 图片 · 兴趣 · 位置</tspan></text>
+<rect x="880" y="170" width="410" height="80" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="1085.0" y="208" class="label" text-anchor="middle">景区管理后台</text><text x="1085.0" y="242" class="small" text-anchor="middle"><tspan x="1085.0" dy="0">知识库 · 数字人配置 · 数据 · 报告</tspan></text>
+<rect x="160" y="350" width="410" height="115" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="365.0" y="388" class="label" text-anchor="middle">FastAPI 导览网关</text><text x="365.0" y="422" class="small" text-anchor="middle"><tspan x="365.0" dy="0">HTTPS / SSE / WebRTC 代理</tspan><tspan x="365.0" dy="24">会话、路线、定位、反馈</tspan></text>
+<rect x="880" y="350" width="410" height="115" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="1085.0" y="388" class="label" text-anchor="middle">管理服务与鉴权</text><text x="1085.0" y="422" class="small" text-anchor="middle"><tspan x="1085.0" dy="0">签名 Cookie / 来源校验</tspan><tspan x="1085.0" dy="24">统计分析与配置管理</tspan></text>
+<rect x="105" y="560" width="280" height="130" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="245.0" y="598" class="label" text-anchor="middle">RAG 服务</text><text x="245.0" y="632" class="small" text-anchor="middle"><tspan x="245.0" dy="0">BGE-M3 + FAISS</tspan><tspan x="245.0" dy="24">GLM 流式问答与引用</tspan></text>
+<rect x="425" y="560" width="280" height="130" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="565.0" y="598" class="label" text-anchor="middle">GLM 多模态</text><text x="565.0" y="632" class="small" text-anchor="middle"><tspan x="565.0" dy="0">ASR · 4V · TTS</tspan><tspan x="565.0" dy="24">云端模型 API</tspan></text>
+<rect x="745" y="560" width="280" height="130" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="885.0" y="598" class="label" text-anchor="middle">LiveTalking</text><text x="885.0" y="632" class="small" text-anchor="middle"><tspan x="885.0" dy="0">Wav2Lip FP16</tspan><tspan x="885.0" dy="24">WebRTC 音视频</tspan></text>
+<rect x="1065" y="560" width="280" height="130" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="1205.0" y="598" class="label" text-anchor="middle">HumanOmni</text><text x="1205.0" y="632" class="small" text-anchor="middle"><tspan x="1205.0" dy="0">七类情绪与文本倾向</tspan><tspan x="1205.0" dy="24">异步分析 / 失败降级</tspan></text>
+<rect x="105" y="810" width="280" height="145" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="245.0" y="848" class="label" text-anchor="middle">知识资产</text><text x="245.0" y="882" class="small" text-anchor="middle"><tspan x="245.0" dy="0">官方 / 管理员文档</tspan><tspan x="245.0" dy="24">97 个片段 + 元数据</tspan></text>
+<rect x="425" y="810" width="280" height="145" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="565.0" y="848" class="label" text-anchor="middle">SQLite</text><text x="565.0" y="882" class="small" text-anchor="middle"><tspan x="565.0" dy="0">会话 · 反馈 · 情绪</tspan><tspan x="565.0" dy="24">配置 · 实时运营</tspan></text>
+<rect x="745" y="810" width="280" height="145" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="885.0" y="848" class="label" text-anchor="middle">模型与形象资源</text><text x="885.0" y="882" class="small" text-anchor="middle"><tspan x="885.0" dy="0">CPU / RAM 待机</tspan><tspan x="885.0" dy="24">空闲 GPU 动态选择</tspan></text>
+<rect x="1065" y="810" width="280" height="145" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="1205.0" y="848" class="label" text-anchor="middle">历史数据集</text><text x="1205.0" y="882" class="small" text-anchor="middle"><tspan x="1205.0" dy="0">140447 条游客记录</tspan><tspan x="1205.0" dy="24">152 个景点</tspan></text>
+<rect x="420" y="985" width="610" height="42" rx="12" fill="#FFFFFF" stroke="#B75538" stroke-width="2"/>
+<text x="725" y="1012" class="small" text-anchor="middle">GPU 生命周期：请求触发加载，连续请求复用，空闲 180 秒后释放</text>
+</svg>
