@@ -81,6 +81,7 @@ from .location import (
     update_location_configuration,
 )
 from .rag_client import RAGClientError, rag
+from .route_planner import plan_personalized_route
 from .speech_segments import SpeechSegmenter
 from .tourism_analytics import compact_tourism_database, ensure_tourism_schema, tourism_analytics
 from .vision_analysis import (
@@ -121,7 +122,13 @@ class ChatRequest(BaseModel):
 
 
 class RecommendRequest(BaseModel):
-    interest: str = Field(..., description="历史/自然/亲子 或 history/nature/family")
+    interest: str = Field("历史", description="兼容旧客户端的单一兴趣")
+    interests: list[str] = Field(default_factory=list, description="history/nature/family/photo")
+    scenic_area: Literal["LS", "NH"] = "LS"
+    duration_hours: float = Field(4.0, ge=1.5, le=8.0)
+    party: Literal["adults", "family", "seniors"] = "adults"
+    mobility: Literal["normal", "relaxed", "accessible"] = "normal"
+    start_spot_id: Optional[str] = Field(None, max_length=30)
 
 
 class LocateRequest(BaseModel):
@@ -168,6 +175,7 @@ class AvatarSettingsRequest(BaseModel):
     display_name: str = Field("灵山小向导", min_length=1, max_length=30)
     avatar_id: str = Field(LIVETALKING_AVATAR_ID, min_length=1, max_length=100)
     voice: str = Field(TTS_VOICE, min_length=1, max_length=50)
+    presentation_mode: Literal["gpu_video", "light_2d"] = "gpu_video"
 
 
 class AdminLoginRequest(BaseModel):
@@ -259,6 +267,7 @@ def _db() -> sqlite3.Connection:
             display_name TEXT NOT NULL,
             avatar_id TEXT NOT NULL,
             voice TEXT NOT NULL,
+            presentation_mode TEXT NOT NULL DEFAULT 'gpu_video',
             costume TEXT NOT NULL,
             expression TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -272,6 +281,7 @@ def _db() -> sqlite3.Connection:
     _ensure_column(conn, "feedback", "attraction_name", "TEXT")
     _ensure_column(conn, "feedback", "source", "TEXT NOT NULL DEFAULT 'live'")
     _ensure_column(conn, "feedback", "emotion_event_id", "TEXT")
+    _ensure_column(conn, "avatar_settings", "presentation_mode", "TEXT NOT NULL DEFAULT 'gpu_video'")
     ensure_attraction_schema(conn)
     ensure_tourism_schema(conn)
     conn.execute(
@@ -326,7 +336,7 @@ def _infer_sentiment(text: str, rating: Optional[int] = None) -> str:
 def _avatar_settings() -> dict[str, str]:
     conn = _db()
     row = conn.execute(
-        "SELECT display_name, avatar_id, voice, updated_at "
+        "SELECT display_name, avatar_id, voice, presentation_mode, updated_at "
         "FROM avatar_settings WHERE id=1"
     ).fetchone()
     conn.close()
@@ -335,14 +345,21 @@ def _avatar_settings() -> dict[str, str]:
             "display_name": row[0],
             "avatar_id": row[1],
             "voice": row[2],
-            "updated_at": row[3],
+            "presentation_mode": row[3] if row[3] in {"gpu_video", "light_2d"} else "gpu_video",
+            "updated_at": row[4],
         }
     return {
         "display_name": "灵山小向导",
         "avatar_id": LIVETALKING_AVATAR_ID,
         "voice": TTS_VOICE,
+        "presentation_mode": "gpu_video" if LIVETALKING_ENABLED else "light_2d",
         "updated_at": "",
     }
+
+
+def _gpu_video_avatar_configured() -> bool:
+    """Return whether the admin-selected visitor presentation uses LiveTalking."""
+    return _avatar_settings()["presentation_mode"] == "gpu_video"
 
 
 def _guide_context(extra: Optional[dict[str, str]] = None) -> dict[str, str]:
@@ -871,6 +888,8 @@ def _mark_livetalking_used() -> None:
 async def _ensure_livetalking_started() -> bool:
     if not LIVETALKING_ENABLED:
         raise HTTPException(503, "LiveTalking is disabled")
+    if not _gpu_video_avatar_configured():
+        raise HTTPException(503, "LiveTalking is disabled by administrator")
     async with _livetalking_start_lock:
         try:
             async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
@@ -907,7 +926,7 @@ _livetalking_warm_task: asyncio.Task[None] | None = None
 
 def _schedule_livetalking_warmup() -> None:
     global _livetalking_warm_task
-    if not LIVETALKING_ENABLED:
+    if not LIVETALKING_ENABLED or not _gpu_video_avatar_configured():
         return
     if _livetalking_warm_task and not _livetalking_warm_task.done():
         return
@@ -926,7 +945,9 @@ def _schedule_livetalking_warmup() -> None:
 
 @app.get("/v1/livetalking/status")
 async def livetalking_status(request: Request):
-    avatar_id = _avatar_settings()["avatar_id"]
+    settings = _avatar_settings()
+    avatar_id = settings["avatar_id"]
+    gpu_video_configured = settings["presentation_mode"] == "gpu_video"
     turn = None
     ice_servers: list[dict[str, Any]] = []
     ice_detail = None
@@ -943,14 +964,18 @@ async def livetalking_status(request: Request):
         ice_detail = "公网模式需要配置 Cloudflare TURN"
 
     status = {
-        "enabled": LIVETALKING_ENABLED,
+        "enabled": LIVETALKING_ENABLED and gpu_video_configured,
         "ready": False,
         "on_demand": True,
         "avatar_id": avatar_id,
+        "presentation_mode": settings["presentation_mode"],
         "turn": turn,
         "ice_servers": ice_servers,
     }
     if not LIVETALKING_ENABLED:
+        return status
+    if not gpu_video_configured:
+        status["detail"] = "管理员已配置轻量 2D 数字人"
         return status
     if PUBLIC_APP_URL and not ice_servers:
         status["detail"] = ice_detail
@@ -974,6 +999,8 @@ async def livetalking_start():
 
 @app.post("/v1/livetalking/offer")
 async def livetalking_offer(req: LiveTalkingOfferRequest):
+    if not _gpu_video_avatar_configured():
+        raise HTTPException(503, "LiveTalking is disabled by administrator")
     payload = req.model_dump(exclude_none=True)
     payload["avatar"] = payload.get("avatar") or _avatar_settings()["avatar_id"]
     if cloudflare_turn_configured():
@@ -1223,19 +1250,18 @@ async def list_routes():
 
 @app.post("/v1/recommend")
 async def recommend(req: RecommendRequest):
-    mapping = {
-        "历史": "history",
-        "历史文化": "history",
-        "history": "history",
-        "自然": "nature",
-        "风光": "nature",
-        "nature": "nature",
-        "亲子": "family",
-        "家庭": "family",
-        "family": "family",
-    }
-    rid = mapping.get(req.interest.strip().lower(), mapping.get(req.interest.strip(), "history"))
-    route = next((r for r in ROUTES if r["id"] == rid), ROUTES[0])
+    try:
+        route = plan_personalized_route(
+            scenic_area=req.scenic_area,
+            duration_hours=req.duration_hours,
+            interests=req.interests,
+            legacy_interest=req.interest,
+            party=req.party,
+            mobility=req.mobility,
+            start_spot_id=req.start_spot_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return {"interest": req.interest, "route": route}
 
 
@@ -1453,18 +1479,20 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
         INSERT INTO avatar_settings
             -- Empty values satisfy legacy NOT NULL columns when a fresh row is
             -- created. Existing legacy values are left untouched on updates.
-            (id, display_name, avatar_id, voice, costume, expression, updated_at)
-        VALUES (1,?,?,?,?,?,?)
+            (id, display_name, avatar_id, voice, presentation_mode, costume, expression, updated_at)
+        VALUES (1,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
             display_name=excluded.display_name,
             avatar_id=excluded.avatar_id,
             voice=excluded.voice,
+            presentation_mode=excluded.presentation_mode,
             updated_at=excluded.updated_at
         """,
         (
             req.display_name.strip(),
             req.avatar_id,
             req.voice,
+            req.presentation_mode,
             "",
             "",
             now,
@@ -1530,7 +1558,10 @@ async def feedback(req: FeedbackRequest):
 async def public_avatar():
     """Return only the visitor-safe part of the active avatar configuration."""
     settings = _avatar_settings()
-    return {"display_name": settings["display_name"]}
+    return {
+        "display_name": settings["display_name"],
+        "presentation_mode": settings["presentation_mode"],
+    }
 
 
 @app.get("/v1/attractions")

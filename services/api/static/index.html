@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>灵山小向导 · AI数字人导览</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet.css" />
   <style>
     :root {
       --bg0: #0b1814;
@@ -719,6 +720,46 @@
       cursor: pointer;
     }
     .vision-candidate:hover { border-color: var(--pine); background: #f1f5ee; }
+    .route-planner { display: grid; gap: 14px; }
+    .route-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .route-planner fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    .route-planner legend { margin-bottom: 7px; color: var(--ink-soft); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+    .route-duration { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+    .route-duration button { min-height: 38px; padding: 7px 4px; color: var(--pine-deep); border: 1px solid rgba(31, 90, 79, .24); background: rgba(255, 252, 245, .6); }
+    .route-duration button[aria-pressed="true"] { color: #fffaf1; border-color: var(--pine); background: var(--pine); }
+    .route-interests { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .route-interest { display: flex; align-items: center; gap: 7px; min-height: 34px; margin: 0; padding: 7px 8px; color: var(--pine-deep); border: 1px solid rgba(31, 90, 79, .2); background: rgba(255, 252, 245, .58); font-size: 13px; font-weight: 600; letter-spacing: 0; cursor: pointer; }
+    .route-interest input { width: 15px; height: 15px; margin: 0; accent-color: var(--pine); }
+    .route-location-hint { min-height: 18px; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+    .route-result { margin-top: 2px; padding-top: 15px; border-top: 1px dashed var(--line-soft); }
+    .route-result[hidden] { display: none; }
+    .route-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .route-result h3 { margin: 0; color: var(--pine-deep); font-family: "STKaiti", "Kaiti SC", serif; font-size: 20px; letter-spacing: .05em; }
+    .route-result-summary { margin: 6px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+    .route-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 13px 0; }
+    .route-metric { min-height: 58px; padding: 8px 7px; border-top: 2px solid var(--jade); background: rgba(121, 169, 152, .1); }
+    .route-metric strong { display: block; color: var(--pine-deep); font-size: 15px; line-height: 1.2; }
+    .route-metric span { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 11px; }
+    .route-map { height: 270px; border: 1px solid rgba(31, 90, 79, .28); background: #e7ddca; }
+    .route-map .leaflet-control-attribution { color: var(--ink-soft); background: rgba(255, 252, 245, .82); font-size: 10px; }
+    .route-map .leaflet-control-attribution a { color: var(--pine-deep); }
+    .route-map-marker { display: grid; place-items: center; width: 28px !important; height: 28px !important; margin: 0 !important; }
+    .route-map-marker span { display: grid; place-items: center; width: 26px; height: 26px; color: #fffaf1; border: 2px solid #fffaf1; border-radius: 50%; background: var(--cinnabar); box-shadow: 0 2px 8px rgba(34, 43, 38, .3); font-size: 12px; font-weight: 700; }
+    .route-map-note { margin: 8px 0 0; color: var(--ink-soft); font-size: 11px; line-height: 1.55; }
+    .route-timeline { display: grid; gap: 0; margin-top: 15px; }
+    .route-stop { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 9px; align-items: start; padding: 0 0 15px; }
+    .route-stop::before { content: ""; position: absolute; top: 28px; bottom: 0; left: 14px; width: 1px; background: rgba(31, 90, 79, .28); }
+    .route-stop:last-child { padding-bottom: 0; }
+    .route-stop:last-child::before { display: none; }
+    .route-stop-index { display: grid; place-items: center; width: 28px; height: 28px; color: #fffaf1; border-radius: 50%; background: var(--pine); font-size: 12px; font-weight: 700; }
+    .route-stop-main strong { color: var(--ink); font-size: 14px; }
+    .route-stop-main p { margin: 3px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+    .route-reasons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .route-reasons span { padding: 2px 5px; color: var(--pine-deep); border: 1px solid rgba(31, 90, 79, .2); background: rgba(121, 169, 152, .11); font-size: 10px; }
+    .route-nav-link { align-self: center; width: auto; min-height: 30px; padding: 5px 8px; color: var(--pine-deep); border: 1px solid rgba(31, 90, 79, .28); background: transparent; font-size: 11px; text-decoration: none; white-space: nowrap; }
+    .route-nav-link:hover { color: #fffaf1; background: var(--pine); }
+    .route-warnings { display: grid; gap: 5px; margin-top: 12px; }
+    .route-warning { padding-left: 9px; color: #76571e; border-left: 2px solid var(--amber); font-size: 11px; line-height: 1.5; }
     .qr-scanner {
       grid-column: 1 / -1;
       margin-top: 4px;
@@ -767,6 +808,11 @@
       .feedback-row { grid-template-columns: 1fr; }
       #feedbackComment,#sendFeedback { grid-column:auto; }
       .settings-grid { grid-template-columns: 1fr; }
+      .route-field-grid { grid-template-columns: 1fr; }
+      .route-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .route-map { height: 248px; }
+      .route-stop { grid-template-columns: 30px minmax(0, 1fr); }
+      .route-nav-link { grid-column: 2; justify-self: start; }
     }
   </style>
 </head>
@@ -823,18 +869,79 @@
       </div>
 
       <div class="tool-panel" data-tool-panel="route" hidden>
-        <p class="tool-description" id="guideRouteDescription">选一个游览偏好，灵曦会为你安排顺路、松弛的游览建议。</p>
-        <div class="row">
-          <div>
-            <label>想看什么</label>
-            <select id="interest">
-              <option value="历史">历史文化</option>
-              <option value="自然">自然风光</option>
-              <option value="亲子">亲子家庭</option>
-            </select>
+        <div class="route-planner">
+          <p class="tool-description" id="guideRouteDescription">告诉灵曦你的时间、兴趣和同行情况，生成一条可落地的游览路线。</p>
+          <div class="route-field-grid">
+            <div>
+              <label for="routeArea">游览景区</label>
+              <select id="routeArea">
+                <option value="LS">灵山胜境</option>
+                <option value="NH">拈花湾禅意小镇</option>
+              </select>
+            </div>
+            <div>
+              <label for="routeStart">从哪里出发</label>
+              <select id="routeStart">
+                <option value="">按景区入口规划</option>
+              </select>
+            </div>
           </div>
-        </div>
-        <button id="rec" class="route-action" type="button">为我推荐路线</button>
+          <fieldset>
+            <legend>可用时间</legend>
+            <div class="route-duration" role="group" aria-label="可用游览时间">
+              <button type="button" data-route-duration="2" aria-pressed="false">2 小时</button>
+              <button type="button" data-route-duration="4" aria-pressed="true">4 小时</button>
+              <button type="button" data-route-duration="6" aria-pressed="false">6 小时</button>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>兴趣偏好（可多选）</legend>
+            <div class="route-interests">
+              <label class="route-interest"><input type="checkbox" name="routeInterest" value="history" checked />历史文化</label>
+              <label class="route-interest"><input type="checkbox" name="routeInterest" value="nature" />自然风光</label>
+              <label class="route-interest"><input type="checkbox" name="routeInterest" value="family" />亲子体验</label>
+              <label class="route-interest"><input type="checkbox" name="routeInterest" value="photo" />拍照打卡</label>
+            </div>
+          </fieldset>
+          <div class="route-field-grid">
+            <div>
+              <label for="routeParty">同行人群</label>
+              <select id="routeParty">
+                <option value="adults">成人同行</option>
+                <option value="family">亲子家庭</option>
+                <option value="seniors">长者同行</option>
+              </select>
+            </div>
+            <div>
+              <label for="routeMobility">步行偏好</label>
+              <select id="routeMobility">
+                <option value="normal">正常步行</option>
+                <option value="relaxed">尽量少走路</option>
+                <option value="accessible">无障碍优先</option>
+              </select>
+            </div>
+          </div>
+          <div class="route-location-hint" id="routeLocationHint">正在读取可用地图点位…</div>
+          <button id="rec" class="route-action" type="button">生成个性化路线</button>
+          <section class="route-result" id="routeResult" aria-live="polite" hidden>
+            <div class="route-result-head">
+              <div>
+                <h3 id="routeName"></h3>
+                <p class="route-result-summary" id="routeSummary"></p>
+              </div>
+            </div>
+            <div class="route-metrics">
+              <div class="route-metric"><strong id="routePlannedTime">--</strong><span>预计总时长</span></div>
+              <div class="route-metric"><strong id="routeStopCount">--</strong><span>游览站点</span></div>
+              <div class="route-metric"><strong id="routeWalkDistance">--</strong><span>预计步行</span></div>
+              <div class="route-metric"><strong id="routeWalkTime">--</strong><span>步行用时</span></div>
+            </div>
+            <div class="route-map" id="routeMap" aria-label="个性化路线地图"></div>
+            <p class="route-map-note" id="routeMapNote"></p>
+            <div class="route-timeline" id="routeTimeline"></div>
+            <div class="route-warnings" id="routeWarnings"></div>
+          </section>
+          </div>
       </div>
 
       <div class="tool-panel" data-tool-panel="photo" hidden>
@@ -916,11 +1023,8 @@
             <input id="base" value="" placeholder="默认当前站点" />
           </div>
           <div>
-            <label>数字人呈现</label>
-            <select id="avatarMode">
-              <option value="realtime">拟真口型模式</option>
-              <option value="expressive">情感表情模式（Live2D）</option>
-            </select>
+            <label>数字人运行状态</label>
+            <div class="hint" id="avatarPresentationStatus" aria-live="polite">由后台配置，游客端不可切换</div>
           </div>
           <label class="emotion-consent"><input id="emotionConsent" type="checkbox" /> 允许本次语音使用原声与 ASR 文本进行情绪分析（音频—文本多模态，不采集人脸视频）；原音频分析后即删除，对话文本与情绪标签 30 天后清理，聚合统计长期保留；可随时导出或删除我的数据</label>
         </div>
@@ -938,6 +1042,7 @@
     </section>
   </main>
 
+  <script src="/static/vendor/leaflet.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const base = () => ($("base").value.trim() || location.origin);
@@ -945,6 +1050,9 @@
     let activeGuideName = "灵曦";
     let feedbackAreas = [];
     let attractionCatalogPromise = null;
+    let routeMap = null;
+    let routeMapPoints = [];
+    let confirmedLocation = null;
 
     function applyGuideName(value) {
       const name = String(value || "").trim() || "灵曦";
@@ -952,7 +1060,7 @@
       $("guideTitle").textContent = name === "灵山小向导" ? name : `灵山小向导 · ${name}`;
       $("guideChatTitle").textContent = `和${name}聊聊`;
       $("guideQuestionLabel").textContent = `想问${name}什么`;
-      $("guideRouteDescription").textContent = `选一个游览偏好，${name}会为你安排顺路、松弛的游览建议。`;
+      $("guideRouteDescription").textContent = `告诉${name}你的时间、兴趣和同行情况，生成一条可落地的游览路线。`;
       $("guideVisionDescription").textContent = `拍下眼前的建筑、雕塑或景色，${name}会接着为你讲解。`;
       $("modelLoading").querySelector("span:last-child").textContent = `${name}正在准备…`;
       ["liveTalkingVideo", "xmovMount", "live2dCanvas"].forEach((id) => {
@@ -961,15 +1069,44 @@
       document.title = `${name} · AI数字人导览`;
     }
 
-    async function refreshAvatarProfile() {
-      try {
-        const response = await fetch(base() + "/v1/avatar", { cache: "no-store" });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
-        applyGuideName(data.display_name);
-      } catch (error) {
-        console.warn("avatar profile unavailable; keeping the built-in display name", error);
+    let avatarPresentationMode = "gpu_video";
+    let avatarPresentationPromise = null;
+
+    function updateAvatarPresentationStatus(message = "") {
+      const target = $("avatarPresentationStatus");
+      if (!target) return;
+      if (message) {
+        target.textContent = message;
+        return;
       }
+      target.textContent = avatarPresentationMode === "light_2d"
+        ? "当前由后台配置为轻量 2D 数字人（无需 GPU）"
+        : "当前由后台配置为 GPU 视频数字人（LiveTalking）";
+    }
+
+    async function loadAvatarPresentationMode() {
+      if (!avatarPresentationPromise) {
+        avatarPresentationPromise = fetch(base() + "/v1/avatar", { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            const data = await response.json();
+            avatarPresentationMode = data.presentation_mode === "light_2d" ? "light_2d" : "gpu_video";
+            applyGuideName(data.display_name);
+            updateAvatarPresentationStatus();
+            return data;
+          })
+          .catch((error) => {
+            console.warn("avatar profile unavailable; using GPU-first fallback", error);
+            avatarPresentationMode = "gpu_video";
+            updateAvatarPresentationStatus("后台配置暂时不可用，按 GPU 视频数字人优先运行");
+            return null;
+          });
+      }
+      return avatarPresentationPromise;
+    }
+
+    async function refreshAvatarProfile() {
+      await loadAvatarPresentationMode();
     }
 
     async function ensureAttractionCatalog() {
@@ -1015,9 +1152,6 @@
       tone: "自然、清晰", prefix: "",
     };
     let currentAvatarReaction = { ...DEFAULT_AVATAR_REACTION };
-    let avatarMode = localStorage.getItem("lingshan-avatar-mode") || "realtime";
-    if (avatarMode !== "expressive") avatarMode = "realtime";
-    $("avatarMode").value = avatarMode;
     let liveTalkingStartPromise = null;
     let liveTalkingServiceStartPromise = null;
 
@@ -1151,8 +1285,8 @@
 
 
     function activateLiveTalkingView() {
-      if (avatarMode === "expressive") {
-        fallbackToLive2D("情感表情模式已启用");
+      if (avatarPresentationMode === "light_2d") {
+        fallbackToLive2D("轻量 2D 数字人已启用");
         return;
       }
       document.getElementById("modelLoading").classList.add("is-hidden");
@@ -1166,6 +1300,9 @@
       document.getElementById("liveTalkingVideo").classList.remove("is-active");
       document.getElementById("live2dCanvas").classList.remove("is-hidden");
       document.getElementById("avatarHint").textContent = message || `${activeGuideName}已准备好`;
+      if (avatarPresentationMode === "gpu_video" && message && /GPU|LiveTalking/.test(message)) {
+        updateAvatarPresentationStatus("GPU 视频数字人暂不可用，已自动降级到轻量 2D 数字人");
+      }
       void bootLive2D();
     }
 
@@ -1194,8 +1331,9 @@
     }
 
     async function bootLiveTalking() {
-      if (avatarMode === "expressive") {
-        fallbackToLive2D("情感表情模式已启用");
+      await loadAvatarPresentationMode();
+      if (avatarPresentationMode === "light_2d") {
+        fallbackToLive2D("轻量 2D 数字人已启用");
         await bootLive2D();
         return false;
       }
@@ -1261,7 +1399,7 @@
             rejectConnected(new Error("LiveTalking WebRTC 连接失败"));
           } else if (state === "disconnected" || state === "closed") {
             liveTalkingState.ready = false;
-            fallbackToLive2D("连接暂时中断，已切换到轻量模式");
+            fallbackToLive2D("GPU 服务连接中断，已切换轻量 2D 模式");
           }
         });
 
@@ -1317,7 +1455,7 @@
             body: JSON.stringify({ session_id: failedSessionId }),
           }).catch(() => {});
         }
-        fallbackToLive2D(`${activeGuideName}暂时无法连接，已切换到轻量模式`);
+        fallbackToLive2D(`${activeGuideName}暂时无法连接 GPU 服务，已切换轻量 2D 模式`);
         await bootLive2D();
         return false;
       } finally {
@@ -1339,8 +1477,9 @@
     }
 
     async function ensureLiveTalkingOnDemand() {
-      if (avatarMode === "expressive") {
-        fallbackToLive2D("情感表情模式已启用");
+      await loadAvatarPresentationMode();
+      if (avatarPresentationMode === "light_2d") {
+        fallbackToLive2D("轻量 2D 数字人已启用");
         await bootLive2D();
         return false;
       }
@@ -1542,20 +1681,6 @@
         }
       }
     }
-
-    $("avatarMode").addEventListener("change", async () => {
-      avatarMode = $("avatarMode").value === "expressive" ? "expressive" : "realtime";
-      localStorage.setItem("lingshan-avatar-mode", avatarMode);
-      stopSpeech();
-      if (avatarMode === "expressive") {
-        fallbackToLive2D("情感表情模式已启用");
-        await bootLive2D();
-        $("status").textContent = "已切换为情感表情模式：表情、口型与回应语速会联动";
-      } else {
-        $("status").textContent = "已切换为拟真口型模式，正在连接数字人…";
-        void ensureLiveTalkingOnDemand();
-      }
-    });
 
     function stripMeta(text) {
       let emotionVal = null;
@@ -2054,7 +2179,7 @@
     }
 
     function createSpeechPipeline(interactionStartedAt = performance.now(), options = {}) {
-      if (avatarMode !== "expressive" && liveTalkingState.ready && liveTalkingState.sessionId) {
+      if (liveTalkingState.ready && liveTalkingState.sessionId) {
         activateLiveTalkingView();
         return createLiveTalkingSpeechPipeline(interactionStartedAt, !!options.serverDriven, options.reaction);
       }
@@ -2127,7 +2252,7 @@
         await ensureLiveTalkingOnDemand();
       } catch (error) {
         console.error(error);
-        fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
+        fallbackToLive2D("GPU 服务不可用，已切换轻量 2D 模式");
       }
       const pipeline = createSpeechPipeline(interactionStartedAt, { reaction: currentAvatarReaction });
       pipeline.enqueue(text);
@@ -2145,7 +2270,7 @@
 
       const liveTalkingReadyPromise = ensureLiveTalkingOnDemand().catch(error => {
         console.error(error);
-        fallbackToLive2D("LiveTalking 启动失败，继续使用 Haru");
+        fallbackToLive2D("GPU 服务不可用，已切换轻量 2D 模式");
         return false;
       });
       $("status").textContent = "思考中…";
@@ -2215,7 +2340,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message,
-            interest: $("interest").value,
+            interest: ROUTE_INTEREST_LABELS[selectedRouteInterests()[0]] || "历史",
             session_id: sessionId,
             spot_id: spotId,
             livetalking_session_id: serverDrivenSpeech ? liveTalkingState.sessionId : null,
@@ -2308,20 +2433,200 @@
       });
     });
 
-    $("rec").onclick = async () => {
-      stopSpeech("请求推荐…");
-      $("status").textContent = "请求推荐…";
-      const r = await fetch(base() + "/v1/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interest: $("interest").value })
+    const ROUTE_INTEREST_LABELS = {
+      history: "历史文化",
+      nature: "自然风光",
+      family: "亲子体验",
+      photo: "拍照打卡",
+    };
+
+    function selectedRouteInterests() {
+      const values = [...document.querySelectorAll('input[name="routeInterest"]:checked')]
+        .map(input => input.value)
+        .filter(value => ROUTE_INTEREST_LABELS[value]);
+      return values.length ? values : ["history"];
+    }
+
+    function formatRouteDistance(value) {
+      const meters = Math.max(0, Number(value) || 0);
+      return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+    }
+
+    function refreshRouteStartOptions() {
+      const area = $("routeArea").value;
+      const points = routeMapPoints.filter(point => String(point.spot_id || "").startsWith(area + "-"));
+      const previous = $("routeStart").value;
+      $("routeStart").replaceChildren();
+      const automatic = document.createElement("option");
+      automatic.value = "";
+      automatic.textContent = "按景区入口规划";
+      $("routeStart").appendChild(automatic);
+      points.forEach(point => {
+        const option = document.createElement("option");
+        option.value = point.spot_id;
+        option.textContent = `${point.spot_name}${point.survey_status === "field-verified" ? " · 实测点位" : " · 公开近似点"}`;
+        $("routeStart").appendChild(option);
       });
-      const data = await r.json();
-      const route = data.route;
-      const text = `为您推荐「${route.name}」，约 ${route.duration_hours} 小时。${route.summary}途经：${route.stops.join(" → ")}。`;
-      $("log").textContent = text;
-      setEmotion("smile");
-      void speak(text);
+      const confirmedId = confirmedLocation?.spot_id || confirmedLocation?.attraction_id;
+      if (confirmedId && points.some(point => point.spot_id === confirmedId)) {
+        $("routeStart").value = confirmedId;
+      } else if (points.some(point => point.spot_id === previous)) {
+        $("routeStart").value = previous;
+      }
+      $("routeLocationHint").textContent = points.length
+        ? `${area === "LS" ? "灵山胜境" : "拈花湾禅意小镇"}当前有 ${points.length} 个可核验地图点位；路线线条表示游览顺序。`
+        : "该景区暂未配置可核验地图点位，暂时无法生成地图路线。";
+      if (confirmedLocation?.spot_name && confirmedId && points.some(point => point.spot_id === confirmedId)) {
+        $("routeLocationHint").textContent += ` 已采用已确认位置：${confirmedLocation.spot_name}。`;
+      }
+    }
+
+    function renderRouteMap(route) {
+      if (routeMap) {
+        routeMap.remove();
+        routeMap = null;
+      }
+      const stops = (route.stops || []).filter(stop =>
+        Number.isFinite(Number(stop.map_lat ?? stop.lat)) && Number.isFinite(Number(stop.map_lng ?? stop.lng))
+      );
+      if (!stops.length || !window.L) {
+        $("routeMapNote").textContent = "当前路线没有可绘制的来源坐标。";
+        return;
+      }
+      routeMap = L.map("routeMap", { scrollWheelZoom: false, attributionControl: true });
+      const tileLayer = L.tileLayer(route.map?.tile_url || "https://webrd0{s}.is.autonavi.com/appmaptile?style=7&x={x}&y={y}&z={z}", {
+        maxZoom: 19,
+        subdomains: ["1", "2", "3", "4"],
+        attribution: "© 高德地图",
+      }).addTo(routeMap);
+      let tileErrorShown = false;
+      tileLayer.on("tileerror", () => {
+        if (tileErrorShown) return;
+        tileErrorShown = true;
+        $("routeMapNote").textContent = "高德地图底图暂时无法加载；下方仍保留路线顺序和步行导航链接。";
+      });
+      const latLngs = stops.map(stop => [Number(stop.map_lat ?? stop.lat), Number(stop.map_lng ?? stop.lng)]);
+      stops.forEach((stop, index) => {
+        const marker = L.marker(latLngs[index], {
+          icon: L.divIcon({ className: "route-map-marker", html: `<span>${index + 1}</span>`, iconSize: [28, 28], iconAnchor: [14, 14] }),
+        }).addTo(routeMap);
+        marker.bindPopup(`${index + 1}. ${stop.spot_name}`);
+      });
+      if (latLngs.length > 1) {
+        L.polyline(latLngs, { color: "#b94338", weight: 3, opacity: .85, dashArray: "7 7" }).addTo(routeMap);
+      }
+      const bounds = L.latLngBounds(latLngs);
+      routeMap.fitBounds(bounds, { padding: [24, 24], maxZoom: latLngs.length === 1 ? 16 : 15 });
+      setTimeout(() => routeMap?.invalidateSize(), 0);
+      $("routeMapNote").textContent = route.map?.coverage_note || "地图线条表示游览顺序，不替代园内步行道路导航。";
+    }
+
+    function renderRouteResult(route) {
+      $("routeResult").hidden = false;
+      $("routeName").textContent = route.name || "个性化游览路线";
+      $("routeSummary").textContent = route.summary || "已根据当前偏好生成路线。";
+      $("routePlannedTime").textContent = `${route.planned_minutes || 0} 分钟`;
+      $("routeStopCount").textContent = `${(route.stops || []).length} 站`;
+      $("routeWalkDistance").textContent = formatRouteDistance(route.walking_distance_m);
+      $("routeWalkTime").textContent = `${route.walk_minutes || 0} 分钟`;
+      const timeline = $("routeTimeline");
+      timeline.replaceChildren();
+      (route.stops || []).forEach((stop, index) => {
+        const item = document.createElement("article");
+        item.className = "route-stop";
+        const number = document.createElement("div");
+        number.className = "route-stop-index";
+        number.textContent = String(index + 1);
+        const main = document.createElement("div");
+        main.className = "route-stop-main";
+        const title = document.createElement("strong");
+        title.textContent = stop.spot_name || stop.spot_id || "景点";
+        const detail = document.createElement("p");
+        const walk = index ? ` · 从上一站步行约 ${stop.walk_minutes || 0} 分钟（${formatRouteDistance(stop.distance_from_previous_m)}）` : " · 起点";
+        detail.textContent = `建议停留 ${stop.visit_minutes || 0} 分钟${walk}`;
+        main.append(title, detail);
+        if (stop.note) {
+          const note = document.createElement("p");
+          note.textContent = stop.note;
+          main.appendChild(note);
+        }
+        const reasons = document.createElement("div");
+        reasons.className = "route-reasons";
+        (stop.reasons || []).forEach(reason => {
+          const tag = document.createElement("span");
+          tag.textContent = reason;
+          reasons.appendChild(tag);
+        });
+        main.appendChild(reasons);
+        item.append(number, main);
+        if (stop.navigation_url) {
+          const link = document.createElement("a");
+          link.className = "route-nav-link";
+          link.href = stop.navigation_url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "步行导航 ↗";
+          item.appendChild(link);
+        }
+        timeline.appendChild(item);
+      });
+      const warnings = $("routeWarnings");
+      warnings.replaceChildren();
+      (route.warnings || []).forEach(message => {
+        const warning = document.createElement("div");
+        warning.className = "route-warning";
+        warning.textContent = message;
+        warnings.appendChild(warning);
+      });
+      renderRouteMap(route);
+    }
+
+    $("routeArea").addEventListener("change", refreshRouteStartOptions);
+    document.querySelectorAll("[data-route-duration]").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("[data-route-duration]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+      });
+    });
+
+    $("rec").onclick = async () => {
+      const button = $("rec");
+      const interests = selectedRouteInterests();
+      const durationButton = document.querySelector('[data-route-duration][aria-pressed="true"]');
+      const payload = {
+        scenic_area: $("routeArea").value,
+        duration_hours: Number(durationButton?.dataset.routeDuration || 4),
+        interests,
+        interest: interests[0],
+        party: $("routeParty").value,
+        mobility: $("routeMobility").value,
+        start_spot_id: $("routeStart").value || null,
+      };
+      stopSpeech("正在规划个性化路线…");
+      button.disabled = true;
+      $("status").textContent = "正在规划个性化路线…";
+      try {
+        const response = await fetch(base() + "/v1/recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || "路线规划失败，请稍后重试");
+        if (!data.route) throw new Error("路线服务未返回可用结果");
+        const route = data.route;
+        renderRouteResult(route);
+        const stopNames = (route.stops || []).map(stop => stop.spot_name).filter(Boolean).join("、");
+        const spoken = `${route.summary || "已为你生成个性化路线。"}${stopNames ? ` 途经：${stopNames}。` : ""}`;
+        $("log").textContent = spoken;
+        $("status").textContent = `路线已生成 · ${route.mobility_label || "按当前偏好"}`;
+        setEmotion("smile");
+        void speak(spoken);
+      } catch (error) {
+        $("status").textContent = "路线规划失败";
+        $("log").textContent = String(error.message || error);
+      } finally {
+        button.disabled = false;
+      }
     };
 
     // ---------- Voice input ----------
@@ -2559,8 +2864,9 @@
       const form = new FormData();
       form.append("file", file);
       if (sessionId) form.append("session_id", sessionId);
-      if (locationCandidate?.attraction_id || locationCandidate?.spot_id) {
-        form.append("spot_id", locationCandidate.attraction_id || locationCandidate.spot_id);
+      const knownLocation = confirmedLocation || locationCandidate;
+      if (knownLocation?.attraction_id || knownLocation?.spot_id) {
+        form.append("spot_id", knownLocation.attraction_id || knownLocation.spot_id);
       }
       const question = $("q").value.trim() || "这是哪个景点？请为我讲解。";
       try {
@@ -2618,6 +2924,7 @@
         if (!response.ok) throw new Error(await response.text());
         const data = await response.json();
         const points = data.points || [];
+        routeMapPoints = data.map_points || [];
         const wifiNodes = data.wifi_nodes || [];
         if (points.length) {
           $("manualSpot").replaceChildren();
@@ -2637,8 +2944,10 @@
             $("wifiNode").appendChild(option);
           }
         }
+        refreshRouteStartOptions();
       } catch (error) {
         console.warn("location point registry unavailable", error);
+        refreshRouteStartOptions();
       }
     }
 
@@ -2722,6 +3031,10 @@
     async function handleLocationResult(data) {
       const confirmable = Boolean(data.spot_name && data.requires_confirmation);
       locationCandidate = confirmable ? data : null;
+      if (data.resolved && !data.requires_confirmation) {
+        confirmedLocation = data;
+        refreshRouteStartOptions();
+      }
       $("useLocationCandidate").hidden = true;
       if (data.resolved && !data.requires_confirmation) {
         const detail = data.accuracy_m ? `，精度约 ${data.accuracy_m} 米` : "";

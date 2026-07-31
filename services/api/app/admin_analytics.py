@@ -310,7 +310,7 @@ def build_overview(
     if route_topic and route_topic["count"]:
         add_suggestion(
             "强化定位引导",
-            f"最近 {route_topic['count']} 次咨询涉及路线或定位，可在入口强化分众路线和二维码定位提示。",
+            f"最近 {route_topic['count']} 次咨询涉及路线或定位，可在入口强化分众路线和手动/Wi-Fi 定位提示。",
             sample_count=route_topic["count"],
             severity="low",
             evidence=[f"路线/定位咨询 {route_topic['count']} 次"],

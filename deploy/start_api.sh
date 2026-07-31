@@ -26,6 +26,10 @@ API_SSL_BACKEND_PORT="${API_SSL_BACKEND_PORT:-9443}"
 ADMIN_SSL_PORT="${ADMIN_SSL_PORT:-8444}"
 ADMIN_HTTP_PORT="${ADMIN_HTTP_PORT:-8011}"
 UVICORN_KEEP_ALIVE="${UVICORN_KEEP_ALIVE:-3600}"
+if [[ -z "${MAP_TILE_UPSTREAM_PROXY:-}" ]]; then
+  MAP_TILE_UPSTREAM_PROXY="${HTTPS_PROXY:-${https_proxy:-http://127.0.0.1:7890}}"
+fi
+export MAP_TILE_UPSTREAM_PROXY
 
 # Validate public security settings before stopping a healthy deployment.
 admin_password="${ADMIN_PASSWORD:-}"

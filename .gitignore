@@ -47,6 +47,7 @@ venv/
 data/**/*.db
 data/**/.admin_session_secret
 data/**/*_cache.json
+data/lingshan/map_tile_cache/
 
 # local model weights (too large for GitHub)
 model/

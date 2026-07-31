@@ -466,6 +466,13 @@
           <div class="form-grid">
             <label>数字人称呼<input id="displayName" required maxlength="30" /></label>
             <label>合成声音<select id="voiceName"></select></label>
+            <label>数字人运行模式
+              <select id="presentationMode">
+                <option value="gpu_video">GPU 视频数字人（LiveTalking）</option>
+                <option value="light_2d">轻量 2D 数字人（无需 GPU）</option>
+              </select>
+              <span class="avatar-help">游客端不能切换此项；保存后对新会话生效。GPU 服务不可用时，系统会自动降级到轻量 2D 数字人。</span>
+            </label>
             <div class="field-wide avatar-field"><span class="field-label">数字人形象</span>
               <input id="avatarId" type="hidden" />
               <div class="avatar-choices" id="avatarChoices" role="radiogroup" aria-label="数字人形象"></div>
@@ -668,10 +675,10 @@
     document.querySelectorAll(".avatar-choice").forEach(button=>button.onclick=()=>selectAvatar(button.dataset.avatar));
     selectAvatar(avatarCatalog.some(item=>item.id===selectedId)?selectedId:avatarCatalog[0]?.id||selectedId);
   }
-  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; renderAvatarChoices(s.avatar_id); $("voiceName").innerHTML=data.available_voices.map(x=>`<option ${x===s.voice?"selected":""}>${escapeHtml(x)}</option>`).join("");}catch(error){notify(error.message,true);} }
+  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; $("presentationMode").value=s.presentation_mode||"gpu_video"; renderAvatarChoices(s.avatar_id); $("voiceName").innerHTML=data.available_voices.map(x=>`<option ${x===s.voice?"selected":""}>${escapeHtml(x)}</option>`).join("");}catch(error){notify(error.message,true);} }
 
   $("uploadKb").onclick=async()=>{const file=$("kbFile").files[0]; if(!file)return notify("请先选择 DOCX、TXT 或 Markdown 文件",true); const fd=new FormData();fd.append("file",file); $("uploadKb").disabled=true;$("uploadKb").textContent="构建中…";try{const data=await api("/v1/admin/kb/documents",{method:"POST",body:fd});notify(`知识库更新完成：${data.chunks} 个片段`);$("kbFile").value="";await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);}finally{$("uploadKb").disabled=false;$("uploadKb").textContent="上传并构建";}};
-  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
+  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value,presentation_mode:$("presentationMode").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;$("presentationMode").value=data.settings.presentation_mode||$("presentationMode").value;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
   $("displayName").oninput=()=>$("avatarPreviewName").textContent=$("displayName").value||"灵山小向导";
   $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
   $("logout").onclick=async()=>{try{await fetch("/v1/admin/auth/logout",{method:"POST"});}finally{location.replace("/login");}};

@@ -203,16 +203,42 @@ def _qr_points() -> dict[str, dict[str, str]]:
     return points
 
 
+def routable_map_points() -> list[dict[str, Any]]:
+    """Return only attraction anchors that are safe to draw on a real map."""
+    published = _qr_points()
+    points: list[dict[str, Any]] = []
+    for spot_id, anchor in SPOT_ANCHORS.items():
+        attraction = published.get(spot_id)
+        if not attraction:
+            continue
+        points.append(
+            {
+                **attraction,
+                "lat": float(anchor["lat"]),
+                "lng": float(anchor["lng"]),
+                "coordinate_system": anchor.get("coordinate_system", "WGS-84"),
+                "survey_status": anchor.get("survey_status", "operator-configured"),
+                "source": anchor.get("source"),
+                "source_url": anchor.get("source_url"),
+                "estimated_accuracy_m": anchor.get("estimated_accuracy_m"),
+            }
+        )
+    return sorted(points, key=lambda item: item["spot_id"])
+
+
 def location_options() -> dict[str, Any]:
     points = _qr_points()
     published = [value for key, value in points.items() if key == value["attraction_id"]]
+    map_points = routable_map_points()
     return {
         "points": sorted(published, key=lambda item: item["spot_id"]),
+        "map_points": map_points,
         "wifi_nodes": [
             {"code": code, "name": node["name"], "spot_id": node["spot_id"]}
             for code, node in WIFI_ANCHORS.items()
         ],
         "gps_anchor_count": len(SPOT_ANCHORS),
+        "map_point_count": len(map_points),
         "location_config_mode": LOCATION_CONFIG_MODE,
         "gps_coverage_note": (
             "定位结果为候选，需要确认。当前 GPS 配置了"

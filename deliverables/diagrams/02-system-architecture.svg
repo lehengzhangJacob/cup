@@ -4,6 +4,7 @@
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#173D34"/></marker>
   <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#B75538"/></marker>
+  <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52645E"/></marker>
   <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#173D34" flood-opacity="0.12"/></filter>
   <style>
     text { font-family: "Noto Sans CJK SC", "Noto Sans CJK JP", "Droid Sans Fallback", sans-serif; fill: #173D34; }
@@ -14,7 +15,9 @@
     .small { font-size: 16px; fill: #52645E; }
     .tiny { font-size: 14px; fill: #52645E; }
     .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 16px; }
-    .connector { stroke: #173D34; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    .connector { stroke: #173D34; stroke-width: 2.5; fill: none; marker-end: url(#arrow); stroke-linecap: round; stroke-linejoin: round; }
+    .data-connector { stroke: #52645E; stroke-width: 2; fill: none; marker-end: url(#arrow-muted); stroke-dasharray: 7 6; stroke-linecap: round; stroke-linejoin: round; }
+    .feedback-connector { stroke: #B75538; stroke-width: 2.2; fill: none; marker-end: url(#arrow-accent); stroke-dasharray: 9 8; stroke-linecap: round; stroke-linejoin: round; }
     .association { stroke: #52645E; stroke-width: 2; fill: none; }
     .dashed { stroke: #52645E; stroke-width: 2; stroke-dasharray: 9 8; fill: none; }
   </style>
@@ -30,19 +33,29 @@
 <text x="82" y="559" class="small" text-anchor="start">智能服务层</text>
 <rect x="55" y="765" width="1340" height="210" rx="22" fill="#EDF1F3" fill-opacity="0.46" stroke="#B9C7C1" stroke-width="1.5"/>
 <text x="82" y="799" class="small" text-anchor="start">数据与资源层</text>
-<polyline points="365,250 365,350" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1085,250 1085,350" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="365,465 365,505 245,505 245,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="365,465 365,505 565,505 565,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="365,465 365,505 885,505 885,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1085,465 1085,505 885,505 885,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1085,465 1085,505 1205,505 1205,560" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="245,690 245,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="885,690 885,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1205,690 1205,740 885,740 885,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="365,465 400,465 400,750 565,750 565,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1085,465 1050,465 1050,750 565,750 565,810" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
-<polyline points="1205,810 1345,810 1345,505 1085,505" fill="none" stroke="#173D34" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="9 8" marker-end="url(#arrow)"/>
+<!-- 连线采用独立端口和正交路径，避免共享线段、反向重叠与节点穿越。 -->
+<g id="connectors" aria-label="系统组件连线">
+  <!-- 接入层 → 网关与业务层 -->
+  <path class="connector" d="M365 250 V350"/>
+  <path class="connector" d="M1085 250 V350"/>
+
+  <!-- 网关与业务层 → 智能服务层；每条关系使用独立端口。 -->
+  <path class="connector" d="M245 465 V560"/>
+  <path class="connector" d="M485 465 V560"/>
+  <path class="connector" d="M545 465 V510 H805 V560"/>
+  <path class="connector" d="M965 465 V560"/>
+  <path class="connector" d="M1205 465 V560"/>
+
+  <!-- 数据读写使用灰色虚线，并从服务卡片之间的留白通道下行。 -->
+  <path class="data-connector" d="M405 465 V735 H515 V810"/>
+  <path class="data-connector" d="M1045 465 V745 H615 V810"/>
+  <path class="data-connector" d="M245 690 V810"/>
+  <path class="data-connector" d="M805 690 V810"/>
+  <path class="data-connector" d="M1125 690 V755 H965 V810"/>
+
+  <!-- 历史数据回流从右侧专用通道返回管理服务。 -->
+  <path class="feedback-connector" d="M1345 882 H1370 V407 H1290"/>
+</g>
 <rect x="160" y="170" width="410" height="80" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="365.0" y="208" class="label" text-anchor="middle">游客浏览器 / Android App</text><text x="365.0" y="242" class="small" text-anchor="middle"><tspan x="365.0" dy="0">文字 · 麦克风 · 图片 · 兴趣 · 位置</tspan></text>
 <rect x="880" y="170" width="410" height="80" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="1085.0" y="208" class="label" text-anchor="middle">景区管理后台</text><text x="1085.0" y="242" class="small" text-anchor="middle"><tspan x="1085.0" dy="0">知识库 · 数字人配置 · 数据 · 报告</tspan></text>
 <rect x="160" y="350" width="410" height="115" rx="18" fill="#FFFFFF" stroke="#B9C7C1" stroke-width="2" filter="url(#shadow)"/><text x="365.0" y="388" class="label" text-anchor="middle">FastAPI 导览网关</text><text x="365.0" y="422" class="small" text-anchor="middle"><tspan x="365.0" dy="0">HTTPS / SSE / WebRTC 代理</tspan><tspan x="365.0" dy="24">会话、路线、定位、反馈</tspan></text>

@@ -29,7 +29,7 @@ def test_weak_gps_returns_candidate_without_claiming_resolution():
     assert result["reason"] == "weak_signal"
     assert result["spot_id"] == "LS-006"
     assert result["requires_confirmation"] is True
-    assert [item["mode"] for item in result["fallbacks"]] == ["qr", "wifi", "manual"]
+    assert [item["mode"] for item in result["fallbacks"]] == ["wifi", "manual"]
 
 
 def test_stale_gps_is_not_trusted():
@@ -72,26 +72,25 @@ def test_far_away_stale_gps_is_not_confirmable_either():
     assert result["requires_confirmation"] is False
 
 
-def test_unknown_qr_and_wifi_nodes_do_not_false_positive():
-    assert resolve_location("qr", code="BAD-CODE")["resolved"] is False
+def test_unknown_wifi_nodes_do_not_false_positive():
     assert resolve_location("wifi", code="BAD-NODE")["resolved"] is False
+    assert resolve_location("qr", code="LS-006")["resolved"] is False
 
 
-def test_qr_wifi_and_manual_fallbacks_resolve():
-    assert resolve_location("qr", code="ls-006")["spot_name"] == "九龙灌浴"
+def test_wifi_and_manual_fallbacks_resolve():
     assert resolve_location("wifi", code="LS-WIFI-BRAHMA")["confidence"] == "medium"
     manual = resolve_location("manual", spot_name="五印坛城")
     assert manual["resolved"] is True
     assert manual["confidence"] == "user_confirmed"
 
 
-def test_complete_qr_registry_covers_lingshan_and_nianhuawan_children():
+def test_point_registry_covers_lingshan_and_nianhuawan_children():
     options = location_options()
     codes = {item["spot_id"] for item in options["points"]}
 
     assert "LS-011" in codes
     assert "NH-006" in codes
-    assert resolve_location("qr", code="NH-006")["spot_name"] == "鹿鸣谷"
+    assert resolve_location("manual", spot_name="鹿鸣谷")["spot_id"] == "NH-006"
 
 
 def test_public_catalog_includes_traceable_lingshan_and_nianhuawan_anchors():

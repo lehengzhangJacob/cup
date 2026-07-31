@@ -165,17 +165,20 @@ def build_architecture() -> str:
         [
             polyline([(365, 250), (365, 350)], arrow=True),
             polyline([(1085, 250), (1085, 350)], arrow=True),
-            polyline([(365, 465), (365, 505), (245, 505), (245, 560)], arrow=True),
-            polyline([(365, 465), (365, 505), (565, 505), (565, 560)], arrow=True),
-            polyline([(365, 465), (365, 505), (885, 505), (885, 560)], arrow=True),
-            polyline([(1085, 465), (1085, 505), (885, 505), (885, 560)], arrow=True),
-            polyline([(1085, 465), (1085, 505), (1205, 505), (1205, 560)], arrow=True),
-            polyline([(245, 690), (245, 810)], arrow=True),
-            polyline([(885, 690), (885, 810)], arrow=True),
-            polyline([(1205, 690), (1205, 740), (885, 740), (885, 810)], arrow=True),
-            polyline([(365, 465), (400, 465), (400, 750), (565, 750), (565, 810)], arrow=True),
-            polyline([(1085, 465), (1050, 465), (1050, 750), (565, 750), (565, 810)], arrow=True),
-            polyline([(1205, 810), (1345, 810), (1345, 505), (1085, 505)], arrow=True, dashed=True),
+            # Independent service ports avoid the shared y=505 bus.
+            polyline([(245, 465), (245, 560)], arrow=True),
+            polyline([(485, 465), (485, 560)], arrow=True),
+            polyline([(545, 465), (545, 510), (805, 510), (805, 560)], arrow=True),
+            polyline([(965, 465), (965, 560)], arrow=True),
+            polyline([(1205, 465), (1205, 560)], arrow=True),
+            # Data flows use the blank channels between service cards.
+            polyline([(405, 465), (405, 735), (515, 735), (515, 810)], arrow=True, dashed=True),
+            polyline([(1045, 465), (1045, 745), (615, 745), (615, 810)], arrow=True, dashed=True),
+            polyline([(245, 690), (245, 810)], arrow=True, dashed=True),
+            polyline([(805, 690), (805, 810)], arrow=True, dashed=True),
+            polyline([(1125, 690), (1125, 755), (965, 755), (965, 810)], arrow=True, dashed=True),
+            # Historical data returns through the right-side feedback corridor.
+            polyline([(1345, 882), (1370, 882), (1370, 407), (1290, 407)], arrow=True, dashed=True, accent=True),
             architecture_box(160, 170, 410, 80, "游客浏览器 / Android App", ["文字 · 麦克风 · 图片 · 兴趣 · 位置"], WHITE),
             architecture_box(880, 170, 410, 80, "景区管理后台", ["知识库 · 数字人配置 · 数据 · 报告"], WHITE),
             architecture_box(160, 350, 410, 115, "FastAPI 导览网关", ["HTTPS / SSE / WebRTC 代理", "会话、路线、定位、反馈"], WHITE),
@@ -278,26 +281,29 @@ def build_er() -> str:
     ]
     items.extend(
         [
-            polyline([(750, 245), (245, 245), (245, 300)], dashed=True, arrow=False),
-            polyline([(750, 245), (750, 300)], dashed=True, arrow=False),
-            polyline([(750, 245), (1250, 245), (1250, 300)], dashed=True, arrow=False),
-            polyline([(1090, 520), (1020, 520), (1020, 620), (920, 620)], arrow=False),
-            polyline([(1090, 600), (990, 600), (990, 760), (920, 760)], arrow=False),
-            polyline([(410, 1155), (585, 1155)], arrow=False),
-            polyline([(410, 1195), (500, 1195), (500, 1015), (1025, 1015), (1025, 1155), (1090, 1155)], arrow=False),
-            relationship_label(245, 265, "0..N"),
-            relationship_label(750, 265, "0..N"),
-            relationship_label(1250, 265, "0..N"),
-            relationship_label(1048, 520, "0..N"),
-            relationship_label(990, 680, "1 : N"),
-            relationship_label(500, 1155, "1 : N"),
-            relationship_label(1025, 1195, "1 : N"),
+            # Independent session ports leave a visible relationship corridor.
+            polyline([(650, 295), (650, 312), (245, 312), (245, 330)], dashed=True, arrow=False),
+            polyline([(750, 295), (750, 330)], dashed=True, arrow=False),
+            polyline([(850, 295), (850, 312), (1250, 312), (1250, 330)], dashed=True, arrow=False),
+            # Feedback relations start on their FK rows and terminate on PK rows.
+            polyline([(1090, 491), (1020, 491), (1020, 401), (915, 401)], arrow=False),
+            polyline([(1090, 461), (990, 461), (990, 721), (920, 721)], arrow=False),
+            # Historical import relations use the inter-card gap and lower corridor.
+            polyline([(410, 1131), (585, 1131)], arrow=False),
+            polyline([(245, 1270), (245, 1380), (1255, 1380), (1255, 1270)], arrow=False),
+            relationship_label(245, 317, "0..N"),
+            relationship_label(750, 317, "0..N"),
+            relationship_label(1250, 317, "0..N"),
+            relationship_label(1020, 449, "0..N"),
+            relationship_label(990, 599, "1 : N"),
+            relationship_label(497, 1135, "1 : N"),
+            relationship_label(755, 1383, "1 : N"),
         ]
     )
     logical_session, _ = entity_box(585, 175, 330, "session_id（逻辑会话键）", [("", "无独立会话表"), ("", "由应用层关联")], PALE_GOLD)
-    chat_logs, _ = entity_box(80, 300, 330, "chat_logs", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("", "role TEXT"), ("", "content TEXT"), ("", "meta JSON/TEXT"), ("", "created_at TEXT")])
-    emotion_events, _ = entity_box(585, 300, 330, "emotion_events", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("", "source / transcript"), ("", "emotion_label / scores"), ("", "sentiment / valence"), ("", "aspects JSON/TEXT"), ("", "status / model_name"), ("", "created_at / completed_at")])
-    feedback, _ = entity_box(1090, 300, 330, "feedback", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("FK*", "attraction_id TEXT"), ("FK*", "emotion_event_id TEXT"), ("", "rating INTEGER"), ("", "comment / sentiment"), ("", "created_at TEXT")])
+    chat_logs, _ = entity_box(80, 330, 330, "chat_logs", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("", "role TEXT"), ("", "content TEXT"), ("", "meta JSON/TEXT"), ("", "created_at TEXT")])
+    emotion_events, _ = entity_box(585, 330, 330, "emotion_events", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("", "source / transcript"), ("", "emotion_label / scores"), ("", "sentiment / valence"), ("", "aspects JSON/TEXT"), ("", "status / model_name"), ("", "created_at / completed_at")])
+    feedback, _ = entity_box(1090, 330, 330, "feedback", [("PK", "id TEXT"), ("AK*", "session_id TEXT"), ("FK*", "attraction_id TEXT"), ("FK*", "emotion_event_id TEXT"), ("", "rating INTEGER"), ("", "comment / sentiment"), ("", "created_at TEXT")])
     avatar, _ = entity_box(80, 650, 330, "avatar_settings", [("PK", "id = 1"), ("", "display_name TEXT"), ("", "avatar_id TEXT"), ("", "voice TEXT"), ("", "expression TEXT"), ("", "updated_at TEXT")], PALE_GOLD)
     attractions, _ = entity_box(585, 650, 335, "attractions", [("PK", "id TEXT"), ("", "scenic_area_id TEXT"), ("", "scenic_area TEXT"), ("", "attraction_name TEXT"), ("", "is_overall INTEGER"), ("", "source_document TEXT")], PALE_GOLD)
     imports, _ = entity_box(80, 1060, 330, "dataset_imports", [("PK", "source_file TEXT"), ("", "source_path TEXT"), ("", "source_signature TEXT"), ("", "row_count INTEGER"), ("", "imported_at TEXT")], PALE_GOLD)

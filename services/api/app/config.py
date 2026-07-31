@@ -100,6 +100,18 @@ ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", "").strip()
 ADMIN_SESSION_TTL_SECONDS = int(os.getenv("ADMIN_SESSION_TTL_SECONDS", str(8 * 60 * 60)))
 PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "").strip().rstrip("/")
 PUBLIC_ADMIN_URL = os.getenv("PUBLIC_ADMIN_URL", "").strip().rstrip("/")
+MAP_TILE_UPSTREAM_URL = os.getenv(
+    "MAP_TILE_UPSTREAM_URL",
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+).strip()
+MAP_TILE_UPSTREAM_PROXY = os.getenv("MAP_TILE_UPSTREAM_PROXY", "").strip()
+MAP_TILE_CACHE_DIR = Path(
+    os.getenv("MAP_TILE_CACHE_DIR", str(DATA_DIR / "map_tile_cache"))
+).expanduser()
+MAP_TILE_USER_AGENT = os.getenv(
+    "MAP_TILE_USER_AGENT",
+    f"LingshanGuide/1.0 (+{PUBLIC_APP_URL or 'https://lingshanguide.de5.net'})",
+).strip()
 
 
 def _build_admin_allowed_origins() -> list[str]:

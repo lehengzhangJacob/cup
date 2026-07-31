@@ -208,8 +208,10 @@ curl -ksS https://127.0.0.1:8444/v1/admin/emotion/status  # 该接口需先登�
 | GET | `/v1/xmov/config` | XMOV 浏览器配置状态（显式开启才返回凭据） |
 | POST | `/v1/asr` | 智谱语音识别，上传音频文件 |
 | GET | `/v1/attractions` | DOCX 来源的景区与子景点评分目录 |
-| POST | `/v1/recommend` | 按兴趣推荐路线 |
-| POST | `/v1/locate` | 多源定位 gps/qr/wifi/manual，含精度、时效、置信度与降级提示 |
+| POST | `/v1/recommend` | 按景区、时长、兴趣、人群、步行偏好和起点生成地图路线 |
+| POST | `/v1/locate` | 多源定位 gps/wifi/manual，含精度、时效、置信度与降级提示 |
+| GET | `/v1/location/options` | 景点目录与具备来源的 WGS-84 地图点位 |
+| GET | `/v1/map/tiles/{z}/{x}/{y}.png` | 同源 OSM 瓦片代理；发送应用标识并按上游缓存头落盘缓存 |
 | POST | `/v1/vision/guide` | 上传图片导览 |
 | GET | `/v1/routes` | 路线列表 |
 | GET | `/v1/kb/stats` | 知识库状态 |
@@ -237,14 +239,27 @@ export ADMIN_SESSION_SECRET="请替换为至少 32 字节的随机值"
 
 ## GPS 弱信号与难定位方案
 
-首页“智能定位 / 弱信号”采用可解释的四级降级链：
+首页“智能定位 / 弱信号”采用可解释的三级降级链：
 
 1. GPS：联合校验浏览器上报的精度、位置时效、最近景点距离；低精度、过期或超出标定范围时只给候选点，不自动认定位置。
-2. 景点二维码：二维码携带固定点位码（例如 `/?spot=LS-006`），适合室内和建筑遮挡区域。
-3. 景区 Wi-Fi：由网关把接入点编号映射到景区区域，只提供区域级定位，并要求游客确认。
-4. 手动选择：作为始终可用的最终兜底，不依赖定位权限和无线信号。
+2. 景区 Wi-Fi：由网关把接入点编号映射到景区区域，只提供区域级定位，并要求游客确认。
+3. 手动选择：作为始终可用的最终兜底，不依赖定位权限和无线信号。
 
 接口会返回 `confidence`、`requires_confirmation`、`reason` 和 `fallbacks`，前端据此决定直接讲解、请求确认或显示降级入口。`app/location.py` 内坐标为演示标定点，生产部署应替换为景区审核的 WGS-84 点位，并由锐捷网关传入真实 AP 编号。
+
+## 地图底图代理
+
+游客页优先通过同源 `/v1/map/tiles/{z}/{x}/{y}.png` 加载 OSM 底图，避免客户端网络无法
+直连 `tile.openstreetmap.org`。服务端使用可识别的 User-Agent、页面 Referer 和本地磁盘缓存；
+代理失败时前端再尝试浏览器直连，最终仍失败则保留编号点位、游览顺序和文字行程。
+
+可配置：
+
+- `MAP_TILE_UPSTREAM_URL`：默认 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`。
+- `MAP_TILE_UPSTREAM_PROXY`：服务器访问瓦片上游时使用的 HTTP(S) 代理；当前启动脚本默认
+  采用已有代理环境变量，否则使用 `http://127.0.0.1:7890`。
+- `MAP_TILE_CACHE_DIR`：默认 `data/lingshan/map_tile_cache/`，属于运行时缓存，不提交 Git。
+- `MAP_TILE_USER_AGENT`：稳定的应用标识；默认包含 `PUBLIC_APP_URL`，生产环境可补充联系地址。
 
 ### 聊天示例
 
