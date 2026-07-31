@@ -88,7 +88,7 @@ def generation_error_message(exc: Exception, model_route: str) -> str:
     if any(marker in normalized for marker in _OOM_MARKERS):
         if model_route == "local":
             action = "请切换到“轻量本地 Qwen3-1.7B”或“云端 GLM”后重试"
-            label = "完整本地 Qwen2-7B"
+            label = "完整本地 Qwen3-8B"
         else:
             action = "请释放 GPU 显存，或切换到“云端 GLM”后重试"
             label = "轻量本地 Qwen3-1.7B"
@@ -102,7 +102,7 @@ def generation_error_message(exc: Exception, model_route: str) -> str:
         label = (
             "轻量本地 Qwen3-1.7B"
             if model_route == "local_lite"
-            else "完整本地 Qwen2-7B"
+            else "完整本地 Qwen3-8B"
         )
         action = (
             "请释放显存或改用云端 GLM"
@@ -125,7 +125,7 @@ def generation_error_message(exc: Exception, model_route: str) -> str:
         label = (
             "轻量本地 Qwen3-1.7B"
             if model_route == "local_lite"
-            else "完整本地 Qwen2-7B"
+            else "完整本地 Qwen3-8B"
         )
         return (
             f"{label}启动或推理失败，本次问答未完成。"
@@ -167,7 +167,7 @@ def create_app(
     app = FastAPI(
         title="灵山胜境 RAG Service",
         description=(
-            "BGE-M3 + FAISS retrieval with cloud GLM, full local Qwen2-7B, "
+            "BGE-M3 + FAISS retrieval with cloud GLM, full local Qwen3-8B, "
             "and lightweight local Qwen3-1.7B routes."
         ),
         version="1.0.0",
@@ -232,7 +232,7 @@ def create_app(
                     "uses_local_gpu": False,
                 },
                 "local": {
-                    "label": "完整本地 Qwen2-7B",
+                    "label": "完整本地 Qwen3-8B",
                     "model": Path(LOCAL_LLM_MODEL).name,
                     "ready": local_ready,
                     "uses_local_gpu": True,

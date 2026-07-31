@@ -81,9 +81,17 @@ from .location import (
     update_location_configuration,
 )
 from .rag_client import RAGClientError, rag
+from .local_speech import local_speech
 from .route_planner import plan_personalized_route
 from .speech_segments import SpeechSegmenter
+from .speech_text import normalize_asr_text
 from .tourism_analytics import compact_tourism_database, ensure_tourism_schema, tourism_analytics
+from .voice_profiles import (
+    DEFAULT_VOICE_PROFILE,
+    cloud_voice_id,
+    normalize_voice_profile,
+    public_voice_catalog,
+)
 from .vision_analysis import (
     decide_confidence,
     demote_after_error,
@@ -145,6 +153,7 @@ class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     voice: Optional[str] = None
     speed: float = 1.0
+    model_route: Literal["cloud", "local", "local_lite"] = "cloud"
 
 
 class LiveTalkingOfferRequest(BaseModel):
@@ -158,6 +167,7 @@ class LiveTalkingSpeakRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
     interrupt: bool = False
     speed: float = Field(1.0, ge=0.8, le=1.2)
+    model_route: Literal["cloud", "local", "local_lite"] = "cloud"
 
 
 class LiveTalkingSessionRequest(BaseModel):
@@ -174,7 +184,7 @@ class FeedbackRequest(BaseModel):
 class AvatarSettingsRequest(BaseModel):
     display_name: str = Field("灵山小向导", min_length=1, max_length=30)
     avatar_id: str = Field(LIVETALKING_AVATAR_ID, min_length=1, max_length=100)
-    voice: str = Field(TTS_VOICE, min_length=1, max_length=50)
+    voice: str = Field(DEFAULT_VOICE_PROFILE, min_length=1, max_length=80)
     presentation_mode: Literal["gpu_video", "light_2d"] = "gpu_video"
 
 
@@ -344,14 +354,14 @@ def _avatar_settings() -> dict[str, str]:
         return {
             "display_name": row[0],
             "avatar_id": row[1],
-            "voice": row[2],
+            "voice": normalize_voice_profile(row[2]),
             "presentation_mode": row[3] if row[3] in {"gpu_video", "light_2d"} else "gpu_video",
             "updated_at": row[4],
         }
     return {
         "display_name": "灵山小向导",
         "avatar_id": LIVETALKING_AVATAR_ID,
-        "voice": TTS_VOICE,
+        "voice": DEFAULT_VOICE_PROFILE,
         "presentation_mode": "gpu_video" if LIVETALKING_ENABLED else "light_2d",
         "updated_at": "",
     }
@@ -748,13 +758,22 @@ async def separate_admin_boundary(request: Request, call_next):
 
 @app.get("/health")
 async def health():
-    try:
-        rag_status = await rag.health()
-    except RAGClientError as exc:
-        rag_status = {"ok": False, "detail": str(exc)}
+    rag_result, speech_status = await asyncio.gather(
+        rag.health(),
+        local_speech.health(),
+        return_exceptions=True,
+    )
+    rag_status = (
+        {"ok": False, "detail": str(rag_result)}
+        if isinstance(rag_result, Exception)
+        else rag_result
+    )
+    if isinstance(speech_status, Exception):
+        speech_status = {"ok": False, "detail": str(speech_status)}
     return {
         "ok": bool(rag_status.get("ok")),
         "rag": rag_status,
+        "local_speech": speech_status,
         "chunks": rag_status.get("chunk_count", 0),
         "has_embeddings": bool(rag_status.get("chunk_count")),
         "chat_model": rag_status.get("model"),
@@ -1023,6 +1042,7 @@ async def _stream_tts_to_livetalking(
     interrupt: bool,
     speed: float = 1.0,
     finalize: bool = True,
+    model_route: Literal["cloud", "local", "local_lite"] = "cloud",
 ) -> Optional[int]:
     if interrupt:
         await _livetalking_post(
@@ -1039,64 +1059,90 @@ async def _stream_tts_to_livetalking(
     sample_count = 0
     first_chunk_ms: Optional[int] = None
     tts_started_at = asyncio.get_running_loop().time()
-    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
-        async for event in zhipu.tts_stream(
-            speech_text,
-            voice=_avatar_settings()["voice"],
-            speed=max(0.8, min(1.2, LIVETALKING_TTS_SPEED * speed)),
-        ):
-            choices = event.get("choices") or []
-            delta = choices[0].get("delta", {}) if choices else {}
-            encoded = delta.get("content")
-            if not encoded:
-                continue
 
-            event_sample_rate = int(delta.get("return_sample_rate") or 24000)
-            if sample_rate is None:
-                sample_rate = event_sample_rate
-            elif event_sample_rate != sample_rate:
-                raise RuntimeError(
-                    f"GLM-TTS sample rate changed from {sample_rate} to {event_sample_rate}"
-                )
-
-            try:
-                pcm_chunk = base64.b64decode(encoded, validate=True)
-            except (binascii.Error, ValueError) as exc:
-                raise RuntimeError("GLM-TTS returned invalid base64 PCM audio") from exc
-            if not pcm_chunk:
-                continue
-            chunk_count += 1
-            sample_count += len(pcm_chunk) // 2
-            if sample_count * 2 > 32 * 1024 * 1024:
-                raise RuntimeError("GLM-TTS audio exceeds 32 MiB")
-            response = await client.post(
-                f"{LIVETALKING_URL}/humanpcm",
-                params={
-                    "sessionid": session_id,
-                    "sample_rate": sample_rate,
-                    "final": "false",
-                },
-                content=pcm_chunk,
-                headers={"Content-Type": "application/octet-stream"},
+    async def send_pcm_chunk(
+        client: httpx.AsyncClient,
+        pcm_chunk: bytes,
+        pcm_sample_rate: int,
+    ) -> None:
+        nonlocal chunk_count, sample_count, first_chunk_ms
+        if not pcm_chunk:
+            return
+        chunk_count += 1
+        sample_count += len(pcm_chunk) // 2
+        if sample_count * 2 > 32 * 1024 * 1024:
+            raise RuntimeError("TTS audio exceeds 32 MiB")
+        response = await client.post(
+            f"{LIVETALKING_URL}/humanpcm",
+            params={
+                "sessionid": session_id,
+                "sample_rate": pcm_sample_rate,
+                "final": "false",
+            },
+            content=pcm_chunk,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, dict) and data.get("code") not in (None, 0):
+            raise RuntimeError(data.get("msg") or "LiveTalking PCM stream failed")
+        if first_chunk_ms is None:
+            first_chunk_ms = round(
+                (asyncio.get_running_loop().time() - tts_started_at) * 1000
             )
-            response.raise_for_status()
-            data = response.json()
-            if isinstance(data, dict) and data.get("code") not in (None, 0):
-                raise RuntimeError(data.get("msg") or "LiveTalking PCM stream failed")
-            if first_chunk_ms is None:
-                first_chunk_ms = round(
-                    (asyncio.get_running_loop().time() - tts_started_at) * 1000
+            _mark_livetalking_used()
+
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
+        selected_speed = max(0.8, min(1.2, LIVETALKING_TTS_SPEED * speed))
+        if model_route in {"local", "local_lite"}:
+            local_audio = await local_speech.tts_pcm(
+                speech_text,
+                speed=selected_speed,
+                voice=_avatar_settings()["voice"],
+            )
+            sample_rate = local_audio.sample_rate
+            # Keep HTTP frames small enough for lip-sync to start promptly.
+            for offset in range(0, len(local_audio.data), 8192):
+                await send_pcm_chunk(
+                    client,
+                    local_audio.data[offset : offset + 8192],
+                    sample_rate,
                 )
-                _mark_livetalking_used()
+        else:
+            async for event in zhipu.tts_stream(
+                speech_text,
+                voice=cloud_voice_id(_avatar_settings()["voice"]),
+                speed=selected_speed,
+            ):
+                choices = event.get("choices") or []
+                delta = choices[0].get("delta", {}) if choices else {}
+                encoded = delta.get("content")
+                if not encoded:
+                    continue
+
+                event_sample_rate = int(delta.get("return_sample_rate") or 24000)
+                if sample_rate is None:
+                    sample_rate = event_sample_rate
+                elif event_sample_rate != sample_rate:
+                    raise RuntimeError(
+                        f"GLM-TTS sample rate changed from {sample_rate} to {event_sample_rate}"
+                    )
+
+                try:
+                    pcm_chunk = base64.b64decode(encoded, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise RuntimeError("GLM-TTS returned invalid base64 PCM audio") from exc
+                await send_pcm_chunk(client, pcm_chunk, event_sample_rate)
 
         if not chunk_count or sample_rate is None:
-            raise RuntimeError("GLM-TTS returned no PCM audio")
+            raise RuntimeError("TTS returned no PCM audio")
         if finalize:
             await _finish_livetalking_pcm_stream(session_id, sample_rate)
 
         print(
             "[livetalking] streamed semantic TTS audio: "
             f"session={session_id} chunks={chunk_count} "
+            f"route={model_route} "
             f"samples={sample_count} sample_rate={sample_rate} "
             f"first_chunk_ms={first_chunk_ms} "
             f"finalized={str(finalize).lower()} "
@@ -1144,6 +1190,7 @@ def _start_livetalking_speech_worker(
     session_id: str,
     *,
     speed: float = 1.0,
+    model_route: Literal["cloud", "local", "local_lite"] = "cloud",
 ) -> asyncio.Queue[Optional[str]]:
     _cancel_livetalking_speech_worker(session_id)
     queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
@@ -1166,13 +1213,14 @@ def _start_livetalking_speech_worker(
                 interrupt=first,
                 speed=speed,
                 finalize=False,
+                model_route=model_route,
             )
             if segment_sample_rate is not None:
                 if answer_sample_rate is None:
                     answer_sample_rate = segment_sample_rate
                 elif segment_sample_rate != answer_sample_rate:
                     raise RuntimeError(
-                        "GLM-TTS sample rate changed between semantic segments"
+                        "TTS sample rate changed between semantic segments"
                     )
             first = False
 
@@ -1200,6 +1248,7 @@ async def livetalking_speak(req: LiveTalkingSpeakRequest):
             req.text,
             interrupt=req.interrupt,
             speed=req.speed,
+            model_route=req.model_route,
         )
     except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         raise HTTPException(502, f"LiveTalking streaming TTS failed: {exc}") from exc
@@ -1451,11 +1500,13 @@ async def admin_kb_delete(filename: str):
 
 @app.get("/v1/admin/avatar")
 async def admin_avatar_get():
+    speech_health = await local_speech.health()
     return {
         "settings": _avatar_settings(),
         "available_avatars": _available_avatars(),
         "avatars": _avatar_catalog(),
-        "available_voices": ["female", "male", "tongtong", "chuichui"],
+        "available_voices": public_voice_catalog(),
+        "speech_health": speech_health,
     }
 
 
@@ -1472,6 +1523,9 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
     available = _available_avatars()
     if req.avatar_id not in available:
         raise HTTPException(400, f"数字人形象不存在：{req.avatar_id}")
+    normalized_voice = normalize_voice_profile(req.voice)
+    if normalized_voice != req.voice:
+        raise HTTPException(400, f"统一音色配置不存在：{req.voice}")
     now = datetime.now(timezone.utc).isoformat()
     conn = _db()
     conn.execute(
@@ -1491,7 +1545,7 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
         (
             req.display_name.strip(),
             req.avatar_id,
-            req.voice,
+            normalized_voice,
             req.presentation_mode,
             "",
             "",
@@ -1641,6 +1695,7 @@ async def chat(req: ChatRequest):
             _start_livetalking_speech_worker(
                 req.livetalking_session_id,
                 speed=float(reaction["voice_speed"]),
+                model_route=req.model_route,
             )
             if req.livetalking_session_id
             else None
@@ -1733,36 +1788,73 @@ async def chat(req: ChatRequest):
 
 @app.post("/v1/tts")
 async def tts(req: TTSRequest):
-    """智谱 GLM-TTS 语音合成，返回 wav 音频。"""
+    """Synthesize WAV with cloud GLM or the selected local speech route."""
     speak = _speech_text(req.text)
     if not speak:
         raise HTTPException(400, "没有可合成的正文")
     try:
-        audio = await zhipu.tts(
-            speak,
-            voice=req.voice or _avatar_settings()["voice"],
-            speed=req.speed,
-        )
+        if req.model_route in {"local", "local_lite"}:
+            voice_profile_id = normalize_voice_profile(
+                req.voice or _avatar_settings()["voice"]
+            )
+            audio = await local_speech.tts_wav(
+                speak, speed=req.speed, voice=voice_profile_id
+            )
+            provider = "local-glm-tts"
+        else:
+            audio = await zhipu.tts(
+                speak,
+                voice=cloud_voice_id(req.voice or _avatar_settings()["voice"]),
+                speed=req.speed,
+            )
+            provider = "glm-tts"
     except Exception as e:
         raise HTTPException(502, f"tts failed: {e}") from e
-    return Response(content=audio, media_type="audio/wav")
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={"X-Speech-Provider": provider},
+    )
 
 
 @app.post("/v1/tts/stream")
 async def tts_stream(req: TTSRequest):
-    """Stream GLM-TTS PCM chunks as SSE so playback can start at the first frame."""
+    """Stream cloud or local PCM chunks as SSE for immediate playback."""
     speak = _speech_text(req.text)
     if not speak:
         raise HTTPException(400, "没有可合成的正文")
 
     async def event_gen():
         try:
-            async for event in zhipu.tts_stream(
-                speak,
-                voice=req.voice or _avatar_settings()["voice"],
-                speed=req.speed,
-            ):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if req.model_route in {"local", "local_lite"}:
+                voice_profile_id = normalize_voice_profile(
+                    req.voice or _avatar_settings()["voice"]
+                )
+                audio = await local_speech.tts_pcm(
+                    speak, speed=req.speed, voice=voice_profile_id
+                )
+                for offset in range(0, len(audio.data), 8192):
+                    encoded = base64.b64encode(audio.data[offset : offset + 8192]).decode("ascii")
+                    event = {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "content": encoded,
+                                    "return_sample_rate": audio.sample_rate,
+                                    "provider": audio.provider,
+                                }
+                            }
+                        ]
+                    }
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0)
+            else:
+                async for event in zhipu.tts_stream(
+                    speak,
+                    voice=cloud_voice_id(req.voice or _avatar_settings()["voice"]),
+                    speed=req.speed,
+                ):
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as exc:
             error = {"error": {"message": f"tts stream failed: {exc}"}}
             yield f"data: {json.dumps(error, ensure_ascii=False)}\n\n"
@@ -1833,6 +1925,7 @@ async def asr(
     file: UploadFile = File(...),
     session_id: str = Form(""),
     emotion_consent: bool = Form(False),
+    model_route: Literal["cloud", "local", "local_lite"] = Form("cloud"),
 ):
     """Recognize a visitor utterance and optionally analyze its audio emotion."""
     raw = await file.read()
@@ -1843,7 +1936,14 @@ async def asr(
     name = file.filename or "audio.wav"
     try:
         audio, fname = _normalize_asr_audio(raw, name)
-        text = await zhipu.asr(audio, filename=fname)
+        if model_route in {"local", "local_lite"}:
+            asr_result = await local_speech.asr(audio, filename=fname)
+            text = asr_result["text"]
+            asr_provider = str(asr_result.get("provider") or "local-funasr")
+        else:
+            text = await zhipu.asr(audio, filename=fname)
+            asr_provider = "glm-asr"
+        text = normalize_asr_text(text)
     except HTTPException:
         raise
     except Exception as e:
@@ -1916,6 +2016,8 @@ async def asr(
         "emotion_analysis": analysis_status,
         "audio_retained": bool(emotion_consent and EMOTION_KEEP_MEDIA),
         "emotion_timeout_seconds": EMOTION_TIMEOUT_SECONDS if emotion_consent else 0,
+        "model_route": model_route,
+        "asr_provider": asr_provider,
     }
 
 

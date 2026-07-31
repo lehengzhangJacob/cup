@@ -2,7 +2,7 @@
 
 该目录提供一个独立、仅供导览网关访问的 RAG 服务。启动时加载 BGE-M3 和现有
 FAISS 索引；每次提问先检索景区资料，再把检索片段、游客上下文及有限会话历史交给
-GLM 生成。也可选择轻量本地 Qwen3-1.7B 或完整本地 Qwen2-7B 作为生成模型，三条生成路径共用同一套
+GLM 生成。也可选择轻量本地 Qwen3-1.7B 或完整本地 Qwen3-8B 作为生成模型，三条生成路径共用同一套
 BGE-M3 + FAISS 检索。
 
 ## 启动与重建索引
@@ -59,7 +59,7 @@ TTL/LRU 存储，只保存完整成功的回答；流被取消或生成失败时
 | `RAG_LLM_FALLBACK_MODELS` | `glm-4-flash` | 首 token 超时后的备用模型 |
 | `RAG_LLM_FIRST_TOKEN_TIMEOUT_SECONDS` | `2` | 云端模型首 token 超时秒数 |
 | `RAG_LLM_BASE_URL` | 智谱 OpenAI 兼容地址 | 云端接口地址 |
-| `RAG_LOCAL_LLM_MODEL` | `/home/huggingface/Qwen2-7B-Instruct` | 完整本地路线，约需 18 GiB 空闲显存 |
+| `RAG_LOCAL_LLM_MODEL` | `/home/huggingface/Qwen3-8B` | 完整本地路线，约需 18 GiB 空闲显存 |
 | `RAG_LOCAL_LITE_LLM_MODEL` | 本机 `Qwen3-1.7B` 目录 | 轻量本地路线，约需 6 GiB 空闲显存 |
 | `GLM_API_KEY` / `ZHIPU_API_KEY` | 根目录 `softcup_glmkey` | 服务端密钥 |
 | `RAG_SESSION_TTL_SECONDS` | `3600` | 会话空闲过期时间 |

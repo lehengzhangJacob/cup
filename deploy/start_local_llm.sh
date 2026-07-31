@@ -30,9 +30,9 @@ elif [[ "$PROFILE" == "full" ]]; then
   GPU_CANDIDATES="${LOCAL_LLM_GPU_CANDIDATES:-0,1,2,3}"
   GPU_MIN_FREE_MB="${LOCAL_LLM_GPU_MIN_FREE_MB:-18000}"
   IDLE_SECONDS="${LOCAL_LLM_IDLE_SECONDS:-120}"
-  MODEL="${RAG_LOCAL_LLM_MODEL:-/home/huggingface/Qwen2-7B-Instruct}"
+  MODEL="${RAG_LOCAL_LLM_MODEL:-/home/huggingface/Qwen3-8B}"
   FILE_PREFIX="local-llm"
-  SERVICE_LABEL="Full local Qwen2-7B"
+  SERVICE_LABEL="Full local Qwen3-8B"
 else
   echo "Unsupported LOCAL_LLM_PROFILE: $PROFILE (expected full or lite)" >&2
   exit 1

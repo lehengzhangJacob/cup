@@ -1,6 +1,6 @@
 # 灵山胜境 AI 数字人导览 · 开放 API
 
-本机为服务器，对外提供 HTTP 接口；问答支持云端 GLM、轻量本地 Qwen3-1.7B 与完整本地 Qwen2-7B 三条路径，视觉、ASR 和 TTS 保持原有独立链路。
+本机为服务器，对外提供 HTTP 接口；问答支持云端 GLM、轻量本地 Qwen3-1.7B 与完整本地 Qwen3-8B 三条路径。本地语音链路使用 FunASR 中文识别与开源 GLM-TTS，云端使用 GLM-ASR 与 GLM-TTS；两套 ASR 共用景区热词后处理，两套 TTS 从同一参考音频复刻管理员所选音色。
 
 ## 环境（Miniconda）
 
@@ -34,13 +34,13 @@ LiveTalking 以 CPU/RAM 待机方式常驻；建立 WebRTC 会话时从物理 GP
 
 - 网页默认选择 `GLM API`，不会加载本地 7B 权重。
 - 选择 `轻量本地 Qwen3-1.7B` 后使用 `/home/datasets/EMO_GEN/EMO_GEN_model/Qwen/Qwen3-1.7B`，服务端口为 `8022`；实测加载后约占 5.6 GiB，默认要求候选 GPU 至少有 6 GiB 空闲显存。
-- 选择 `本地 Qwen2-7B` 后，RAG 使用纯文本模型 `/home/huggingface/Qwen2-7B-Instruct`；冷加载实测约 15–60 秒，热请求生成很快。识景、语音和情绪分析仍由各自的多模态模型负责。
+- 选择 `本地 Qwen3-8B` 后，RAG 使用纯文本模型 `/home/huggingface/Qwen3-8B`；首次请求需冷加载。识景、语音和情绪分析仍由各自模型负责。
 - 两个 `transformers serve` 分别在本机 `8021`、`8022` 提供 OpenAI 兼容接口；两条本地路径均在空闲 120 秒后停止独立进程并释放显存。
 - 完整模型手动启停：`bash deploy/start_local_llm.sh`、`bash deploy/stop_local_llm.sh`；轻量模型手动启停：`bash deploy/start_local_lite_llm.sh`、`bash deploy/stop_local_lite_llm.sh`。
-- 本地服务默认在首次使用时扫描物理 GPU 0–3，要求至少 18GB 空闲显存，并优先选择剩余显存最多、利用率更低的卡；可通过 `LOCAL_LLM_GPU_CANDIDATES`、`LOCAL_LLM_GPU_MIN_FREE_MB` 调整，或用 `LOCAL_LLM_GPU` 显式覆盖。Qwen2-7B 加载后约占 `15.7GiB`。本地路径适合离线或 API 故障备份；要求稳定 4–5 秒首答时优先使用云端路径。
+- 本地服务默认在首次使用时扫描物理 GPU 0–3，要求至少 18GB 空闲显存，并优先选择剩余显存最多、利用率更低的卡；可通过 `LOCAL_LLM_GPU_CANDIDATES`、`LOCAL_LLM_GPU_MIN_FREE_MB` 调整，或用 `LOCAL_LLM_GPU` 显式覆盖。本地路径适合离线或 API 故障备份；要求稳定 4–5 秒首答时优先使用云端路径。
 - 轻量路径用对应的 `LOCAL_LITE_LLM_GPU_*` 变量独立选卡。没有满足门槛的 GPU 或发生真实 CUDA OOM 时，接口和游客页面会明确显示所需显存、失败模型及切换建议，不会返回假回答。
 
-`POST /v1/chat` 的 `model_route` 可设为 `cloud`、`local_lite` 或 `local`；语音识别、语音合成和数字人口型链路不随该选项改变。
+`POST /v1/chat` 的 `model_route` 可设为 `cloud`、`local_lite` 或 `local`；游客录音与播报沿用同一选择：`cloud` 使用 GLM-ASR/云端 GLM-TTS，两个本地值使用 FunASR/开源 GLM-TTS。数字人口型均消费对应 TTS 的 24kHz PCM。
 
 三种生成路径之前都使用同一套本地 BGE-M3 + FAISS 检索。`stream=true` 时接口按
 `meta`（会话与引用）→ `delta`（增量文本）→ `done`（耗时）的顺序返回 SSE。首次
@@ -197,7 +197,7 @@ curl -ksS https://127.0.0.1:8444/v1/admin/emotion/status  # 该接口需先登�
 |------|------|------|
 | POST | `/v1/chat` | 导览问答（`model_route=cloud|local`，`stream=true` 为 SSE） |
 | GET | `/v1/model-routes` | 查询云端与本地问答路径状态 |
-| POST | `/v1/tts` | 智谱 GLM-TTS，返回 wav |
+| POST | `/v1/tts` | 按 `model_route` 调用云端或本地 GLM-TTS，返回 wav |
 | POST | `/v1/tts/stream` | 流式 PCM/SSE（Live2D 回退使用） |
 | GET | `/v1/livetalking/status` | LiveTalking 本地服务状态 |
 | POST | `/v1/livetalking/start` | 确保 LiveTalking CPU 待机实例可用 |

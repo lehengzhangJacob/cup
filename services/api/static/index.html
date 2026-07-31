@@ -1019,7 +1019,7 @@
             <select id="modelRoute">
               <option value="cloud">云端 GLM（默认）</option>
               <option value="local_lite">轻量本地 Qwen3-1.7B</option>
-              <option value="local">完整本地 Qwen2-7B</option>
+              <option value="local">完整本地 Qwen3-8B</option>
             </select>
           </div>
           <div>
@@ -1168,9 +1168,9 @@
       localStorage.setItem("lingshan-model-route", route);
       sessionId = null;
       $("status").textContent = route === "local"
-        ? "已切换完整本地 Qwen2-7B；约需 18 GiB 空闲显存，首次加载较慢"
+        ? "已切换完整本地 Qwen3-8B + FunASR + 本地 GLM-TTS；模型按空闲 GPU 分配，首次加载较慢"
         : route === "local_lite"
-          ? "已切换轻量本地 Qwen3-1.7B；约需 6 GiB 空闲显存，空闲后自动释放"
+          ? "已切换轻量本地 Qwen3-1.7B + FunASR + 本地 GLM-TTS；问答模型约需 6 GiB 空闲显存"
           : "已切换云端 GLM；不会占用本机大模型显存";
     });
 
@@ -1869,7 +1869,12 @@
           const response = await fetch(base() + "/v1/tts/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, voice: "female", speed: voiceSpeed }),
+            body: JSON.stringify({
+              text,
+              voice: "female",
+              speed: voiceSpeed,
+              model_route: $("modelRoute").value
+            }),
             signal: controller.signal
           });
           if (!response.ok) throw new Error(await response.text());
@@ -2054,6 +2059,7 @@
           text: segment,
           interrupt,
           speed: voiceSpeed,
+          model_route: $("modelRoute").value,
         })).catch(error => {
           console.error(error);
           settle("LiveTalking 播报失败：" + String(error.message || error));
@@ -2666,6 +2672,7 @@
       fd.append("file", blob, filename || recordingFilename(blob));
       if (sessionId) fd.append("session_id", sessionId);
       fd.append("emotion_consent", String($("emotionConsent").checked));
+      fd.append("model_route", $("modelRoute").value);
       const r = await fetch(base() + "/v1/asr", { method: "POST", body: fd });
       if (!r.ok) {
         let msg = await r.text();

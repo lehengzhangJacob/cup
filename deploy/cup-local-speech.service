@@ -1,0 +1,21 @@
+[Unit]
+Description=CUP FunASR and unified local speech gateway
+After=network-online.target cup-glm-tts.service
+Wants=network-online.target cup-glm-tts.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gmn/codes/cup
+EnvironmentFile=-/home/gmn/codes/cup/deploy/public.env
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+Environment=NO_PROXY=localhost,127.0.0.1,localaddress,.localdomain.com
+Environment=no_proxy=localhost,127.0.0.1,localaddress,.localdomain.com
+ExecStart=/home/gmn/.conda/envs/ccc/bin/python -m uvicorn services.local_speech.app:app --host 127.0.0.1 --port 8030 --timeout-keep-alive 300
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

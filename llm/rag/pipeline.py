@@ -574,7 +574,7 @@ class RAGPipeline:
             base_url = LOCAL_LLM_BASE_URL
             start_script = LOCAL_LLM_START_SCRIPT
             last_used_file = LOCAL_LLM_LAST_USED_FILE
-            route_label = "full local Qwen2-7B"
+            route_label = "full local Qwen3-8B"
         elif model_route == "local_lite":
             base_url = LOCAL_LITE_LLM_BASE_URL
             start_script = LOCAL_LITE_LLM_START_SCRIPT

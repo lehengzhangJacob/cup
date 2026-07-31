@@ -7,7 +7,7 @@ LiveTalking Wav2Lip 本地数字人、本地景区 RAG 知识库、云端/本地
 
 - 游客端：文字/语音问答、按句流式播报、实时口型同步（LiveTalking/Wav2Lip）、Live2D 表情模式（按情绪切换）、拍照识景、弱定位导览、个性化路线和满意度反馈。游客侧情绪分析为音频—文本多模态（不采集人脸视频）。
 - 管理端：运营数据大屏、热门问题、情感趋势、满意度报告、服务建议、知识文档上传/更新/删除和数字人形象配置。
-- AI 能力：BGE-M3 在本地生成向量、FAISS 检索景区资料，问答可在部署环境配置的 GLM API 与本地 Qwen2-7B-Instruct 间切换；GLM-4V、GLM-ASR、GLM-TTS 继续负责视觉和语音。
+- AI 能力：BGE-M3 在本地生成向量、FAISS 检索景区资料，问答可在云端 GLM、本地 Qwen3-1.7B 与 Qwen3-8B 间切换；视觉使用 GLM-4V/本地参考图库，语音可在 GLM-ASR + GLM-TTS 云端链路与 FunASR + 开源 GLM-TTS 本地链路间切换。
 - 数字人：打开游客网页后按需启动 LiveTalking + Wav2Lip FP16；网页关闭或隐藏后空闲自动释放 GPU。
 
 ## 快速访问

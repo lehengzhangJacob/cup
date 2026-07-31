@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app import main
@@ -169,6 +170,36 @@ class LiveTalkingAudioTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_Client.posts[0]["params"]["final"], "false")
         self.assertEqual(_Client.posts[1]["params"]["final"], "false")
         self.assertEqual(_Client.posts[2]["params"]["final"], "true")
+
+    async def test_local_route_uses_local_paragraph_tts(self):
+        pcm = b"\x03\x00" * 5000
+        local_tts = AsyncMock(
+            return_value=SimpleNamespace(
+                data=pcm,
+                sample_rate=22050,
+                provider="paragraph-prosody+piper",
+            )
+        )
+        cloud_tts = AsyncMock()
+        _Client.posts = []
+        with (
+            patch.object(main.local_speech, "tts_pcm", new=local_tts),
+            patch.object(main.zhipu, "tts_stream", new=cloud_tts),
+            patch.object(main.httpx, "AsyncClient", new=_Client),
+            patch.object(main, "_mark_livetalking_used"),
+        ):
+            await main._stream_tts_to_livetalking(
+                "local-session",
+                "灵山胜境欢迎您。",
+                interrupt=False,
+                model_route="local",
+            )
+
+        local_tts.assert_awaited_once()
+        cloud_tts.assert_not_awaited()
+        self.assertEqual(_Client.posts[0]["params"]["sample_rate"], 22050)
+        self.assertEqual(b"".join(post["content"] for post in _Client.posts[:-1]), pcm)
+        self.assertEqual(_Client.posts[-1]["params"]["final"], "true")
 
 
 if __name__ == "__main__":

@@ -56,6 +56,10 @@ fi
 # must not bounce the independent RAG coordinator unless explicitly requested.
 RAG_RESTART="${RAG_RESTART:-false}" bash "$ROOT/deploy/start_rag.sh"
 
+# Local speech for both Qwen routes: FunASR stays on CPU while GLM-TTS runs in
+# an isolated service that selects a sufficiently free GPU at service start.
+bash "$ROOT/deploy/start_local_speech.sh"
+
 # By default, do not bind the local LLM to a GPU during stack startup. The
 # first local-model request starts it, selects a sufficiently free GPU, and
 # the watchdog stops it after the configured idle period.

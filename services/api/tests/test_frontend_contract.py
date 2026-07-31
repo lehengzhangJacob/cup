@@ -46,6 +46,7 @@ def test_visitor_exposes_lightweight_local_model_and_visible_gpu_errors():
     html = _visitor_html()
 
     assert '<option value="local_lite">轻量本地 Qwen3-1.7B</option>' in html
+    assert '<option value="local">完整本地 Qwen3-8B</option>' in html
     assert "模型显存不足" in html
     assert '["cloud", "local_lite", "local"]' in html
 

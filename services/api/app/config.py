@@ -88,6 +88,7 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash").strip()
 RAG_URL = os.getenv("RAG_URL", "http://127.0.0.1:8020").rstrip("/")
 RAG_CONNECT_TIMEOUT_SECONDS = float(os.getenv("RAG_CONNECT_TIMEOUT_SECONDS", "5"))
 RAG_READ_TIMEOUT_SECONDS = float(os.getenv("RAG_READ_TIMEOUT_SECONDS", "180"))
+LOCAL_SPEECH_URL = os.getenv("LOCAL_SPEECH_URL", "http://127.0.0.1:8030").rstrip("/")
 
 HOST = os.getenv("API_HOST", "0.0.0.0")
 PORT = int(os.getenv("API_PORT", "8000"))

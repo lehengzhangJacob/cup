@@ -19,7 +19,8 @@ stack_ready() {
     && curl -kfsS --max-time 2 "https://127.0.0.1:8443/health" >/dev/null 2>&1 \
     && curl -kfsS --max-time 2 "https://127.0.0.1:8444/health" >/dev/null 2>&1 \
     && curl -fsS --max-time 2 "http://127.0.0.1:8011/health" >/dev/null 2>&1 \
-    && curl -fsS --max-time 2 "http://127.0.0.1:8020/health" 2>/dev/null | json_health_ok
+    && curl -fsS --max-time 2 "http://127.0.0.1:8020/health" 2>/dev/null | json_health_ok \
+    && curl -fsS --max-time 2 "http://127.0.0.1:8030/health" 2>/dev/null | json_health_ok
 }
 
 while true; do

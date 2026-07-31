@@ -179,7 +179,7 @@ def test_local_route_uses_local_client_and_model():
 
     assert result.answer == "灵山大佛通高88米。"
     assert cloud_client.completions.calls == []
-    assert local_client.completions.calls[0]["model"].endswith("Qwen2-7B-Instruct")
+    assert local_client.completions.calls[0]["model"].endswith("Qwen3-8B")
 
 
 def test_lightweight_local_route_uses_qwen3_client_and_model():

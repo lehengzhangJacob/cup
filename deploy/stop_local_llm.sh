@@ -8,7 +8,7 @@ if [[ "$PROFILE" == "lite" ]]; then
   SERVICE_LABEL="Lightweight local Qwen3-1.7B"
 elif [[ "$PROFILE" == "full" ]]; then
   FILE_PREFIX="local-llm"
-  SERVICE_LABEL="Full local Qwen2-7B"
+  SERVICE_LABEL="Full local Qwen3-8B"
 else
   echo "Unsupported LOCAL_LLM_PROFILE: $PROFILE" >&2
   exit 1

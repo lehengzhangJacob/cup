@@ -1,0 +1,17 @@
+[Unit]
+Description=CUP local GLM-TTS voice cloning service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gmn/codes/cup
+EnvironmentFile=-/home/gmn/codes/cup/deploy/public.env
+ExecStart=/usr/bin/bash /home/gmn/codes/cup/deploy/run_glm_tts.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

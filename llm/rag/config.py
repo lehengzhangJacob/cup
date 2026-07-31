@@ -81,7 +81,7 @@ LOCAL_LLM_BASE_URL = os.getenv(
 ).rstrip("/")
 LOCAL_LLM_MODEL = os.getenv(
     "RAG_LOCAL_LLM_MODEL",
-    "/home/huggingface/Qwen2-7B-Instruct",
+    "/home/huggingface/Qwen3-8B",
 ).strip()
 LOCAL_LLM_API_KEY = os.getenv("RAG_LOCAL_LLM_API_KEY", "local").strip() or "local"
 LOCAL_LLM_START_SCRIPT = Path(

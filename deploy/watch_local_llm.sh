@@ -18,7 +18,7 @@ if [[ "$PROFILE" == "lite" ]]; then
 elif [[ "$PROFILE" == "full" ]]; then
   IDLE_SECONDS="${LOCAL_LLM_IDLE_SECONDS:-120}"
   FILE_PREFIX="local-llm"
-  SERVICE_LABEL="Full local Qwen2-7B"
+  SERVICE_LABEL="Full local Qwen3-8B"
 else
   echo "Unsupported LOCAL_LLM_PROFILE: $PROFILE" >&2
   exit 1

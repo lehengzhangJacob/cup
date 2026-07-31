@@ -1,7 +1,7 @@
 [Unit]
 Description=CUP API and supporting services
-After=network-online.target
-Wants=network-online.target
+After=network-online.target cup-local-speech.service
+Wants=network-online.target cup-local-speech.service
 
 [Service]
 Type=simple
