@@ -14,9 +14,11 @@ def test_legacy_provider_voice_is_mapped_to_paired_profile():
 
 def test_voice_catalog_only_exposes_paired_local_cloud_profiles():
     catalog = public_voice_catalog()
-    assert catalog
+    assert len(catalog) == 4
     assert all(item["paired"] for item in catalog)
     assert cloud_voice_id(DEFAULT_VOICE_PROFILE)
+    assert sum(item["gender"] == "female" for item in catalog) == 2
+    assert sum(item["gender"] == "male" for item in catalog) == 2
 
 
 def test_local_and_cloud_asr_share_scenic_post_processing():
