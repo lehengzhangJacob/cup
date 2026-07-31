@@ -68,8 +68,10 @@ PATH_DISTANCE_FACTOR = 1.22
 # expect GCJ-02, so route rendering/navigation carries a converted coordinate
 # alongside the original value.
 AMAP_NAVIGATION_URL = "https://uri.amap.com/navigation"
-AMAP_TILE_URL = "https://webrd0{s}.is.autonavi.com/appmaptile?style=7&x={x}&y={y}&z={z}"
-
+AMAP_TILE_URL = (
+    "https://webrd0{s}.is.autonavi.com/appmaptile?"
+    "lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}"
+)
 
 def _out_of_china(lat: float, lng: float) -> bool:
     return not (73.66 < lng < 135.05 and 3.86 < lat < 53.55)

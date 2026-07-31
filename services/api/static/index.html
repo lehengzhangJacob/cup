@@ -301,6 +301,7 @@
       --surface: rgba(255, 252, 245, .84);
       --surface-solid: #fffaf1;
       --shadow: 0 20px 50px rgba(56, 50, 35, .12);
+      --experience-height: clamp(560px, calc(100vh - 150px), 820px);
     }
     * { box-sizing: border-box; }
     body {
@@ -374,7 +375,9 @@
     .stage {
       position: relative;
       isolation: isolate;
-      min-height: 480px;
+      height: var(--experience-height);
+      min-height: var(--experience-height);
+      max-height: var(--experience-height);
       padding: 0;
       overflow: hidden;
       border: 1px solid rgba(31, 90, 79, .29);
@@ -542,8 +545,9 @@
     .quick-prompt:hover { color: #fffaf1; background: var(--pine); }
     .control-panel {
       min-width: 0;
-      min-height: 480px;
-      max-height: calc(100vh - 160px);
+      height: var(--experience-height);
+      min-height: var(--experience-height);
+      max-height: var(--experience-height);
       padding: 24px;
       overflow-y: auto;
       overscroll-behavior: contain;
@@ -773,18 +777,18 @@
       main { grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr); }
     }
     @media (max-width: 900px) {
+      :root { --experience-height: 600px; }
       header, main { width: min(100% - 28px, 680px); }
       header { min-height: 84px; padding: 18px 0 15px; }
       main { grid-template-columns: 1fr; padding-top: 14px; }
-      .stage { min-height: 540px; }
-      .control-panel { padding: 20px; max-height: none; overflow: visible; }
+      .control-panel { padding: 20px; overflow-y: auto; }
     }
     @media (max-width: 600px) {
+      :root { --experience-height: clamp(520px, calc(100vh - 130px), 600px); }
       body::before { width: 310px; height: 310px; top: -150px; right: -160px; }
       header { align-items: flex-start; gap: 12px; }
       header h1 { font-size: 23px; line-height: 1.15; }
       header p { max-width: 205px; line-height: 1.5; }
-      .stage { min-height: 480px; }
       .stage-footer { grid-template-columns: 1fr; gap: 8px; }
       .quick-prompts { justify-content: flex-start; }
       .quick-prompt { padding: 5px 7px; }
@@ -2494,7 +2498,10 @@
         return;
       }
       routeMap = L.map("routeMap", { scrollWheelZoom: false, attributionControl: true });
-      const tileLayer = L.tileLayer(route.map?.tile_url || "https://webrd0{s}.is.autonavi.com/appmaptile?style=7&x={x}&y={y}&z={z}", {
+      const fallbackAmapTileUrl = "https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}";
+      const configuredTileUrl = String(route.map?.tile_url || "");
+      const tileUrl = configuredTileUrl.includes("lang=zh_cn") ? configuredTileUrl : fallbackAmapTileUrl;
+      const tileLayer = L.tileLayer(tileUrl, {
         maxZoom: 19,
         subdomains: ["1", "2", "3", "4"],
         attribution: "© 高德地图",
@@ -2616,7 +2623,7 @@
         const route = data.route;
         renderRouteResult(route);
         const stopNames = (route.stops || []).map(stop => stop.spot_name).filter(Boolean).join("、");
-        const spoken = `${route.summary || "已为你生成个性化路线。"}${stopNames ? ` 途经：${stopNames}。` : ""}`;
+        const spoken = `${route.summary || "已为你生成个性化路线。"}${stopNames ? ` ` : ""}`;
         $("log").textContent = spoken;
         $("status").textContent = `路线已生成 · ${route.mobility_label || "按当前偏好"}`;
         setEmotion("smile");
