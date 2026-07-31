@@ -47,7 +47,6 @@ from .config import (
     LIVETALKING_ENABLED,
     LIVETALKING_TTS_SPEED,
     LIVETALKING_URL,
-    TTS_VOICE,
     TURN_CREDENTIAL,
     TURN_ENABLED,
     TURN_PORT,
@@ -87,9 +86,12 @@ from .speech_segments import SpeechSegmenter
 from .speech_text import normalize_asr_text
 from .tourism_analytics import compact_tourism_database, ensure_tourism_schema, tourism_analytics
 from .voice_profiles import (
+    DEFAULT_CLOUD_VOICE,
     DEFAULT_VOICE_PROFILE,
-    cloud_voice_id,
+    normalize_cloud_voice,
     normalize_voice_profile,
+    public_cloud_voice_catalog,
+    public_local_voice_catalog,
     public_voice_catalog,
 )
 from .vision_analysis import (
@@ -184,7 +186,9 @@ class FeedbackRequest(BaseModel):
 class AvatarSettingsRequest(BaseModel):
     display_name: str = Field("灵山小向导", min_length=1, max_length=30)
     avatar_id: str = Field(LIVETALKING_AVATAR_ID, min_length=1, max_length=100)
-    voice: str = Field(DEFAULT_VOICE_PROFILE, min_length=1, max_length=80)
+    local_voice: str = Field(DEFAULT_VOICE_PROFILE, min_length=1, max_length=80)
+    cloud_voice: str = Field(DEFAULT_CLOUD_VOICE, min_length=1, max_length=80)
+    voice: Optional[str] = Field(None, min_length=1, max_length=80)
     presentation_mode: Literal["gpu_video", "light_2d"] = "gpu_video"
 
 
@@ -277,6 +281,8 @@ def _db() -> sqlite3.Connection:
             display_name TEXT NOT NULL,
             avatar_id TEXT NOT NULL,
             voice TEXT NOT NULL,
+            local_voice TEXT NOT NULL DEFAULT 'lingxi_female_v1',
+            cloud_voice TEXT NOT NULL DEFAULT 'female',
             presentation_mode TEXT NOT NULL DEFAULT 'gpu_video',
             costume TEXT NOT NULL,
             expression TEXT NOT NULL,
@@ -292,6 +298,8 @@ def _db() -> sqlite3.Connection:
     _ensure_column(conn, "feedback", "source", "TEXT NOT NULL DEFAULT 'live'")
     _ensure_column(conn, "feedback", "emotion_event_id", "TEXT")
     _ensure_column(conn, "avatar_settings", "presentation_mode", "TEXT NOT NULL DEFAULT 'gpu_video'")
+    _ensure_column(conn, "avatar_settings", "local_voice", "TEXT NOT NULL DEFAULT 'lingxi_female_v1'")
+    _ensure_column(conn, "avatar_settings", "cloud_voice", "TEXT NOT NULL DEFAULT 'female'")
     ensure_attraction_schema(conn)
     ensure_tourism_schema(conn)
     conn.execute(
@@ -346,22 +354,30 @@ def _infer_sentiment(text: str, rating: Optional[int] = None) -> str:
 def _avatar_settings() -> dict[str, str]:
     conn = _db()
     row = conn.execute(
-        "SELECT display_name, avatar_id, voice, presentation_mode, updated_at "
+        "SELECT display_name, avatar_id, voice, local_voice, cloud_voice, "
+        "presentation_mode, updated_at "
         "FROM avatar_settings WHERE id=1"
     ).fetchone()
     conn.close()
     if row:
+        local_voice = normalize_voice_profile(row[3] or row[2])
+        cloud_voice = normalize_cloud_voice(row[4])
         return {
             "display_name": row[0],
             "avatar_id": row[1],
-            "voice": normalize_voice_profile(row[2]),
-            "presentation_mode": row[3] if row[3] in {"gpu_video", "light_2d"} else "gpu_video",
-            "updated_at": row[4],
+            # voice remains a read-only compatibility alias for old clients.
+            "voice": local_voice,
+            "local_voice": local_voice,
+            "cloud_voice": cloud_voice,
+            "presentation_mode": row[5] if row[5] in {"gpu_video", "light_2d"} else "gpu_video",
+            "updated_at": row[6],
         }
     return {
         "display_name": "灵山小向导",
         "avatar_id": LIVETALKING_AVATAR_ID,
         "voice": DEFAULT_VOICE_PROFILE,
+        "local_voice": DEFAULT_VOICE_PROFILE,
+        "cloud_voice": DEFAULT_CLOUD_VOICE,
         "presentation_mode": "gpu_video" if LIVETALKING_ENABLED else "light_2d",
         "updated_at": "",
     }
@@ -1098,7 +1114,7 @@ async def _stream_tts_to_livetalking(
             local_audio = await local_speech.tts_pcm(
                 speech_text,
                 speed=selected_speed,
-                voice=_avatar_settings()["voice"],
+                voice=_avatar_settings()["local_voice"],
             )
             sample_rate = local_audio.sample_rate
             # Keep HTTP frames small enough for lip-sync to start promptly.
@@ -1111,7 +1127,7 @@ async def _stream_tts_to_livetalking(
         else:
             async for event in zhipu.tts_stream(
                 speech_text,
-                voice=cloud_voice_id(_avatar_settings()["voice"]),
+                voice=_avatar_settings()["cloud_voice"],
                 speed=selected_speed,
             ):
                 choices = event.get("choices") or []
@@ -1505,6 +1521,8 @@ async def admin_avatar_get():
         "settings": _avatar_settings(),
         "available_avatars": _available_avatars(),
         "avatars": _avatar_catalog(),
+        "available_local_voices": public_local_voice_catalog(),
+        "available_cloud_voices": public_cloud_voice_catalog(),
         "available_voices": public_voice_catalog(),
         "speech_health": speech_health,
     }
@@ -1523,9 +1541,14 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
     available = _available_avatars()
     if req.avatar_id not in available:
         raise HTTPException(400, f"数字人形象不存在：{req.avatar_id}")
-    normalized_voice = normalize_voice_profile(req.voice)
-    if normalized_voice != req.voice:
-        raise HTTPException(400, f"统一音色配置不存在：{req.voice}")
+    requested_local_voice = req.voice or req.local_voice
+    normalized_local_voice = normalize_voice_profile(requested_local_voice)
+    local_ids = {item["id"] for item in public_local_voice_catalog()}
+    if req.voice is None and requested_local_voice not in local_ids:
+        raise HTTPException(400, f"本地音色配置不存在：{requested_local_voice}")
+    normalized_cloud_voice = normalize_cloud_voice(req.cloud_voice)
+    if normalized_cloud_voice != req.cloud_voice:
+        raise HTTPException(400, f"云端系统音色不存在：{req.cloud_voice}")
     now = datetime.now(timezone.utc).isoformat()
     conn = _db()
     conn.execute(
@@ -1533,19 +1556,24 @@ async def admin_avatar_update(req: AvatarSettingsRequest):
         INSERT INTO avatar_settings
             -- Empty values satisfy legacy NOT NULL columns when a fresh row is
             -- created. Existing legacy values are left untouched on updates.
-            (id, display_name, avatar_id, voice, presentation_mode, costume, expression, updated_at)
-        VALUES (1,?,?,?,?,?,?,?)
+            (id, display_name, avatar_id, voice, local_voice, cloud_voice,
+             presentation_mode, costume, expression, updated_at)
+        VALUES (1,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
             display_name=excluded.display_name,
             avatar_id=excluded.avatar_id,
             voice=excluded.voice,
+            local_voice=excluded.local_voice,
+            cloud_voice=excluded.cloud_voice,
             presentation_mode=excluded.presentation_mode,
             updated_at=excluded.updated_at
         """,
         (
             req.display_name.strip(),
             req.avatar_id,
-            normalized_voice,
+            normalized_local_voice,
+            normalized_local_voice,
+            normalized_cloud_voice,
             req.presentation_mode,
             "",
             "",
@@ -1793,18 +1821,23 @@ async def tts(req: TTSRequest):
     if not speak:
         raise HTTPException(400, "没有可合成的正文")
     try:
+        settings = _avatar_settings()
         if req.model_route in {"local", "local_lite"}:
             voice_profile_id = normalize_voice_profile(
-                req.voice or _avatar_settings()["voice"]
+                req.voice or settings["local_voice"]
             )
             audio = await local_speech.tts_wav(
                 speak, speed=req.speed, voice=voice_profile_id
             )
             provider = "local-glm-tts"
+            selected_voice = voice_profile_id
         else:
+            selected_voice = normalize_cloud_voice(
+                req.voice or settings["cloud_voice"]
+            )
             audio = await zhipu.tts(
                 speak,
-                voice=cloud_voice_id(req.voice or _avatar_settings()["voice"]),
+                voice=selected_voice,
                 speed=req.speed,
             )
             provider = "glm-tts"
@@ -1813,7 +1846,7 @@ async def tts(req: TTSRequest):
     return Response(
         content=audio,
         media_type="audio/wav",
-        headers={"X-Speech-Provider": provider},
+        headers={"X-Speech-Provider": provider, "X-Speech-Voice": selected_voice},
     )
 
 
@@ -1826,9 +1859,10 @@ async def tts_stream(req: TTSRequest):
 
     async def event_gen():
         try:
+            settings = _avatar_settings()
             if req.model_route in {"local", "local_lite"}:
                 voice_profile_id = normalize_voice_profile(
-                    req.voice or _avatar_settings()["voice"]
+                    req.voice or settings["local_voice"]
                 )
                 audio = await local_speech.tts_pcm(
                     speak, speed=req.speed, voice=voice_profile_id
@@ -1851,7 +1885,7 @@ async def tts_stream(req: TTSRequest):
             else:
                 async for event in zhipu.tts_stream(
                     speak,
-                    voice=cloud_voice_id(req.voice or _avatar_settings()["voice"]),
+                    voice=normalize_cloud_voice(req.voice or settings["cloud_voice"]),
                     speed=req.speed,
                 ):
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

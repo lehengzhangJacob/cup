@@ -1,6 +1,6 @@
 # 灵山胜境 AI 数字人导览 · 开放 API
 
-本机为服务器，对外提供 HTTP 接口；问答支持云端 GLM、轻量本地 Qwen3-1.7B 与完整本地 Qwen3-8B 三条路径。本地语音链路使用 FunASR 中文识别与开源 GLM-TTS，云端使用 GLM-ASR 与 GLM-TTS；两套 ASR 共用景区热词后处理，两套 TTS 从同一参考音频复刻管理员所选音色。
+本机为服务器，对外提供 HTTP 接口；问答支持云端 GLM、轻量本地 Qwen3-1.7B 与完整本地 Qwen3-8B 三条路径。本地语音链路使用 FunASR 中文识别与开源 GLM-TTS，云端使用 GLM-ASR 与 GLM-TTS 系统音色；两套 ASR 共用景区热词后处理，本地与云端音色在管理后台分别配置，云端不调用音色克隆。
 
 ## 环境（Miniconda）
 

@@ -55,7 +55,10 @@ def test_admin_avatar_form_only_exposes_runtime_backed_settings():
     html = (STATIC_DIR / "admin.html").read_text(encoding="utf-8")
 
     assert 'id="displayName"' in html
-    assert 'id="voiceName"' in html
+    assert 'id="localVoiceName"' in html
+    assert 'id="cloudVoiceName"' in html
+    assert 'id="voiceName"' not in html
+    assert "不调用 GLM-TTS-Clone" in html
     assert 'id="avatarId"' in html
     assert 'id="costume"' not in html
     assert 'id="expression"' not in html

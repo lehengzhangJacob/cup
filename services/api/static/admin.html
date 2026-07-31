@@ -465,9 +465,13 @@
         <form id="avatarForm">
           <div class="form-grid">
             <label>数字人称呼<input id="displayName" required maxlength="30" /></label>
-            <label>统一合成音色
-              <select id="voiceName"></select>
-              <span class="avatar-help" id="voiceCompatibility">正在检查本地/云端音色映射…</span>
+            <label>本地 GLM-TTS 音色
+              <select id="localVoiceName"></select>
+              <span class="avatar-help" id="localVoiceStatus">正在检查本地音色模型…</span>
+            </label>
+            <label>云端 GLM-TTS 系统音色
+              <select id="cloudVoiceName"></select>
+              <span class="avatar-help">直接使用智谱系统音色，不调用 GLM-TTS-Clone。</span>
             </label>
             <label>数字人运行模式
               <select id="presentationMode">
@@ -678,10 +682,10 @@
     document.querySelectorAll(".avatar-choice").forEach(button=>button.onclick=()=>selectAvatar(button.dataset.avatar));
     selectAvatar(avatarCatalog.some(item=>item.id===selectedId)?selectedId:avatarCatalog[0]?.id||selectedId);
   }
-  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; $("presentationMode").value=s.presentation_mode||"gpu_video"; renderAvatarChoices(s.avatar_id); const voices=(data.available_voices||[]).map(x=>typeof x==="string"?{id:x,label:x,paired:false}:x); $("voiceName").innerHTML=voices.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===s.voice?"selected":""}>${escapeHtml(x.label)}</option>`).join(""); const selected=voices.find(x=>x.id===s.voice)||voices[0], engine=data.speech_health?.tts?.engine||{}; $("voiceCompatibility").textContent=selected?.paired?`本地与云端均由同一参考音频复刻；云端 ${selected.cloud_ready?"已注册":"未注册"}，本地模型 ${engine.ready?"已加载":engine.ok?"按需加载":"未就绪"}。`:`此音色没有完整的本地/云端映射。`;}catch(error){notify(error.message,true);} }
+  async function loadAvatar(){ try{const data=await api("/v1/admin/avatar"), s=data.settings; avatarCatalog=data.avatars||data.available_avatars.map(id=>({id,preview_url:null})); $("displayName").value=s.display_name; $("avatarPreviewName").textContent=s.display_name; $("presentationMode").value=s.presentation_mode||"gpu_video"; renderAvatarChoices(s.avatar_id); const localVoices=data.available_local_voices||data.available_voices||[], cloudVoices=data.available_cloud_voices||[]; $("localVoiceName").innerHTML=localVoices.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===(s.local_voice||s.voice)?"selected":""}>${escapeHtml(x.label)}</option>`).join(""); $("cloudVoiceName").innerHTML=cloudVoices.map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===s.cloud_voice?"selected":""}>${escapeHtml(x.label)}</option>`).join(""); const engine=data.speech_health?.tts?.engine||{}; $("localVoiceStatus").textContent=`本地开源 GLM-TTS ${engine.ready?"已加载":engine.ok?"按需加载":"未就绪"}；仅本地 Qwen 路线使用此音色。`;}catch(error){notify(error.message,true);} }
 
   $("uploadKb").onclick=async()=>{const file=$("kbFile").files[0]; if(!file)return notify("请先选择 DOCX、TXT 或 Markdown 文件",true); const fd=new FormData();fd.append("file",file); $("uploadKb").disabled=true;$("uploadKb").textContent="构建中…";try{const data=await api("/v1/admin/kb/documents",{method:"POST",body:fd});notify(`知识库更新完成：${data.chunks} 个片段`);$("kbFile").value="";await Promise.all([loadDocuments(),loadHealth()]);}catch(error){notify(error.message,true);}finally{$("uploadKb").disabled=false;$("uploadKb").textContent="上传并构建";}};
-  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,voice:$("voiceName").value,presentation_mode:$("presentationMode").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;$("presentationMode").value=data.settings.presentation_mode||$("presentationMode").value;notify("数字人配置已保存，新会话立即生效");}catch(error){notify(error.message,true);}};
+  $("avatarForm").onsubmit=async event=>{event.preventDefault();const body={display_name:$("displayName").value,avatar_id:$("avatarId").value,local_voice:$("localVoiceName").value,cloud_voice:$("cloudVoiceName").value,presentation_mode:$("presentationMode").value};try{const data=await api("/v1/admin/avatar",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});$("avatarPreviewName").textContent=data.settings.display_name;$("presentationMode").value=data.settings.presentation_mode||$("presentationMode").value;notify("本地与云端音色已分别保存，新会话立即生效");}catch(error){notify(error.message,true);}};
   $("displayName").oninput=()=>$("avatarPreviewName").textContent=$("displayName").value||"灵山小向导";
   $("refresh").onclick=()=>Promise.all([loadStats(),loadHealth(),loadDocuments(),loadVisionReferences(),loadVisionCorrections(),loadAvatar(),loadEmotionStatus(),loadHistorical()]).then(()=>notify("数据已刷新"));
   $("logout").onclick=async()=>{try{await fetch("/v1/admin/auth/logout",{method:"POST"});}finally{location.replace("/login");}};
